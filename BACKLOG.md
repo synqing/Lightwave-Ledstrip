@@ -117,15 +117,24 @@ Is `effects.parameters.set` an end-user surface (sliders in effect detail view) 
 
 ## Synergy-Topology Programme
 
-The active feature branch is `feature/synergy-topology-phase-0-1`. Phase moves land here; merge to `main` is gated on completion of selected programme work.
+Canonical plan is `firmware-v3/docs/research/synergy-topology/Topology_Reconciliation.md` §5, with the resume protocol preserved in `firmware-v3/docs/research/synergy-topology/RESUME_BRIEF_2026-05-05.md`. Do **not** implement against the superseded 6-phase `PASS_3_KILL_ORDER.md` ordering.
 
-### [DONE] ~~Phase 1 — Infrastructure substrates (Moves 1.1–1.6)~~
+Original execution branch `feature/synergy-topology-phase-0-1` was folded into later work via merge `effa781d`. Current resume branch: `feature/synergy-topology-resume-2026-05-05`; keep new resume work isolated unless Captain redirects.
+
+### Phase 0 — Baseline Guardrails — PARTIAL / LEDGER RECONCILIATION REQUIRED
+- Phase 0A kill-list lint shipped — commit b2cc2824
+- Move 0.2 centre-origin / brand-voice violation triage shipped — commit d4348f08
+- Move 0.2 follow-up recovery after sandbox-to-integration loss shipped — commit 6b1a222f
+- **Gate before new Phase >=1 firmware work:** Captain must accept the existing Phase 0A + Move 0.2 commits as satisfying `Topology_Reconciliation.md` §5 Move 0.1 Product Signature Filter-as-code and Move 0.2 centre-origin audit pass, or authorise a small Phase 0 close-out patch first. This prevents repeating the F12 failure mode documented in the resume brief.
+
+### Phase 1 — Infrastructure substrates — PARTIAL (5 landed, 2 owed)
 - Move 1.1 PersistenceHelpers — commit 6907404c
 - Move 1.2 EffectRoleFlags substrate — commit 7a077701
 - Move 1.3 FramebufferLPF — commit 00628fe7
 - Move 1.4 LayerStack composer — commit d2a7499f
 - Move 1.6 sinLUT256 + CFLSubstepGate — commit b62cc5d7
-- Move 1.5: not yet planned (gap left intentional)
+- Move 1.5 ControlBus render-side reuse refactor — NOT STARTED; recommended clean re-entry after Phase 0 ledger acceptance
+- Move 1.7 E-05 PerceptualJND calibration constants — NOT STARTED; requires empirical floor measurement under K1 hardware + LGP at customer viewing distance
 
 ### [DONE] ~~Phase 1B — AFS v2 instrumentation + ControlBus contract lock~~
 - Phase 1B instrumentation — commit 19007888
@@ -135,11 +144,23 @@ The active feature branch is `feature/synergy-topology-phase-0-1`. Phase moves l
 
 ### [DONE] ~~Phase 2 Move 2.1 — PSRAMScalarRing substrate~~ -- commit f8b52bce
 
-### [DONE] ~~Phase 4 — Audio substrates + cinematic boot~~
+### Phase 3 — Dual-Strip Moat — NOT STARTED
+- Move 3.1 F5 Reflective Twin contract enforcement — NOT STARTED
+- Move 3.2 F4 Cross-Strip Wave Interference — GATED; do not start until LGP fringe-visibility measurement passes
+- Move 3.3 GEO-13 InterStripPhaseDelay infrastructure — NOT STARTED
+- Resume-brief recommendation: Phase 3 is the most strategically valuable un-started phase, but Phase 1 close-out is the cleaner re-entry unless Captain prioritises moat work now.
+
+### Phase 4 — Audio substrates + cinematic boot — PARTIAL (3 landed, 1 owed)
 - Move 4.1 AUD-21 VoiceMusicClassifier — commit 5021d96a
 - Move 4.2 PER-18 AudioGatedConditionalDecay — commit ba816631
 - Move 4.4 F6 First-Light Ignition (cinematic boot effect) — commit 4d12edc5 (Captain hardware visual confirmed in commit body)
 - Move 4.3: not yet planned
+
+### Next Synergy-Topology re-entry recommendation — PENDING CAPTAIN RATIFICATION
+- First, resolve the Phase 0 ledger gate above.
+- Then close Phase 1 properly with Move 1.5 ControlBus render-side reuse refactor and Move 1.7 PerceptualJND constants.
+- Do not start Move 3.2 before LGP fringe-visibility data exists.
+- Do not finalise Phase 5 visual sign-off until C-1/C-2/C-5 calibration debt is resolved; C-3 also gates sign-off corpus composition.
 
 ### Phase 5 — Synergy-Topology effect exemplars (3 of 7+ moves) — DONE-DEGRADED
 - Move 5.4 RadialTimeScopeEffect (EID 0x2100) — committed in 39406e6b; **DEGRADED-MODE attested 2026-04-28**

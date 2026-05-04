@@ -39,6 +39,7 @@ void test_role_flags_are_distinct_bits() {
         static_cast<uint8_t>(EffectRoleFlags::INVERT_INPUT_OK),
         static_cast<uint8_t>(EffectRoleFlags::BACKGROUND),
         static_cast<uint8_t>(EffectRoleFlags::OPTS_OUT_OF_PERSISTENCE),
+        static_cast<uint8_t>(EffectRoleFlags::DUAL_CHANNEL),
     };
     constexpr size_t kCount = sizeof(bits) / sizeof(bits[0]);
 

@@ -22,6 +22,7 @@
 #include "../../effects/transitions/TransitionEngine.h"
 #endif
 #include "../../effects/PatternRegistry.h"
+#include "../../effects/ReflectiveTwinPolicy.h"
 #include "../../palettes/Palettes_Master.h"
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
@@ -1898,6 +1899,14 @@ void RendererActor::renderFrame()
         ctx.totalTimeMs = static_cast<uint32_t>(m_effectTimeSeconds * 1000.0f + 0.5f);
 
         { TRACE_SCOPE("effect_render"); safeReg->effect->render(ctx); }
+
+        // Phase 3 Move 3.1: Reflective Twin enforcement. A render body can
+        // request direct dual-strip output only if its metadata declares the
+        // DUAL_CHANNEL role; otherwise showLeds() keeps the mirrored unified
+        // path and overwrites accidental strip-buffer writes.
+        ctx.dualChannelMode = effects::reflective_twin::allowDualChannel(
+            safeReg->effect->getMetadata(),
+            ctx.dualChannelMode);
     }
 
     // Increment hue for effects that use it (slow rotation), gated so a

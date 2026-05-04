@@ -180,11 +180,11 @@ Original execution branch `feature/synergy-topology-phase-0-1` was folded into l
 
 ### [DONE] ~~Phase 2 Move 2.1 — PSRAMScalarRing substrate~~ -- commit f8b52bce
 
-### Phase 3 — Dual-Strip Moat — NOT STARTED
-- Move 3.1 F5 Reflective Twin contract enforcement — NOT STARTED
+### Phase 3 — Dual-Strip Moat — PARTIAL (1 landed, 2 owed)
+- Move 3.1 F5 Reflective Twin contract enforcement — shipped in resume branch; `ReflectiveTwinPolicy` gates direct dual-strip output so default/legacy effects stay on the mirrored unified path unless metadata declares `EffectRoleFlags::DUAL_CHANNEL`; native harness matrix includes the scoped policy test.
 - Move 3.2 F4 Cross-Strip Wave Interference — GATED; do not start until LGP fringe-visibility measurement passes
 - Move 3.3 GEO-13 InterStripPhaseDelay infrastructure — NOT STARTED
-- Resume-brief recommendation: Phase 3 is the most strategically valuable un-started phase, but Phase 1 close-out is the cleaner re-entry unless Captain prioritises moat work now.
+- Resume-brief recommendation: Phase 3 is now the active re-entry lane; do Move 3.3 next while Move 3.2 remains gated on LGP fringe-visibility data.
 
 ### Phase 4 — Audio substrates + cinematic boot — PARTIAL (3 landed, 1 owed)
 - Move 4.1 AUD-21 VoiceMusicClassifier — commit 5021d96a
@@ -195,6 +195,7 @@ Original execution branch `feature/synergy-topology-phase-0-1` was folded into l
 ### Next Synergy-Topology re-entry recommendation — CAPTAIN RATIFIED 2026-05-05
 - Phase 0 ledger gate is resolved above.
 - Move 1.5 and Move 1.7 are closed on this resume branch; C-7 remains as photometer-grade follow-up debt, not a Phase 1 blocker.
+- Move 3.1 is closed on this resume branch.
 - Do not start Move 3.2 before LGP fringe-visibility data exists.
 - Do not finalise Phase 5 visual sign-off until C-1/C-2/C-5 calibration debt is resolved; C-3 also gates sign-off corpus composition.
 

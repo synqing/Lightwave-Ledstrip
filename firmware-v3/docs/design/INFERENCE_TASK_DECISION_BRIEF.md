@@ -121,7 +121,7 @@ These are **signal processing and scene inference** already in-tree. They are **
 
 | Fact | Tag |
 |------|-----|
-| `AudioSource` enum for auto-mapping covers RMS/flux/bands/bass/mid/treble/beat phase/BPM/tempo confidence — **not** chroma vectors, `bins256`, STM tensors, `scene.tension`, etc. | **Verified** (`AudioEffectMapping.h` / `.cpp`) |
+| `AudioSource` enum for auto-mapping covers RMS/flux/bands/bass/mid/treble, audio confidence/silence state, onset/percussion levels, chroma/chord scalars, saliency scalars, scene scalars, beat phase/BPM/tempo confidence — **not** chroma vectors, `bins256`, or STM tensors. | **Verified** (`AudioEffectMapping.h` / `.cpp`) |
 | Effects can still read rich state via `EffectContext` / `ControlBus` paths. | **Inference** from architecture (effects catalog); **Verified** that `ControlBusFrame` carries the rich fields |
 
 **Inference:** Adding a **new** model output for **mapping-only** consumers requires extending `AudioSource` + `applyMappings()` logic; using fields only inside custom effects requires **effect-level** contracts only.

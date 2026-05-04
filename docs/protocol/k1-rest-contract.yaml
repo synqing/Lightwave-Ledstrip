@@ -273,7 +273,7 @@ endpoints:
 
   /api/v1/audio/mappings/sources:
     method: GET
-    description: "List available audio mapping sources"
+    description: "List available audio mapping sources, including Phase 1.5 render-side ControlBus reuse scalars"
 
   /api/v1/audio/mappings/targets:
     method: GET

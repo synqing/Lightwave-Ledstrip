@@ -59,7 +59,7 @@ These rules operationalise the brief’s mapping boundary.
 
 ### Bucket A — Mappable scalar controls (`AudioEffectMapping`)
 
-- **Rule:** Only signals wired through `AudioSource` in [AudioEffectMapping.h](../../src/audio/contracts/AudioEffectMapping.h) and the `switch` in [AudioEffectMapping.cpp](../../src/audio/contracts/AudioEffectMapping.cpp) may participate in **generic** per-effect mappings (RMS, flux, eight bands, bass/mid/treble aggregates, beat phase, BPM, tempo confidence).
+- **Rule:** Only signals wired through `AudioSource` in [AudioEffectMapping.h](../../src/audio/contracts/AudioEffectMapping.h) and the `switch` in [AudioEffectMapping.cpp](../../src/audio/contracts/AudioEffectMapping.cpp) may participate in **generic** per-effect mappings (RMS, flux, eight bands, bass/mid/treble aggregates, confidence/silence state, onset/percussion channels, chroma/chord scalars, saliency scalars, scene scalars, beat phase, BPM, tempo confidence).
 - **Consequence:** A new **scalar** that Tab5/iOS must drive through the same mapping UI needs: new `AudioSource` value, `applyMappings()` branch, persistence if stored, and **protocol** updates in `k1-rest-contract.yaml` / `k1-ws-contract.yaml` plus client updates.
 
 ### Bucket B — Effect-private semantic fields

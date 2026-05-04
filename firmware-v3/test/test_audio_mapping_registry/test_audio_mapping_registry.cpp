@@ -91,10 +91,80 @@ static void test_registry_set_mapping_and_apply() {
     TEST_ASSERT_GREATER_THAN_UINT8(0, brightness);
 }
 
+static void test_move_1_5_sources_reuse_existing_controlbus_fields() {
+    ControlBusFrame bus{};
+    MusicalGridSnapshot grid{};
+
+    bus.heavy_bands[2] = 0.3f;
+    bus.heavy_bands[3] = 0.6f;
+    bus.heavy_bands[4] = 0.9f;
+    bus.audioConfidence = 0.7f;
+    bus.liveliness = 0.8f;
+    bus.silentScale = 0.4f;
+    bus.onsetEvent = 0.5f;
+    bus.kickTrigger = true;
+    bus.snareEnergy = 0.35f;
+    bus.hihatEnergy = 0.45f;
+    bus.chroma[0] = 0.2f;
+    bus.chroma[7] = 0.9f;
+    bus.chordState.confidence = 0.65f;
+    bus.saliency.overallSaliency = 0.55f;
+    bus.saliency.harmonicNoveltySmooth = 0.25f;
+    bus.saliency.rhythmicNoveltySmooth = 0.75f;
+    bus.saliency.timbralNoveltySmooth = 0.45f;
+    bus.saliency.dynamicNoveltySmooth = 0.85f;
+    bus.scene.beat_pulse = 0.95f;
+    bus.scene.phrase_progress = 0.15f;
+    bus.scene.tension = 0.6f;
+
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.6f,
+        AudioMappingRegistry::getAudioValue(AudioSource::HEAVY_MID, bus, grid));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.7f,
+        AudioMappingRegistry::getAudioValue(AudioSource::AUDIO_CONFIDENCE, bus, grid));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.8f,
+        AudioMappingRegistry::getAudioValue(AudioSource::LIVELINESS, bus, grid));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.4f,
+        AudioMappingRegistry::getAudioValue(AudioSource::SILENT_SCALE, bus, grid));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.5f,
+        AudioMappingRegistry::getAudioValue(AudioSource::ONSET_EVENT, bus, grid));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 1.0f,
+        AudioMappingRegistry::getAudioValue(AudioSource::KICK_LEVEL, bus, grid));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.35f,
+        AudioMappingRegistry::getAudioValue(AudioSource::SNARE_LEVEL, bus, grid));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.45f,
+        AudioMappingRegistry::getAudioValue(AudioSource::HIHAT_LEVEL, bus, grid));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.9f,
+        AudioMappingRegistry::getAudioValue(AudioSource::CHROMA_MAX, bus, grid));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.65f,
+        AudioMappingRegistry::getAudioValue(AudioSource::CHORD_CONFIDENCE, bus, grid));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.55f,
+        AudioMappingRegistry::getAudioValue(AudioSource::OVERALL_SALIENCY, bus, grid));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.25f,
+        AudioMappingRegistry::getAudioValue(AudioSource::HARMONIC_SALIENCY, bus, grid));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.75f,
+        AudioMappingRegistry::getAudioValue(AudioSource::RHYTHMIC_SALIENCY, bus, grid));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.45f,
+        AudioMappingRegistry::getAudioValue(AudioSource::TIMBRAL_SALIENCY, bus, grid));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.85f,
+        AudioMappingRegistry::getAudioValue(AudioSource::DYNAMIC_SALIENCY, bus, grid));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.95f,
+        AudioMappingRegistry::getAudioValue(AudioSource::BEAT_PULSE, bus, grid));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.15f,
+        AudioMappingRegistry::getAudioValue(AudioSource::PHRASE_PROGRESS, bus, grid));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.6f,
+        AudioMappingRegistry::getAudioValue(AudioSource::TENSION, bus, grid));
+
+    TEST_ASSERT_EQUAL_STRING("OVERALL_SALIENCY",
+        AudioMappingRegistry::getSourceName(AudioSource::OVERALL_SALIENCY));
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(AudioSource::BEAT_PULSE),
+        static_cast<uint8_t>(AudioMappingRegistry::parseSource("BEAT_PULSE")));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_registry_before_begin_is_safe);
     RUN_TEST(test_registry_begin_failure_then_recover);
     RUN_TEST(test_registry_set_mapping_and_apply);
+    RUN_TEST(test_move_1_5_sources_reuse_existing_controlbus_fields);
     return UNITY_END();
 }

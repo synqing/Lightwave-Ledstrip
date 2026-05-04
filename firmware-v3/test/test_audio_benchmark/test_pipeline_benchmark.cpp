@@ -6,8 +6,7 @@
  * analysis. Tests different audio pipeline configurations and reports
  * quantitative metrics for comparison.
  *
- * Build: pio test -e native_test -f test_pipeline_benchmark
- * Run: .pio/build/native_test/program
+ * Build: pio test -e native_audio_benchmark
  */
 
 #define FEATURE_AUDIO_SYNC 1
@@ -544,4 +543,3 @@ int main(void) {
 
     return result;
 }
-

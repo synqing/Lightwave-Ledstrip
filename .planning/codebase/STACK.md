@@ -218,7 +218,7 @@ pio run -e esp32dev_audio_esv11_k1v2_32khz
 pio run -e esp32dev_audio_esv11_k1v2_32khz -t upload
 
 # Unit tests (host-only, no hardware)
-pio run -e native_test
+python3 scripts/native_harness_matrix.py
 
 # Serial monitor
 pio device monitor -b 115200

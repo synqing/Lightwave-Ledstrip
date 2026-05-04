@@ -4,8 +4,8 @@
  * Main entry point for native unit tests. Runs all test suites and
  * reports results.
  *
- * Build: pio run -e native_test
- * Run: .pio/build/native_test/program
+ * Legacy aggregate runner retained only as a source grouping reference.
+ * Run current host validation with scripts/native_harness_matrix.py.
  */
 
 #include <unity.h>

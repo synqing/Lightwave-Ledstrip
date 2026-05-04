@@ -63,7 +63,7 @@ Required metrics:
 
 - [ ] `v2/test/test_audio/test_pipeline_benchmark.cpp` exists
 - [ ] Test outputs metrics in parseable format
-- [ ] Test runs successfully: `pio test -e native_test -f test_pipeline_benchmark`
+- [ ] Test runs successfully: `pio test -e native_audio_benchmark`
 
 ### ✅ Workflow Syntax
 
@@ -148,7 +148,7 @@ python3 detect_regressions.py \
 cd v2
 
 # Run benchmark
-pio test -e native_test -f test_pipeline_benchmark --verbose > benchmark_output.log
+pio test -e native_audio_benchmark --verbose > benchmark_output.log
 
 # Parse results
 python test/tools/parse_benchmark_serial.py \
@@ -267,7 +267,7 @@ cd v2/test/tools && \
 ./test_tools.sh && \
 echo "✅ Tools validated" && \
 cd ../../.. && \
-pio test -e native_test -f test_pipeline_benchmark --verbose > /tmp/benchmark_output.log 2>&1 && \
+pio test -e native_audio_benchmark --verbose > /tmp/benchmark_output.log 2>&1 && \
 python3 v2/test/tools/parse_benchmark_serial.py /tmp/benchmark_output.log --platformio --format summary && \
 python3 v2/test/tools/detect_regressions.py v2/test/baseline/benchmark_baseline.json <(python3 v2/test/tools/parse_benchmark_serial.py /tmp/benchmark_output.log --platformio) && \
 echo "✅ End-to-end validation passed"

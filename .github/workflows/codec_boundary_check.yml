@@ -100,6 +100,10 @@ jobs:
       - name: Run Codec Tests
         working-directory: firmware-v3
         run: pio test -e native_codec_test_ws
+
+      - name: Guard Native Harness Routes
+        working-directory: firmware-v3
+        run: python3 scripts/check_native_harness_routes.py
       
       - name: Build Check
         working-directory: firmware-v3

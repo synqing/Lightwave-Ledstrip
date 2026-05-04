@@ -20,9 +20,9 @@
 
 #ifndef NATIVE_BUILD
 #include <esp_heap_caps.h>
+#endif
 #include "effects/PersistenceHelpers.h"
 using lightwaveos::effects::persistence::fadeToBlackByDt;
-#endif
 
 namespace lightwaveos {
 namespace effects {

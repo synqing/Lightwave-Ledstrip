@@ -271,8 +271,9 @@ void test_encode_parameters_get() {
     float paramMaxs[] = {1.0f, 1.0f, 0.0f, 0.0f};
     float paramDefaults[] = {0.5f, 0.7f, 0.0f, 0.0f};
     float paramValues[] = {0.6f, 0.8f, 0.0f, 0.0f};
+    uint8_t paramTypes[] = {0, 0, 0, 0};
     
-    WsEffectsCodec::encodeParametersGet(5, "TestEffect", true, paramNames, paramDisplayNames, paramMins, paramMaxs, paramDefaults, paramValues, 2, data);
+    WsEffectsCodec::encodeParametersGet(5, "TestEffect", true, paramNames, paramDisplayNames, paramMins, paramMaxs, paramDefaults, paramValues, paramTypes, 2, data);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(5, data["effectId"].as<uint8_t>(), "effectId should be 5");
     TEST_ASSERT_EQUAL_STRING("TestEffect", data["name"].as<const char*>());
@@ -289,6 +290,7 @@ void test_encode_parameters_get() {
     TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 1.0f, firstParam["max"].as<float>(), "max should be 1.0");
     TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 0.5f, firstParam["default"].as<float>(), "default should be 0.5");
     TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 0.6f, firstParam["value"].as<float>(), "value should be 0.6");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, firstParam["type"].as<int>(), "type should be FLOAT");
     
     const char* allowedKeys[] = {"effectId", "name", "hasParameters", "parameters"};
     TEST_ASSERT_TRUE_MESSAGE(

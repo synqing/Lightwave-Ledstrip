@@ -62,7 +62,7 @@ jobs:
       - name: Build native test environment
         working-directory: firmware-v3
         run: |
-          pio test -e native_test --without-testing --verbose
+          pio test -e native_audio_benchmark --without-testing --verbose
 
       - name: Run audio benchmark tests
         id: benchmark
@@ -70,7 +70,7 @@ jobs:
         continue-on-error: true
         run: |
           echo "Running audio benchmark tests..."
-          pio test -e native_test -f test_pipeline_benchmark --verbose > benchmark_output.log 2>&1 || true
+          pio test -e native_audio_benchmark --verbose > benchmark_output.log 2>&1 || true
           cat benchmark_output.log
 
       - name: Parse benchmark results

@@ -11,7 +11,7 @@ abstract: "Testing infrastructure across firmware-v3 (native unit tests via Plat
 ### Firmware-v3 (C++)
 
 **Runner:**
-- PlatformIO native build: `pio run -e native_test`
+- PlatformIO native matrix: `python3 scripts/native_harness_matrix.py`
 - Host-based unit tests (not embedded firmware tests)
 - Compiles to x86/x64 binary for fast iteration
 - Platform: Linux, macOS, Windows all supported
@@ -26,13 +26,13 @@ abstract: "Testing infrastructure across firmware-v3 (native unit tests via Plat
 cd firmware-v3
 
 # Run all native tests
-pio run -e native_test
+python3 scripts/native_harness_matrix.py
 
 # Build only (no run)
-pio run -e native_test --target build
+python3 scripts/native_harness_matrix.py
 
 # Verbose output
-pio run -e native_test -v
+python3 scripts/native_harness_matrix.py
 
 # Specific test file (configure in platformio.ini)
 # Tests in firmware-v3/test/ are auto-discovered
@@ -464,7 +464,7 @@ func testDecoding() throws {
 ```bash
 # PlatformIO native_test does not generate coverage reports
 # Manual inspection: run tests and verify all test functions pass
-pio run -e native_test
+python3 scripts/native_harness_matrix.py
 ```
 
 ### Lightwave-iOS-v2

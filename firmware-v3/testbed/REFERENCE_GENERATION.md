@@ -8,10 +8,12 @@ This directory contains the test harness for generating ground-truth reference (
 
 ```bash
 cd /sessions/adoring-festive-clarke/mnt/firmware-v3
-pio run -e native_test
+python3 scripts/native_harness_matrix.py
 ```
 
-This runs the native test suite, including `test_transport_reference.cpp`, which:
+This runs the current native harness matrix. `test_transport_reference.cpp`
+is a legacy reference generator and needs a scoped PlatformIO environment before
+new reference data can be regenerated. It:
 - Creates a BeatPulseTransportCore instance
 - Iterates through 576 parameter combinations (4 × 3 × 4 × 2 × 2 × 3)
 - For each combination:
@@ -154,7 +156,7 @@ Key implementation notes:
 
 **Solution**: Run the test harness:
 ```bash
-pio run -e native_test
+python3 scripts/native_harness_matrix.py
 ```
 
 ### Wrong file size
@@ -162,7 +164,7 @@ pio run -e native_test
 
 **Solution**: Check for build failures:
 ```bash
-pio run -e native_test -vv  # Verbose output
+python3 scripts/native_harness_matrix.py
 ```
 
 ### Python import error

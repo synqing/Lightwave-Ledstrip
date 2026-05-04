@@ -239,7 +239,7 @@ Lightwave-Ledstrip/                    Monorepo root
 - `lightwave-ios-v2/LightwaveOS/Network/RESTClient.swift` — REST calls with debounce
 
 **Testing:**
-- `firmware-v3/test/` — Unit tests, run with `pio run -e native_test`
+- `firmware-v3/test/` — Unit tests, run through scoped PlatformIO envs or `python3 scripts/native_harness_matrix.py`
 - `lightwave-ios-v2/LightwaveOSTests/` — Swift unit tests
 - `lightwave-ios-v2/LightwaveOSUITests/` — SwiftUI component tests
 

@@ -377,7 +377,7 @@ void test_encode_zones_changed_single_field() {
     JsonDocument doc;
     JsonObject data = doc.to<JsonObject>();
 
-    WsZonesCodec::encodeZonesChanged(1, updatedFields, 1, composer, nullptr, data);
+    WsZonesCodec::encodeZonesChanged(0, updatedFields, 1, composer, nullptr, data);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, data["zoneId"].as<int>(), "zoneId should be 1");
     JsonArray updated = data["updated"].as<JsonArray>();
@@ -385,7 +385,7 @@ void test_encode_zones_changed_single_field() {
     TEST_ASSERT_EQUAL_STRING_MESSAGE("brightness", updated[0].as<const char*>(), "updated field should be brightness");
 
     JsonObject current = data["current"].as<JsonObject>();
-    TEST_ASSERT_EQUAL_INT_MESSAGE(7, current["effectId"].as<int>(), "effectId should match stub");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0x0100, current["effectId"].as<int>(), "effectId should match stub");
     TEST_ASSERT_EQUAL_INT_MESSAGE(140, current["brightness"].as<int>(), "brightness should match stub");
     TEST_ASSERT_EQUAL_INT_MESSAGE(33, current["speed"].as<int>(), "speed should match stub");
     TEST_ASSERT_EQUAL_INT_MESSAGE(4, current["paletteId"].as<int>(), "paletteId should match stub");
@@ -429,7 +429,7 @@ void test_encode_zones_effect_changed() {
     JsonDocument doc;
     JsonObject data = doc.to<JsonObject>();
 
-    WsZonesCodec::encodeZonesEffectChanged(1, 9, composer, nullptr, data);
+    WsZonesCodec::encodeZonesEffectChanged(0, 9, composer, nullptr, data);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, data["zoneId"].as<int>(), "zoneId should be 1");
     JsonObject current = data["current"].as<JsonObject>();

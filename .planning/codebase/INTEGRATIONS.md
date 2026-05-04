@@ -138,7 +138,7 @@ abstract: "External integrations and communication protocols across LightwaveOS 
 **CI Pipeline:**
 - **None.** No GitHub Actions, no Jenkins. Manual build/test on developer machine.
 - **Testing:**
-  - Firmware: `pio run -e native_test` (unit tests on host)
+- Firmware: `python3 scripts/native_harness_matrix.py` (scoped native host harnesses)
   - iOS: `xcodebuild test` (XCTest)
   - Python: `pytest` (led_capture, benchmark suite)
 - **Linting:** ruff (Python), clang-format (C++, optional)

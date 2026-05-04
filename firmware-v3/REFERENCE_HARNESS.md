@@ -63,8 +63,8 @@ read_reference.print_stats(data)  # Print summary
 ```bash
 cd /sessions/adoring-festive-clarke/mnt/firmware-v3
 
-# Build and run the native test suite
-pio run -e native_test
+# Build and run the current native harness matrix
+python3 scripts/native_harness_matrix.py
 ```
 
 This will:
@@ -251,13 +251,13 @@ pip3 install platformio
 **Solution**: Generation takes ~30s for 576 pairs. Check:
 ```bash
 # See live output
-pio run -e native_test -vv
+python3 scripts/native_harness_matrix.py
 ```
 
 ### Issue: "reference_pairs.bin not found"
 **Solution**: Test must complete successfully. Check logs:
 ```bash
-pio run -e native_test --verbose
+python3 scripts/native_harness_matrix.py
 ```
 
 ### Issue: Python import errors
@@ -270,7 +270,7 @@ pip3 install numpy
 
 1. **Generate data** (one-time):
    ```bash
-   pio run -e native_test
+   python3 scripts/native_harness_matrix.py
    ```
 
 2. **Verify output**:

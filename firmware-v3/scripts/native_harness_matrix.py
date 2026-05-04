@@ -24,6 +24,7 @@ MATRIX: tuple[HarnessStep, ...] = (
     HarnessStep("phase5 native substrate", (("pio", "test", "-e", "native_test_phase5"),)),
     HarnessStep("zone effect isolation", (("pio", "test", "-e", "native_test_zone_effect_isolation"),)),
     HarnessStep("reflective twin policy", (("pio", "test", "-e", "native_test_reflective_twin_policy"),)),
+    HarnessStep("inter-strip phase delay", (("pio", "test", "-e", "native_test_interstrip_phase_delay"),)),
     HarnessStep("audio benchmark", (("pio", "test", "-e", "native_audio_benchmark"),)),
     HarnessStep(
         "manifest codec standalone",

@@ -190,7 +190,7 @@ Original execution branch `feature/synergy-topology-phase-0-1` was folded into l
 - Move 4.1 AUD-21 VoiceMusicClassifier — commit 5021d96a
 - Move 4.2 PER-18 AudioGatedConditionalDecay — commit ba816631
 - Move 4.4 F6 First-Light Ignition (cinematic boot effect) — commit 4d12edc5 (Captain hardware visual confirmed in commit body)
-- Move 4.3: not yet planned
+- Move 4.3 F3 Liquid Stillness curation — planned in `firmware-v3/docs/research/synergy-topology/MOVE_4_3_LIQUID_STILLNESS_CURATION_2026-05-05.md`; implementation is gated on Captain selecting the final 8–12 ambient programmes from the audition slate.
 
 ### Next Synergy-Topology re-entry recommendation — CAPTAIN RATIFIED 2026-05-05
 - Phase 0 ledger gate is resolved above.

@@ -1,0 +1,2586 @@
+# Bundle: lightwave-ios-v2 architecture (Swift)
+# Purpose: Show NotebookLM the iOS architecture: actor-isolated network services, MainActor Observable VMs, debounce policy, AP-only connection model.
+# Files included: 5
+# Generated: 2026-05-04 (lightwave-ledstrip notebooklm curation, SSA4)
+
+================================================================================
+FILE: lightwave-ios-v2/LightwaveOS/App/LightwaveOSApp.swift
+DESCRIPTION: App entry point — @main App struct wiring root environment + AppViewModel.
+================================================================================
+
+//
+//  LightwaveOSApp.swift
+//  LightwaveOS
+//
+//  App entry point for LightwaveOS v2.
+//  Creates AppViewModel and injects it via environment.
+//
+
+import SwiftUI
+
+@main
+struct LightwaveOSApp: App {
+    @State private var appVM = AppViewModel()
+    @Environment(\.scenePhase) private var scenePhase
+
+    var body: some Scene {
+        WindowGroup {
+#if DEBUG
+            let env = ProcessInfo.processInfo.environment
+            if env["LW_EXPORT_DESIGN_PNGS"] == "1"
+                || ProcessInfo.processInfo.arguments.contains("LW_EXPORT_DESIGN_PNGS") {
+                DesignReferenceExportView()
+                    .environment(appVM)
+                    .environment(appVM.audio)
+                    .preferredColorScheme(.dark)
+            } else if env["LW_SHOW_RIVE_GALLERY"] == "1"
+                || ProcessInfo.processInfo.arguments.contains("LW_SHOW_RIVE_GALLERY") {
+                RiveReferenceGallery()
+                    .environment(appVM)
+                    .environment(appVM.audio)
+                    .preferredColorScheme(.dark)
+            } else {
+                ContentView()
+                    .environment(appVM)
+                    .environment(appVM.audio)
+                    .preferredColorScheme(.dark)
+            }
+#else
+            ContentView()
+                .environment(appVM)
+                .environment(appVM.audio)
+                .preferredColorScheme(.dark)
+#endif
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            switch newPhase {
+            case .background:
+                appVM.handleBackgrounding()
+            case .active:
+                Task { await appVM.handleForegrounding() }
+            case .inactive:
+                break
+            @unknown default:
+                break
+            }
+        }
+    }
+}
+
+
+================================================================================
+FILE: lightwave-ios-v2/LightwaveOS/Network/RESTClient.swift
+DESCRIPTION: Actor-isolated REST client — single canonical path for K1 HTTP API; 150ms slider debounce; AP-only base URL.
+================================================================================
+
+//
+//  RESTClient.swift
+//  LightwaveOS
+//
+//  URLSession-based async REST client for ESP32 API v1.
+//  Pure Apple frameworks, no third-party dependencies.
+//  iOS 17+, Swift 6. British English comments.
+//
+
+import Foundation
+
+// MARK: - API Error Types
+
+enum APIClientError: LocalizedError {
+    case connectionFailed(Error)
+    case invalidResponse
+    case httpError(Int, String?)
+    case decodingError(Error)
+    case rateLimited
+    case encodingError
+    /// Wire-format zoneId is out of the post-B2 firmware range (1..3).
+    /// Wire value 0 is RESERVED and rejected by the firmware. Raised by
+    /// `RESTClient` per-zone setters before any network round-trip.
+    case invalidZoneId(Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .connectionFailed(let error):
+            return "Connection failed: \(error.localizedDescription)"
+        case .invalidResponse:
+            return "Invalid server response"
+        case .httpError(let code, let message):
+            return "HTTP \(code): \(message ?? "Unknown error")"
+        case .decodingError(let error):
+            return "Failed to decode response: \(error.localizedDescription)"
+        case .rateLimited:
+            return "Rate limit exceeded (20 req/s)"
+        case .encodingError:
+            return "Failed to encode request body"
+        case .invalidZoneId(let zoneId):
+            return "Invalid zoneId \(zoneId): wire-format zoneId must be 1..3 (0 is reserved)"
+        }
+    }
+}
+
+// MARK: - Response Models
+
+struct DeviceInfoResponse: Codable, Sendable {
+    let success: Bool
+    let data: DeviceInfo
+    let timestamp: Int?
+    let version: String?
+
+    struct DeviceInfo: Codable, Sendable {
+        let firmware: String
+        let firmwareVersionNumber: Int?
+        let board: String
+        let sdk: String
+        let flashSize: Int?
+        let sketchSize: Int?
+        let freeSketch: Int?
+        let architecture: String?
+
+        // Computed properties for backward compatibility
+        var firmwareVersion: String { firmware }
+        var sdkVersion: String { sdk }
+        var freeSketchSpace: Int? { freeSketch }
+    }
+}
+
+struct DeviceStatusResponse: Codable, Sendable {
+    let success: Bool
+    let data: DeviceStatus
+    let timestamp: Int?
+
+    struct DeviceStatus: Codable, Sendable {
+        let uptime: Int
+        let freeHeap: Int
+        let heapSize: Int?
+        let cpuFreq: Int?
+        let fps: Float?
+        let cpuPercent: Float?
+        let framesRendered: Int?
+        let network: NetworkInfo?
+        let wsClients: Int?
+
+        struct NetworkInfo: Codable, Sendable {
+            let connected: Bool?
+            let apMode: Bool?
+            let ip: String?
+            let rssi: Int?
+        }
+    }
+}
+
+struct EffectsResponse: Codable, Sendable {
+    let success: Bool
+    let data: EffectsData
+    let timestamp: Int?
+
+    struct EffectsData: Codable, Sendable {
+        let effects: [Effect]
+        let total: Int
+        let offset: Int?
+        let limit: Int?
+        let pagination: Pagination?
+
+        struct Effect: Codable, Sendable {
+            let id: Int
+            let name: String
+            let description: String?
+            let category: String?
+            let categoryId: Int?
+            let categoryName: String?
+            let isAudioReactive: Bool?
+            let centerOrigin: Bool?
+            let usesSpeed: Bool?
+            let usesPalette: Bool?
+            let zoneAware: Bool?
+            let dualStrip: Bool?
+            let physicsBased: Bool?
+
+            // MARK: Phase 2 — isExperimental field
+            //
+            // Firmware emits `isExperimental` per effect (see
+            // `firmware-v3/src/network/webserver/handlers/EffectHandlers.cpp:173`
+            // — `effect["isExperimental"] = PatternRegistry::isExperimental(eid)`).
+            // Optional so legacy K1 firmware payloads (pre-flag) decode without
+            // throwing; nil is treated as non-experimental at the ViewModel layer.
+            let isExperimental: Bool?
+        }
+
+        struct Pagination: Codable, Sendable {
+            let page: Int?
+            let limit: Int?
+            let total: Int?
+            let pages: Int?
+        }
+    }
+}
+
+struct EffectDetailResponse: Codable, Sendable {
+    let success: Bool
+    let data: EffectDetail
+    let timestamp: Int?
+
+    struct EffectDetail: Codable, Sendable {
+        let id: Int
+        let name: String
+        let category: String?
+        let description: String?
+        let parameters: [String]?
+    }
+}
+
+struct PalettesResponse: Codable, Sendable {
+    let success: Bool
+    let data: PalettesData
+    let timestamp: Int?
+
+    struct PalettesData: Codable, Sendable {
+        let palettes: [Palette]
+        let total: Int?
+        let offset: Int?
+        let limit: Int?
+
+        struct Palette: Codable, Sendable {
+            let id: Int
+            let name: String
+            let category: String?
+            let flags: PaletteFlags?
+            let avgBrightness: Int?
+            let maxBrightness: Int?
+
+            struct PaletteFlags: Codable, Sendable {
+                let warm: Bool?
+                let cool: Bool?
+                let calm: Bool?
+                let vivid: Bool?
+                let cvdFriendly: Bool?
+                let whiteHeavy: Bool?
+            }
+        }
+    }
+}
+
+struct ParametersResponse: Codable, Sendable {
+    let success: Bool
+    let data: Parameters
+    let timestamp: Int?
+
+    struct Parameters: Codable, Sendable {
+        let brightness: Int
+        let speed: Int
+        let paletteId: Int?
+        let mood: Int?
+        let fadeAmount: Int?
+        let hue: Int?
+        let saturation: Int?
+        let intensity: Int?
+        let complexity: Int?
+        let variation: Int?
+    }
+}
+
+// MARK: Phase 1 — parameterType field
+//
+// Per-effect parameter descriptor returned by `effects.parameters` (REST and
+// WebSocket). Firmware commit 4398af3b (2026-03-24) added a numeric `type`
+// field to each parameter object so clients can render type-appropriate
+// controls (toggles for BOOL, steppers for INT, dropdowns for ENUM, sliders
+// for FLOAT) instead of treating every value as a float.
+//
+// Wire shape (per `docs/protocol/k1-ws-contract.yaml`):
+//
+//     {
+//         "name": "contrast",
+//         "displayName": "Contrast",
+//         "min": 0.0, "max": 3.0,
+//         "default": 1.0, "value": 1.0,
+//         "type": 0     // uint8: 0=FLOAT, 1=INT, 2=BOOL, 3=ENUM
+//     }
+//
+// Forward-compatibility rules enforced by the custom decoder:
+//   - Legacy payloads (no `type` field) decode with `parameterType == nil`.
+//   - Numeric codes 0-3 decode to their corresponding `ParameterType` case.
+//   - Unknown numeric codes (firmware may grow new types) decode to
+//     `.unknown` — the decoder MUST NOT throw on unrecognised codes.
+
+/// The runtime classification of an effect parameter, used to drive
+/// type-appropriate UI controls.
+enum ParameterType: Int, Codable, Sendable, Equatable {
+    /// Continuous value; render as a slider.
+    case float = 0
+    /// Discrete integer; render as a stepper.
+    case int = 1
+    /// Boolean flag; render as a toggle.
+    case bool = 2
+    /// Enumerated choice; render as a dropdown / picker.
+    case enumerated = 3
+    /// Code emitted by firmware that this client does not understand.
+    /// Treated as untyped — UI should fall back to a slider over [min, max].
+    case unknown = -1
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(Int.self)
+        // Map any unrecognised code to .unknown rather than throwing — this
+        // keeps iOS forward-compatible with future firmware revisions.
+        self = ParameterType(rawValue: raw) ?? .unknown
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+}
+
+/// A single effect parameter descriptor, including its current value, range,
+/// default, and (post-`4398af3b`) its runtime type.
+struct EffectParameter: Codable, Sendable, Equatable {
+    /// Programmatic key (e.g. `"contrast"`).
+    let name: String
+    /// Human-readable label (e.g. `"Contrast"`). Optional for tolerance against
+    /// older firmware revisions that may not have populated it.
+    let displayName: String?
+    /// Inclusive lower bound of the value range.
+    let min: Float
+    /// Inclusive upper bound of the value range.
+    let max: Float
+    /// Default value used when the parameter is reset.
+    /// Decoded from the `default` JSON key (renamed to avoid the Swift keyword).
+    let defaultValue: Float
+    /// Current live value as known to firmware.
+    let value: Float
+    /// Runtime classification — `nil` for legacy responses that pre-date the
+    /// `type` field on commit 4398af3b. New responses always populate this.
+    let parameterType: ParameterType?
+
+    private enum CodingKeys: String, CodingKey {
+        case name
+        case displayName
+        case min
+        case max
+        case defaultValue = "default"
+        case value
+        case parameterType = "type"
+    }
+}
+
+/// The full envelope returned by the `effects.parameters` request — a single
+/// effect's identifier, name, and the list of its tunable parameters.
+struct EffectParametersGet: Codable, Sendable, Equatable {
+    let effectId: Int
+    let name: String
+    let hasParameters: Bool
+    let parameters: [EffectParameter]
+}
+
+struct ZonesResponse: Codable, Sendable {
+    let success: Bool
+    let data: ZonesData
+    let timestamp: Int?
+
+    struct ZonesData: Codable, Sendable {
+        let enabled: Bool
+        let zoneCount: Int
+        let segments: [Segment]?
+        let zones: [Zone]
+        let presets: [ZonePreset]?
+
+        struct Segment: Codable, Sendable {
+            let zoneId: Int
+            let s1LeftStart: Int
+            let s1LeftEnd: Int
+            let s1RightStart: Int
+            let s1RightEnd: Int
+            let totalLeds: Int?
+        }
+
+        struct Zone: Codable, Sendable {
+            let id: Int
+            let enabled: Bool?
+            let effectId: Int
+            let effectName: String?
+            let brightness: Int?
+            let speed: Int
+            let paletteId: Int
+            let paletteName: String?
+            let blendMode: Int
+            let blendModeName: String?
+        }
+
+        struct ZonePreset: Codable, Sendable {
+            let id: Int
+            let name: String
+        }
+    }
+}
+
+struct ColourCorrectionResponse: Codable, Sendable {
+    let success: Bool
+    let data: ColourCorrectionData
+    let timestamp: Int?
+
+    struct ColourCorrectionData: Codable, Sendable {
+        let gammaEnabled: Bool?
+        let gammaValue: Float?
+        let autoExposureEnabled: Bool?
+        let autoExposureTarget: Int?
+        let brownGuardrailEnabled: Bool?
+        let mode: Int?
+    }
+}
+
+struct PresetsResponse: Codable, Sendable {
+    let success: Bool
+    let data: PresetsData
+    let timestamp: Int?
+
+    struct PresetsData: Codable, Sendable {
+        let presets: [Preset]
+
+        struct Preset: Codable, Sendable {
+            let id: Int
+            let name: String
+        }
+    }
+}
+
+struct AudioParametersResponse: Codable, Sendable {
+    let success: Bool
+    let data: AudioParameters
+    let timestamp: Int?
+
+    struct AudioParameters: Codable, Sendable {
+        let gain: Double?
+        let threshold: Double?
+        let micType: Int?
+    }
+}
+
+struct AudioTuningResponse: Codable, Sendable {
+    let success: Bool
+    let data: AudioTuningData
+    let timestamp: Int?
+
+    struct AudioTuningData: Codable, Sendable {
+        let pipeline: Pipeline
+        let controlBus: ControlBus
+        let contract: Contract
+        let state: State?
+
+        struct Pipeline: Codable, Sendable {
+            let dcAlpha: Double?
+            let agcTargetRms: Double?
+            let agcMinGain: Double?
+            let agcMaxGain: Double?
+            let agcAttack: Double?
+            let agcRelease: Double?
+            let agcClipReduce: Double?
+            let agcIdleReturnRate: Double?
+            let noiseFloorMin: Double?
+            let noiseFloorRise: Double?
+            let noiseFloorFall: Double?
+            let gateStartFactor: Double?
+            let gateRangeFactor: Double?
+            let gateRangeMin: Double?
+            let rmsDbFloor: Double?
+            let rmsDbCeil: Double?
+            let bandDbFloor: Double?
+            let bandDbCeil: Double?
+            let chromaDbFloor: Double?
+            let chromaDbCeil: Double?
+            let fluxScale: Double?
+            let bandAttack: Double?
+            let bandRelease: Double?
+            let heavyBandAttack: Double?
+            let heavyBandRelease: Double?
+            let usePerBandNoiseFloor: Bool?
+            let silenceHysteresisMs: Double?
+            let silenceThreshold: Double?
+            let perBandGains: [Double]?
+            let perBandNoiseFloors: [Double]?
+            let bins64Adaptive: Bins64Adaptive?
+            let novelty: Novelty?
+
+            struct Bins64Adaptive: Codable, Sendable {
+                let scale: Double?
+                let floor: Double?
+                let rise: Double?
+                let fall: Double?
+                let decay: Double?
+            }
+
+            struct Novelty: Codable, Sendable {
+                let useSpectralFlux: Bool?
+                let spectralFluxScale: Double?
+            }
+        }
+
+        struct ControlBus: Codable, Sendable {
+            let alphaFast: Double?
+            let alphaSlow: Double?
+        }
+
+        struct Contract: Codable, Sendable {
+            let audioStalenessMs: Double?
+            let bpmMin: Double?
+            let bpmMax: Double?
+            let bpmTau: Double?
+            let confidenceTau: Double?
+            let phaseCorrectionGain: Double?
+            let barCorrectionGain: Double?
+            let beatsPerBar: Int?
+            let beatUnit: Int?
+        }
+
+        struct State: Codable, Sendable {
+            let rmsRaw: Double?
+            let rmsMapped: Double?
+            let rmsPreGain: Double?
+            let fluxMapped: Double?
+            let agcGain: Double?
+            let dcEstimate: Double?
+            let noiseFloor: Double?
+            let minSample: Double?
+            let maxSample: Double?
+            let peakCentered: Double?
+            let meanSample: Double?
+            let clipCount: Int?
+        }
+    }
+}
+
+struct AudioFFTResponse: Codable, Sendable {
+    let success: Bool
+    let data: AudioFFTData
+    let timestamp: Int?
+
+    struct AudioFFTData: Codable, Sendable {
+        let rmsRaw: Double
+        let rmsMapped: Double
+        let rmsPreGain: Double
+        let agcGain: Double
+        let bands: [Double]
+        let chroma: [Double]
+    }
+}
+
+struct AudioTempoResponse: Codable, Sendable {
+    let success: Bool
+    let data: AudioTempoData
+    let timestamp: Int?
+
+    struct AudioTempoData: Codable, Sendable {
+        let bpm: Double
+        let confidence: Double
+        let beatPhase: Double
+        let barPhase: Double
+        let beatInBar: Int
+        let beatsPerBar: Int
+
+        enum CodingKeys: String, CodingKey {
+            case bpm
+            case confidence
+            case beatPhase = "beat_phase"
+            case barPhase = "bar_phase"
+            case beatInBar = "beat_in_bar"
+            case beatsPerBar = "beats_per_bar"
+        }
+    }
+}
+
+struct AudioStateResponse: Codable, Sendable {
+    let success: Bool
+    let data: AudioStateData
+    let timestamp: Int?
+
+    struct AudioStateData: Codable, Sendable {
+        let state: String
+        let capturing: Bool
+        let hopCount: Int
+        let sampleIndex: UInt32
+        let controlBus: ControlBus?
+
+        struct ControlBus: Codable, Sendable {
+            let silentScale: Double
+            let isSilent: Bool
+            let tempoLocked: Bool
+            let tempoConfidence: Double
+        }
+    }
+}
+
+struct TransitionTypesResponse: Codable, Sendable {
+    let success: Bool
+    let data: TransitionTypesData
+    let timestamp: Int?
+
+    struct TransitionTypesData: Codable, Sendable {
+        let types: [TransitionType]
+
+        struct TransitionType: Codable, Sendable {
+            let id: Int
+            let name: String
+        }
+    }
+}
+
+struct GenericResponse: Codable, Sendable {
+    let success: Bool
+    let message: String?
+    let timestamp: Int?
+}
+
+// MARK: - Network Endpoints (Wi-Fi setup / AP mode)
+
+struct NetworkStatusResponse: Codable, Sendable {
+    let success: Bool
+    let data: NetworkStatusData
+    let timestamp: Int?
+
+    struct NetworkStatusData: Codable, Sendable {
+        let connected: Bool
+        let state: String?
+        let apMode: Bool
+        let ssid: String?
+        let ip: String?
+        let rssi: Int?
+        let channel: Int?
+        let apIP: String?
+        let stats: NetworkStats?
+
+        struct NetworkStats: Codable, Sendable {
+            let connectionAttempts: Int?
+            let successfulConnections: Int?
+            let uptimeSeconds: Int?
+        }
+    }
+}
+
+struct NetworkScanResponse: Codable, Sendable {
+    let success: Bool
+    let data: NetworkScanData
+    let timestamp: Int?
+
+    struct NetworkScanData: Codable, Sendable {
+        let networks: [ScanResult]
+        let count: Int?
+        let lastScanTime: Int?
+
+        struct ScanResult: Codable, Sendable {
+            let ssid: String
+            let rssi: Int?
+            let channel: Int?
+            let encryption: String?
+            let bssid: String?
+        }
+    }
+}
+
+struct NetworkSavedListResponse: Codable, Sendable {
+    let success: Bool
+    let data: NetworkSavedData
+    let timestamp: Int?
+
+    struct NetworkSavedData: Codable, Sendable {
+        let networks: [String]
+        let count: Int?
+        let maxNetworks: Int?
+    }
+}
+
+struct NetworkConnectResponse: Codable, Sendable {
+    let success: Bool
+    let data: NetworkConnectData?
+    let timestamp: Int?
+
+    struct NetworkConnectData: Codable, Sendable {
+        let message: String?
+        let ssid: String?
+    }
+}
+
+// MARK: - REST Client
+
+@available(iOS 17.0, *)
+actor RESTClient {
+    private let baseURL: String
+    private let port: Int
+    private let session: URLSession
+
+    // MARK: - Initialization
+
+    init(host: String, port: Int = 80) {
+        self.baseURL = "http://\(host)"
+        self.port = port
+
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 15.0
+        config.timeoutIntervalForResource = 30.0
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.urlCache = nil
+
+        self.session = URLSession(configuration: config)
+    }
+
+    /// Test-only initialiser allowing injection of a pre-configured `URLSession`.
+    /// Production code uses `init(host:port:)`. Tests use this to wire a session
+    /// whose `protocolClasses` route through a `URLProtocol` mock.
+    init(host: String, port: Int = 80, session: URLSession) {
+        self.baseURL = "http://\(host)"
+        self.port = port
+        self.session = session
+    }
+
+    // MARK: - Generic Request Method
+
+    private func request<T: Decodable>(
+        _ method: String,
+        path: String,
+        body: [String: Any]? = nil
+    ) async throws -> T {
+        let urlString = "\(baseURL):\(port)/api/v1/\(path)"
+        guard let url = URL(string: urlString) else {
+            throw APIClientError.invalidResponse
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        if let body = body {
+            do {
+                request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            } catch {
+                throw APIClientError.encodingError
+            }
+        }
+
+        let (data, response) = try await session.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIClientError.invalidResponse
+        }
+
+        switch httpResponse.statusCode {
+        case 200...299:
+            break
+        case 429:
+            throw APIClientError.rateLimited
+        default:
+            let message = String(data: data, encoding: .utf8)
+            throw APIClientError.httpError(httpResponse.statusCode, message)
+        }
+
+        do {
+            let decoder = JSONDecoder()
+            // Device firmware sends camelCase, not snake_case
+            return try decoder.decode(T.self, from: data)
+        } catch {
+            #if DEBUG
+            if let rawString = String(data: data, encoding: .utf8) {
+                print("❌ Decode failed (\(T.self)). Raw response:\n\(rawString)")
+            }
+            #endif
+            throw APIClientError.decodingError(error)
+        }
+    }
+
+    // MARK: - Device Endpoints
+
+    func getDeviceInfo() async throws -> DeviceInfoResponse {
+        try await request("GET", path: "device/info")
+    }
+
+    func getDeviceStatus() async throws -> DeviceStatusResponse {
+        try await request("GET", path: "device/status")
+    }
+
+    // MARK: - Effects Endpoints
+
+    func getEffects(page: Int = 1, limit: Int = 50, details: Bool = false) async throws -> EffectsResponse {
+        var path = "effects?page=\(page)&limit=\(limit)"
+        if details {
+            path += "&details=true"
+        }
+        return try await request("GET", path: path)
+    }
+
+    func setEffect(_ id: Int) async throws {
+        let _: GenericResponse = try await request("POST", path: "effects/set", body: ["effectId": id])
+    }
+
+    func getEffectMetadata(_ id: Int) async throws -> EffectDetailResponse {
+        try await request("GET", path: "effects/metadata?id=\(id)")
+    }
+
+    // MARK: - Palettes Endpoints
+
+    func getPalettes(page: Int = 1, limit: Int = 75) async throws -> PalettesResponse {
+        try await request("GET", path: "palettes?page=\(page)&limit=\(limit)")
+    }
+
+    func setPalette(_ id: Int) async throws {
+        let _: GenericResponse = try await request("POST", path: "palettes/set", body: ["paletteId": id])
+    }
+
+    // MARK: - Parameters Endpoints
+
+    func getParameters() async throws -> ParametersResponse {
+        try await request("GET", path: "parameters")
+    }
+
+    func setParameters(_ params: [String: Int]) async throws {
+        let _: GenericResponse = try await request("POST", path: "parameters", body: params)
+    }
+
+    func setBrightness(_ value: Int) async throws {
+        try await setParameters(["brightness": value])
+    }
+
+    func setSpeed(_ value: Int) async throws {
+        try await setParameters(["speed": value])
+    }
+
+    func setParameter(name: String, value: Int) async throws {
+        try await setParameters([name: value])
+    }
+
+    // MARK: - Zones Endpoints
+    //
+    // Wire-format note (2026-05-02 migration): the `zoneId` argument on each
+    // setter is the 1-indexed wire identifier (1..3) and is interpolated
+    // verbatim into the URL path (`/api/v1/zones/{zoneId}/...`). Firmware
+    // post-B2 (`d53092ad`) accepts only 1, 2, 3 on the wire. Wire value 0
+    // is RESERVED — firmware rejects it with HTTP 400 / `INVALID_VALUE`,
+    // and `GET /api/v1/zones/0` returns 404 NOT_FOUND because the path
+    // regex is now `[1-3]`. iOS internal `ZoneConfig.id` and
+    // `ZoneSegment.zoneId` mirror the wire format so no translation step
+    // is required at this boundary. The defensive guards below reject
+    // out-of-range zoneIds before they reach the firmware.
+
+    /// Validate that `zoneId` is in the 1-indexed wire range and throw
+    /// `APIClientError.invalidZoneId` if not. Centralises the boundary
+    /// check across all per-zone setters.
+    private static func validateWireZoneId(_ zoneId: Int) throws {
+        guard (1...3).contains(zoneId) else {
+            throw APIClientError.invalidZoneId(zoneId)
+        }
+    }
+
+    func getZones() async throws -> ZonesResponse {
+        try await request("GET", path: "zones")
+    }
+
+    func setZonesEnabled(_ enabled: Bool) async throws {
+        let _: GenericResponse = try await request("POST", path: "zones/enabled", body: ["enabled": enabled])
+    }
+
+    func setZoneEffect(zoneId: Int, effectId: Int) async throws {
+        try Self.validateWireZoneId(zoneId)
+        let _: GenericResponse = try await request("POST", path: "zones/\(zoneId)/effect", body: ["effectId": effectId])
+    }
+
+    func setZoneBrightness(zoneId: Int, brightness: Int) async throws {
+        try Self.validateWireZoneId(zoneId)
+        let _: GenericResponse = try await request("POST", path: "zones/\(zoneId)/brightness", body: ["brightness": brightness])
+    }
+
+    func setZoneSpeed(zoneId: Int, speed: Int) async throws {
+        try Self.validateWireZoneId(zoneId)
+        let _: GenericResponse = try await request("POST", path: "zones/\(zoneId)/speed", body: ["speed": speed])
+    }
+
+    func setZonePalette(zoneId: Int, paletteId: Int) async throws {
+        try Self.validateWireZoneId(zoneId)
+        let _: GenericResponse = try await request("POST", path: "zones/\(zoneId)/palette", body: ["paletteId": paletteId])
+    }
+
+    func setZoneBlendMode(zoneId: Int, blendMode: Int) async throws {
+        try Self.validateWireZoneId(zoneId)
+        let _: GenericResponse = try await request("POST", path: "zones/\(zoneId)/blend", body: ["blendMode": blendMode])
+    }
+
+    func setZoneLayout(zones: [[String: Int]]) async throws {
+        // Defensive: each layout segment carries its own zoneId. Reject the
+        // batch if any segment uses the reserved 0 wire value before the
+        // request is dispatched.
+        for seg in zones {
+            if let zid = seg["zoneId"] {
+                try Self.validateWireZoneId(zid)
+            }
+        }
+        let _: GenericResponse = try await request("POST", path: "zones/layout", body: ["zones": zones])
+    }
+
+    func loadZonePreset(id: Int) async throws {
+        let _: GenericResponse = try await request("POST", path: "presets/zones/\(id)/load", body: [:])
+    }
+
+    // MARK: - Transition Endpoints
+
+    func triggerTransition(toEffect: Int, type: Int? = nil, duration: Int? = nil) async throws {
+        var body: [String: Any] = ["toEffect": toEffect]
+        if let type = type {
+            body["type"] = type
+        }
+        if let duration = duration {
+            body["duration"] = duration
+        }
+        let _: GenericResponse = try await request("POST", path: "transitions/trigger", body: body)
+    }
+
+    func getTransitionTypes() async throws -> TransitionTypesResponse {
+        try await request("GET", path: "transitions/types")
+    }
+
+    // MARK: - Colour Correction Endpoints
+
+    func getColourCorrection() async throws -> ColourCorrectionResponse {
+        try await request("GET", path: "colorCorrection/config")
+    }
+
+    func setColourCorrection(
+        gammaEnabled: Bool? = nil,
+        gammaValue: Float? = nil,
+        autoExposureEnabled: Bool? = nil,
+        autoExposureTarget: Int? = nil,
+        brownGuardrailEnabled: Bool? = nil,
+        mode: Int? = nil
+    ) async throws {
+        var body: [String: Any] = [:]
+        if let gammaEnabled = gammaEnabled {
+            body["gammaEnabled"] = gammaEnabled
+        }
+        if let gammaValue = gammaValue {
+            body["gammaValue"] = gammaValue
+        }
+        if let autoExposureEnabled = autoExposureEnabled {
+            body["autoExposureEnabled"] = autoExposureEnabled
+        }
+        if let autoExposureTarget = autoExposureTarget {
+            body["autoExposureTarget"] = autoExposureTarget
+        }
+        if let brownGuardrailEnabled = brownGuardrailEnabled {
+            body["brownGuardrailEnabled"] = brownGuardrailEnabled
+        }
+        if let mode = mode {
+            body["mode"] = mode
+        }
+        let _: GenericResponse = try await request("POST", path: "colorCorrection/config", body: body)
+    }
+
+    // MARK: - Presets Endpoints
+
+    func getPresets() async throws -> PresetsResponse {
+        try await request("GET", path: "presets")
+    }
+
+    func loadPreset(name: String) async throws {
+        let encodedName = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? name
+        let _: GenericResponse = try await request("POST", path: "presets/\(encodedName)/load", body: [:])
+    }
+
+    func savePreset(name: String) async throws {
+        let _: GenericResponse = try await request("POST", path: "presets/save-current", body: ["name": name])
+    }
+
+    // MARK: - Audio Endpoints
+
+    func getAudioParameters() async throws -> AudioParametersResponse {
+        try await request("GET", path: "audio/parameters")
+    }
+
+    func setAudioParameters(gain: Double? = nil, threshold: Double? = nil, micType: Int? = nil) async throws {
+        var body: [String: Any] = [:]
+        if let gain = gain {
+            body["gain"] = gain
+        }
+        if let threshold = threshold {
+            body["threshold"] = threshold
+        }
+        if let micType = micType {
+            body["micType"] = micType
+        }
+        let _: GenericResponse = try await request("POST", path: "audio/parameters", body: body)
+    }
+
+    func getAudioTuning() async throws -> AudioTuningResponse {
+        try await request("GET", path: "audio/parameters")
+    }
+
+    func patchAudioTuning(_ payload: [String: Any]) async throws {
+        let _: GenericResponse = try await request("PATCH", path: "audio/parameters", body: payload)
+    }
+
+    func getAudioFFT() async throws -> AudioFFTResponse {
+        try await request("GET", path: "audio/fft")
+    }
+
+    func getAudioTempo() async throws -> AudioTempoResponse {
+        try await request("GET", path: "audio/tempo")
+    }
+
+    func getAudioState() async throws -> AudioStateResponse {
+        try await request("GET", path: "audio/state")
+    }
+
+    // MARK: - Network Endpoints (Wi-Fi setup)
+
+    func getNetworkStatus() async throws -> NetworkStatusResponse {
+        try await request("GET", path: "network/status")
+    }
+
+    func getNetworkScan() async throws -> NetworkScanResponse {
+        try await request("GET", path: "network/scan")
+    }
+
+    func getSavedNetworks() async throws -> NetworkSavedListResponse {
+        try await request("GET", path: "network/networks")
+    }
+
+    func addNetwork(ssid: String, password: String) async throws {
+        let _: GenericResponse = try await request("POST", path: "network/networks", body: [
+            "ssid": ssid,
+            "password": password
+        ])
+    }
+
+    func connectToNetwork(ssid: String, password: String, save: Bool = true) async throws {
+        var body: [String: Any] = ["ssid": ssid]
+        if !password.isEmpty {
+            body["password"] = password
+        }
+        body["save"] = save
+        let _: NetworkConnectResponse = try await request("POST", path: "network/connect", body: body)
+    }
+
+    func disconnectFromNetwork() async throws {
+        let _: GenericResponse = try await request("POST", path: "network/disconnect", body: [:])
+    }
+
+    // MARK: Phase 1 — capability discovery
+
+    /// Probe the connected device for its advertised capabilities.
+    ///
+    /// Probe order:
+    ///   1. `GET /api/v1/openapi.json`        — richest, contract-aware
+    ///   2. `GET /api/v1/firmware/version`    — fallback, version-only
+    ///   3. `nil`                              — degrade gracefully
+    ///
+    /// This call is BEST-EFFORT: it never throws. Any transport, status, or decode
+    /// failure collapses to `nil` so that capability discovery cannot break the
+    /// connect flow. AppViewModel logs a single line on `nil` and proceeds.
+    func getCapabilities() async -> DeviceCapabilities? {
+        if let viaOpenAPI = await fetchOpenAPICapabilities() {
+            return viaOpenAPI
+        }
+        if let viaVersion = await fetchFirmwareVersionCapabilities() {
+            return viaVersion
+        }
+        return nil
+    }
+
+    /// Fetch and decode `/api/v1/openapi.json`. Returns `nil` on any failure.
+    private func fetchOpenAPICapabilities() async -> DeviceCapabilities? {
+        guard let data = await rawGet(path: "openapi.json") else { return nil }
+        return DeviceCapabilities.decodeOpenAPI(from: data)
+    }
+
+    /// Fetch and decode `/api/v1/firmware/version`. Returns `nil` on any failure.
+    private func fetchFirmwareVersionCapabilities() async -> DeviceCapabilities? {
+        guard let data = await rawGet(path: "firmware/version") else { return nil }
+        return DeviceCapabilities.decodeFirmwareVersion(from: data)
+    }
+
+    /// Best-effort raw GET against `/api/v1/<path>`. Returns the response body on
+    /// 2xx, `nil` for any non-2xx status or transport error. Never throws.
+    private func rawGet(path: String) async -> Data? {
+        let urlString = "\(baseURL):\(port)/api/v1/\(path)"
+        guard let url = URL(string: urlString) else { return nil }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse,
+                  (200...299).contains(http.statusCode) else {
+                return nil
+            }
+            return data
+        } catch {
+            return nil
+        }
+    }
+
+    // MARK: Phase 2 — runtime parameter set
+    //
+    // End-user surface for live effect tuning. Per F-4 of the parity spec, every
+    // parameter with a non-empty `displayName` is exposed via a type-appropriate
+    // control: FLOAT → slider, INT → stepper, BOOL → toggle, ENUM → picker (integer
+    // keyed for now since firmware does not yet emit case names). The sheet is
+    // driven by these two endpoints:
+    //
+    //     GET  /api/v1/effects/parameters?effectId=<id>   → EffectParametersGet
+    //     POST /api/v1/effects/parameters                 → {effectId, parameters: {<name>: <value>}}
+    //
+    // The encode helper is a pure free static so tests can lock the wire shape
+    // without spinning up a URLProtocol mock.
+
+    /// Fetch the tunable runtime parameters for a single effect.
+    /// - Parameter effectId: The numeric effect identifier as returned by
+    ///   `/api/v1/effects`.
+    /// - Returns: The decoded `EffectParametersGet` envelope.
+    func getEffectParameters(effectId: Int) async throws -> EffectParametersGet {
+        // Firmware exposes the parameters list as the `data` payload of a
+        // standard envelope. Decode the envelope, then return its inner value.
+        struct Envelope: Codable, Sendable {
+            let success: Bool
+            let data: EffectParametersGet
+            let timestamp: Int?
+        }
+        let response: Envelope = try await request(
+            "GET",
+            path: "effects/parameters?effectId=\(effectId)"
+        )
+        return response.data
+    }
+
+    /// Push a new value for a single runtime parameter.
+    /// - Parameters:
+    ///   - effectId: The numeric effect identifier the parameter belongs to.
+    ///   - name: The programmatic parameter key (e.g. `"contrast"`).
+    ///   - value: The new value. The firmware expects a numeric form regardless
+    ///     of the underlying `ParameterType`; for BOOL pass `0.0` or `1.0`, for
+    ///     INT/ENUM pass a whole number, for FLOAT pass any value within the
+    ///     parameter's declared range.
+    func setRuntimeParameter(effectId: Int, name: String, value: Double) async throws {
+        let body = Self.encodeRuntimeParameterBody(
+            effectId: effectId,
+            name: name,
+            value: value
+        )
+        // Reach the JSON-Serialization codepath of `request(_:path:body:)` by
+        // round-tripping the bytes back into a `[String: Any]` so the body has
+        // the exact shape the contract documents.
+        guard let dict = try JSONSerialization.jsonObject(with: body) as? [String: Any] else {
+            throw APIClientError.encodingError
+        }
+        let _: GenericResponse = try await request(
+            "POST",
+            path: "effects/parameters",
+            body: dict
+        )
+    }
+
+    /// Encode the runtime-set body to JSON bytes.
+    ///
+    /// Wire shape (per `docs/protocol/k1-rest-contract.yaml`):
+    /// ```
+    /// {"effectId": 4878, "parameters": {"contrast": 1.5}}
+    /// ```
+    ///
+    /// Exposed as a `static` so unit tests can lock the shape without touching
+    /// the network layer. The body is deterministic and self-contained — no
+    /// shared state, no actor isolation, no URL state.
+    static func encodeRuntimeParameterBody(
+        effectId: Int,
+        name: String,
+        value: Double
+    ) -> Data {
+        // JSONSerialization preserves Double precision and avoids Swift's
+        // `Codable` JSONEncoder ambiguity around `[String: Any]`-shaped bodies.
+        let payload: [String: Any] = [
+            "effectId": effectId,
+            "parameters": [name: value]
+        ]
+        // The payload is a fixed, well-formed `[String: Any]` — JSONSerialization
+        // cannot fail on it. If it ever does, surfacing an empty `Data` is a
+        // strictly better failure mode than a fatal error during a slider drag.
+        return (try? JSONSerialization.data(withJSONObject: payload)) ?? Data()
+    }
+
+    // MARK: Phase 2 — preset CRUD
+    //
+    // The preset surface uses REST for reads (list + single fetch) and WS for
+    // mutations (saveCurrent / load / delete) so iOS receives the firmware's
+    // broadcast confirmations (`effectPresets.saved` etc., wired in
+    // `WebSocketService.swift`'s Phase 1 broadcast block).
+    //
+    // Endpoints (per `firmware-v3/src/network/webserver/V1ApiRoutes.cpp`
+    // lines 1267-1382):
+    //   GET    /api/v1/effect-presets         → list
+    //   GET    /api/v1/effect-presets/get?id= → detail (unused by P2-3 today)
+    //   POST   /api/v1/effect-presets/apply   → covered by WS effectPresets.load
+    //   DELETE /api/v1/effect-presets/delete  → covered by WS effectPresets.delete
+    //   GET    /api/v1/zone-presets           → list
+    //   GET    /api/v1/zone-presets/get?id=   → detail (unused by P2-3 today)
+    //   POST   /api/v1/zone-presets/apply     → covered by WS zonePresets.load
+    //   DELETE /api/v1/zone-presets/delete    → covered by WS zonePresets.delete
+
+    /// Fetch the user-saved effect-preset list.
+    func getEffectPresets() async throws -> EffectPresetsListResponse {
+        try await request("GET", path: "effect-presets")
+    }
+
+    /// Fetch the zone-preset list (built-in plus user-saved).
+    func getZonePresets() async throws -> ZonePresetsListResponse {
+        try await request("GET", path: "zone-presets")
+    }
+
+    // MARK: Phase 2 — show transport
+    //
+    // Read endpoints for the shows surface. Mutations (play / pause / resume /
+    // stop / seek) go over WebSocket so iOS receives broadcast confirmations
+    // and benefits from low-latency dispatch — see `WebSocketService` Phase 2
+    // additions. Out-of-scope for Phase 2: upload, delete, cue.inject.
+
+    /// `GET /api/v1/shows` — list built-in and uploaded shows.
+    func getShows() async throws -> ShowsListResponse {
+        try await request("GET", path: "shows")
+    }
+
+    /// `GET /api/v1/shows/current` — current playback frame (playing show,
+    /// elapsed/duration timestamps, paused flag).
+    func getCurrentShow() async throws -> CurrentShowResponse {
+        try await request("GET", path: "shows/current")
+    }
+}
+
+
+
+
+================================================================================
+FILE: lightwave-ios-v2/LightwaveOS/Network/WebSocketService.swift
+DESCRIPTION: Actor-isolated WebSocket service — bidirectional control + telemetry channel to K1; reconnection state machine.
+================================================================================
+
+//
+//  WebSocketService.swift
+//  LightwaveOS
+//
+//  Actor-based WebSocket service for real-time communication with ESP32 device.
+//  Handles JSON text messages and binary LED stream data.
+//  Auto-reconnect with exponential backoff.
+//  iOS 17+, Swift 6 with strict concurrency. British English comments.
+//
+
+import Foundation
+
+// MARK: - WebSocket Message Types
+
+enum WebSocketMessageType: String {
+    case status
+    case beatEvent = "beat.event"
+    case zonesList = "zones.list"
+    case zonesChanged = "zones.changed"
+    case zonesStateChanged = "zones.stateChanged"
+    case zonesEffectChanged = "zones.effectChanged"
+    case zonesLayoutChanged = "zones.layoutChanged"
+    case zoneEnabledChanged = "zone.enabledChanged"
+    case zonesEnabledChanged = "zones.enabledChanged"
+    case parametersChanged = "parameters.changed"
+    case effectsChanged = "effects.changed"
+    case effectsList = "effects.list"
+    case palettesList = "palettes.list"
+    case deviceStatus = "device.status"
+    case colourCorrectionConfig = "colorCorrection.getConfig"
+    case audioSubscribed = "audio.subscribed"
+    case audioUnsubscribed = "audio.unsubscribed"
+    case ledStreamSubscribed = "ledStream.subscribed"
+    case edgeMixerGet = "edge_mixer.get"
+    case edgeMixerSet = "edge_mixer.set"
+    case edgeMixerSave = "edge_mixer.save"
+
+    // MARK: Phase 1 — broadcast cases
+    // Added 2026-04-30 to cover broadcasts emitted by firmware that iOS previously
+    // dropped silently. Phase 2 will wire UI handlers; for now these exist so the
+    // decode path produces a typed Event rather than falling through to .unknown.
+    case cameraModeChanged = "cameraMode.changed"
+    case factoryPresetsChanged = "factoryPresets.changed"
+    case effectPresetsSaved = "effectPresets.saved"
+    case effectPresetsDeleted = "effectPresets.deleted"
+    case colourCorrectionSetGamma = "colorCorrection.setGamma"
+    case colourCorrectionSetAutoExposure = "colorCorrection.setAutoExposure"
+    case colourCorrectionSetBrownGuardrail = "colorCorrection.setBrownGuardrail"
+
+    // MARK: Phase 2 — STM and VRMS streams
+    // Added 2026-05-01 (Task P2-2). Wire bindings:
+    //   - stm.subscribed / stm.unsubscribed: text acks emitted by
+    //     `WsStmCommands.cpp` after a client toggles STM streaming.
+    //   - vrms.subscribed / vrms.unsubscribed: text acks from
+    //     `WsStreamCommands.cpp` (FEATURE_VRMS_METRICS gate).
+    //   - vrms.frame: 10 Hz JSON broadcast carrying perceptual metrics
+    //     emitted by `WebServer.cpp` line 894.
+    // STM uses a 250-byte BINARY frame with magic 0xFD (no text type — handled
+    // entirely by `handleBinaryMessage`).
+    case stmSubscribed = "stm.subscribed"
+    case stmUnsubscribed = "stm.unsubscribed"
+    case vrmsSubscribed = "vrms.subscribed"
+    case vrmsUnsubscribed = "vrms.unsubscribed"
+    case vrmsFrame = "vrms.frame"
+
+    // MARK: Phase 2 — show transport WS commands
+    //
+    // Show playback transport (P2-4). The firmware emits `show.status` as the
+    // canonical playback push and acknowledges each transport command by
+    // echoing a `cmd`-prefixed object with `success: true`. iOS only needs the
+    // raw values listed here on the inbound path; outbound dispatch uses the
+    // string commands directly via `WebSocketService.send(...)`.
+    case showStatus = "show.status"
+    case showList = "show.list"
+    case showPlay = "show.play"
+    case showPause = "show.pause"
+    case showResume = "show.resume"
+    case showStop = "show.stop"
+    case showSeek = "show.seek"
+
+    case unknown
+}
+
+// MARK: - WebSocket Service Actor
+
+@available(iOS 17.0, *)
+actor WebSocketService {
+    // MARK: - Event Stream Types
+
+    /// Event stream for WebSocket state and messages
+    enum Event: Sendable {
+        case status(WebSocketPayload)
+        case beat(WebSocketPayload)
+        case zoneUpdate(WebSocketPayload)
+        case parameterUpdate(WebSocketPayload)
+        case ledData(Data)
+        case audioMetrics(AudioMetricsFrame)
+        case edgeMixerUpdate(WebSocketPayload)
+        case connected
+        case disconnected(Error?)
+
+        // MARK: Phase 1 — broadcast cases
+        // Added 2026-04-30. Each case carries the raw payload as a `WebSocketPayload`
+        // so consumers can inspect `data` ad-hoc until Phase 2 introduces typed DTOs.
+        case cameraModeChanged(WebSocketPayload)
+        case factoryPresetsChanged(WebSocketPayload)
+        case effectPresetsSaved(WebSocketPayload)
+        case effectPresetsDeleted(WebSocketPayload)
+        case colourCorrectionSetGamma(WebSocketPayload)
+        case colourCorrectionSetAutoExposure(WebSocketPayload)
+        case colourCorrectionSetBrownGuardrail(WebSocketPayload)
+
+        // MARK: Phase 2 — STM and VRMS streams
+        // Added 2026-05-01 (Task P2-2). Carry decoded frame structs so consumers
+        // do not have to repeat the binary/JSON parsing.
+        case stmFrame(STMFrame)
+        case vrmsFrame(VRMSFrame, timestamp: UInt32)
+        case stmSubscriptionAck(WebSocketPayload)
+        case vrmsSubscriptionAck(WebSocketPayload)
+
+        // MARK: Phase 2 — show transport WS commands
+        // Firmware emits `show.status` on every playback transition. The other
+        // show.* responses are command acks; we surface them as `.showAck` so
+        // a UI can confirm dispatch without each command needing its own case.
+        case showStatus(WebSocketPayload)
+        case showAck(WebSocketPayload)
+
+        // MARK: Phase 2 — colour correction (P2-?)
+        // Replaces the previously-dropped `.colourCorrectionConfig` REST stub
+        // path. Firmware unicasts the full ColorCorrectionEngine state in
+        // reply to `colorCorrection.getConfig` and `colorCorrection.setConfig`;
+        // both reply shapes are identical so we surface them under one event.
+        // See WsColorCommands.cpp:247-352 (firmware) and
+        // ColourCorrectionViewModel.handleConfigUpdate (iOS handler).
+        case colourCorrectionConfigUpdated(WebSocketPayload)
+    }
+
+    /// Sendable wrapper for [String: Any] JSON payloads
+    struct WebSocketPayload: @unchecked Sendable {
+        let data: [String: Any]
+    }
+
+    // MARK: - Public State
+
+    private(set) var isConnected: Bool = false
+
+    // MARK: - Private State
+
+    private var webSocketTask: URLSessionWebSocketTask?
+    private var session: URLSession?
+    private var shouldReconnect = true
+    private var reconnectAttempts = 0
+    private var reconnectTask: Task<Void, Never>?
+    private var receiveTask: Task<Void, Never>?
+    private var monitorTask: Task<Void, Never>?
+
+    private let initialBackoff: TimeInterval = 3.0
+    private let maxBackoff: TimeInterval = 30.0
+    private let backoffMultiplier: Double = 2.0
+
+    private var currentURL: URL?
+    private var eventContinuation: AsyncStream<Event>.Continuation?
+
+    // MARK: - Initialization
+
+    init() {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 30.0
+        self.session = URLSession(configuration: config)
+    }
+
+    // MARK: - Public Methods
+
+    /// Connect to the WebSocket server and return an event stream
+    func connect(to url: URL) -> AsyncStream<Event> {
+        // Guard double-connect: clean up any existing connection first
+        if webSocketTask != nil || eventContinuation != nil {
+            disconnect()
+        }
+
+        currentURL = url
+        shouldReconnect = true
+        reconnectAttempts = 0
+
+        return AsyncStream<Event> { continuation in
+            self.eventContinuation = continuation
+            self.performConnect()
+        }
+    }
+
+    /// Disconnect from the WebSocket server
+    func disconnect() {
+        shouldReconnect = false
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        receiveTask?.cancel()
+        receiveTask = nil
+        monitorTask?.cancel()
+        monitorTask = nil
+        closeConnection()
+        eventContinuation?.finish()
+        eventContinuation = nil
+    }
+
+    /// Send a command with optional parameters.
+    ///
+    /// `params` accepts `[String: any Sendable]` so call sites in
+    /// non-actor contexts pass values across the actor boundary cleanly
+    /// under Swift 6 strict concurrency. Internally we widen to
+    /// `[String: Any]` for `JSONSerialization`, which only ever runs on
+    /// this actor.
+    func send(_ command: String, params: [String: any Sendable] = [:]) {
+        guard webSocketTask != nil else {
+            print("WS send dropped (not connected): \(command)")
+            return
+        }
+        var message: [String: Any] = ["type": command]
+        for (key, value) in params {
+            message[key] = value
+        }
+        sendRaw(message)
+    }
+
+    /// Subscribe to periodic status broadcasts.
+    ///
+    /// Required for the iOS app to receive `.status` events from K1 V2
+    /// (commit firmware/streaming-and-status-gate). The firmware now gates
+    /// its 5-second status-broadcast loop behind this subscribe — without it
+    /// no periodic `.status` messages arrive, so the app would only see the
+    /// status payload on explicit changes. Sent automatically by
+    /// `AppViewModel.consumeWebSocketEvents` on the `.connected` event;
+    /// no other call site should need it.
+    func subscribeStatus() {
+        send("status.subscribe")
+    }
+
+    /// Unsubscribe from periodic status broadcasts. The companion to
+    /// `subscribeStatus()` above. Currently unused at the call-site level —
+    /// the WebSocket disconnect on backgrounding implicitly tears down the
+    /// firmware-side subscription — but exposed for completeness and future
+    /// use (e.g. a low-power mode that pauses telemetry without dropping the
+    /// socket).
+    func unsubscribeStatus() {
+        send("status.unsubscribe")
+    }
+
+    /// Subscribe to LED stream
+    ///
+    /// Phase 3 disabled — heap-stability mitigation. K1 allocates a per-client
+    /// LED message queue (~7680 B = 8 frame slots × 960 B) on subscribe;
+    /// suppressing the upstream subscribe prevents the internal-heap
+    /// fragmentation that starves the firmware heap-shedding recovery path.
+    /// Re-enable by uncommenting the `send` line below once the broadcaster
+    /// fix lands. See docs/superpowers/ios-firmware-parity-phase-3-scoping.md.
+    func subscribeLEDStream(udpPort: UInt16 = 41234) {
+        _ = udpPort
+        // send("ledStream.subscribe", params: ["udpPort": Int(udpPort)])
+    }
+
+    /// Subscribe to LED stream via WebSocket (no UDP transport)
+    ///
+    /// Phase 3 disabled — see `subscribeLEDStream(udpPort:)` above.
+    func subscribeLEDStreamWS() {
+        // send("ledStream.subscribe")
+    }
+
+    /// Unsubscribe from LED stream
+    func unsubscribeLEDStream() {
+        send("ledStream.unsubscribe")
+    }
+
+    /// Subscribe to audio metrics stream
+    ///
+    /// Phase 3 disabled — see `subscribeLEDStream(udpPort:)` above.
+    func subscribeAudioStream(udpPort: UInt16 = 41234) {
+        _ = udpPort
+        // send("audio.subscribe", params: ["udpPort": Int(udpPort)])
+    }
+
+    /// Subscribe to audio metrics stream via WebSocket (no UDP transport)
+    ///
+    /// Phase 3 disabled — see `subscribeLEDStream(udpPort:)` above.
+    func subscribeAudioStreamWS() {
+        // send("audio.subscribe")
+    }
+
+    /// Unsubscribe from audio metrics stream
+    func unsubscribeAudioStream() {
+        send("audio.unsubscribe")
+    }
+
+    /// Trigger a transition effect
+    func triggerTransition(type: Int, duration: Int? = nil, toEffect: Int? = nil) {
+        var params: [String: any Sendable] = ["type": type]
+        if let duration = duration {
+            params["duration"] = duration
+        }
+        if let toEffect = toEffect {
+            params["toEffect"] = toEffect
+        }
+        send("transition.trigger", params: params)
+    }
+
+    /// Fetch current audio tuning parameters
+    func sendAudioParametersGet(requestId: String? = nil) {
+        var params: [String: any Sendable] = [:]
+        if let requestId = requestId {
+            params["requestId"] = requestId
+        }
+        send("audio.parameters.get", params: params)
+    }
+
+    /// Patch audio tuning parameters
+    func sendAudioParametersSet(payload: [String: any Sendable], requestId: String? = nil) {
+        var params = payload
+        if let requestId = requestId {
+            params["requestId"] = requestId
+        }
+        send("audio.parameters.set", params: params)
+    }
+
+    // MARK: Phase 2 — STM and VRMS streams
+
+    /// Subscribe to the firmware's STM (Spectral-Temporal Modulation) binary
+    /// stream. Frames arrive at ~30 FPS as 250-byte binary WebSocket messages
+    /// with magic 0xFD. The firmware emits a `stm.subscribed` text ack on
+    /// success, surfaced as `Event.stmSubscriptionAck`.
+    func subscribeSTM(requestId: String? = nil) {
+        var params: [String: any Sendable] = [:]
+        if let requestId = requestId {
+            params["requestId"] = requestId
+        }
+        send("stm.subscribe", params: params)
+    }
+
+    /// Unsubscribe from the STM binary stream.
+    func unsubscribeSTM(requestId: String? = nil) {
+        var params: [String: any Sendable] = [:]
+        if let requestId = requestId {
+            params["requestId"] = requestId
+        }
+        send("stm.unsubscribe", params: params)
+    }
+
+    /// Subscribe to the firmware's VRMS (Visual RMS) perceptual-metrics
+    /// stream. Frames arrive at 10 Hz as JSON text messages of type
+    /// `vrms.frame`, decoded by `handleTextMessage` into `VRMSFrame`.
+    func subscribeVRMS(requestId: String? = nil) {
+        var params: [String: any Sendable] = [:]
+        if let requestId = requestId {
+            params["requestId"] = requestId
+        }
+        send("vrms.subscribe", params: params)
+    }
+
+    /// Unsubscribe from the VRMS metrics stream.
+    func unsubscribeVRMS(requestId: String? = nil) {
+        var params: [String: any Sendable] = [:]
+        if let requestId = requestId {
+            params["requestId"] = requestId
+        }
+        send("vrms.unsubscribe", params: params)
+    }
+
+    // MARK: Phase 2 — show transport WS commands
+    //
+    // Outbound transport dispatch helpers. Each maps to a single-line `send`
+    // call to the firmware. Returning `Void` and being implicitly async (actor
+    // isolation) keeps the call sites compact. The firmware ack (`cmd` +
+    // `success`) is delivered via `.showAck` on the event stream; the
+    // canonical state update arrives as `.showStatus`.
+
+    /// `show.list` — request the catalogue of built-in and uploaded shows.
+    /// REST `getShows()` is the preferred read path; this is provided for
+    /// parity / debugging.
+    func sendShowList() {
+        send("show.list")
+    }
+
+    /// `show.play` — start playback of `showId`.
+    func sendShowPlay(showId: String) {
+        send("show.play", params: ["showId": showId])
+    }
+
+    /// `show.pause` — pause the currently playing show.
+    func sendShowPause() {
+        send("show.pause")
+    }
+
+    /// `show.resume` — resume from a paused show.
+    func sendShowResume() {
+        send("show.resume")
+    }
+
+    /// `show.stop` — stop the currently playing show.
+    func sendShowStop() {
+        send("show.stop")
+    }
+
+    /// `show.seek` — seek to `timeMs` within the current show.
+    func sendShowSeek(timeMs: Int) {
+        send("show.seek", params: ["timeMs": timeMs])
+    }
+
+    /// `show.status` — request a fresh playback status frame from the
+    /// firmware (firmware also broadcasts unsolicited).
+    func sendShowStatus() {
+        send("show.status")
+    }
+
+    // MARK: - Private Connection Management
+
+    private func performConnect() {
+        guard let url = currentURL else { return }
+
+        closeConnection()
+
+        guard let session = session else { return }
+
+        let task = session.webSocketTask(with: url)
+        webSocketTask = task
+
+        task.resume()
+        isConnected = true
+        reconnectAttempts = 0
+
+        // Yield connected event
+        eventContinuation?.yield(.connected)
+
+        // Start receiving messages
+        receiveTask = Task {
+            await receiveMessages()
+        }
+
+        // Start connection monitoring
+        monitorTask = Task {
+            await monitorConnection()
+        }
+    }
+
+    private func closeConnection() {
+        webSocketTask?.cancel(with: .goingAway, reason: nil)
+        webSocketTask = nil
+
+        if isConnected {
+            isConnected = false
+            eventContinuation?.yield(.disconnected(nil))
+        }
+    }
+
+    // MARK: - Message Receiving
+
+    private func receiveMessages() async {
+        while let task = webSocketTask, task.state == .running {
+            do {
+                let message = try await task.receive()
+                handleMessage(message)
+            } catch {
+                handleConnectionError(error)
+                break
+            }
+        }
+    }
+
+    private func handleMessage(_ message: URLSessionWebSocketTask.Message) {
+        switch message {
+        case .string(let text):
+            handleTextMessage(text)
+
+        case .data(let data):
+            handleBinaryMessage(data)
+
+        @unknown default:
+            break
+        }
+    }
+
+    private func handleTextMessage(_ text: String) {
+        // Inspector capture — non-blocking, O(1) actor send. Records the raw
+        // text BEFORE JSON parsing so malformed frames are still observable
+        // in the inspector. See WSInspector.swift for the ring-buffer details.
+        Task.detached(priority: .background) {
+            await WSInspector.shared.recordInboundText(text)
+        }
+
+        guard let data = text.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return
+        }
+
+        let messageType = (json["type"] as? String).flatMap { WebSocketMessageType(rawValue: $0) } ?? .unknown
+        let payload = WebSocketPayload(data: json)
+
+        switch messageType {
+        case .status:
+            eventContinuation?.yield(.status(payload))
+
+        case .beatEvent:
+            eventContinuation?.yield(.beat(payload))
+
+        case .zonesList, .zonesChanged, .zonesStateChanged, .zonesEffectChanged, .zonesLayoutChanged, .zoneEnabledChanged, .zonesEnabledChanged:
+            eventContinuation?.yield(.zoneUpdate(payload))
+
+        case .parametersChanged:
+            eventContinuation?.yield(.parameterUpdate(payload))
+
+        case .edgeMixerGet, .edgeMixerSet:
+            eventContinuation?.yield(.edgeMixerUpdate(payload))
+
+        case .edgeMixerSave:
+            #if DEBUG
+            print("[WS] EdgeMixer save ack")
+            #endif
+
+        case .deviceStatus, .effectsChanged, .effectsList, .palettesList:
+            // These are handled via REST API, not event stream
+            break
+
+        case .colourCorrectionConfig:
+            // Firmware unicasts this in reply to `colorCorrection.getConfig`
+            // and `colorCorrection.setConfig`. Yield to AppViewModel so
+            // `ColourCorrectionViewModel` can refresh its state without a
+            // separate REST call. The REST path is a stub at
+            // ColorCorrectionHandlers.cpp:14-30 (returns 404) — WS is the
+            // only working route.
+            eventContinuation?.yield(.colourCorrectionConfigUpdated(payload))
+
+        case .audioSubscribed, .audioUnsubscribed, .ledStreamSubscribed:
+            #if DEBUG
+            let success = json["success"] as? Bool ?? (json["status"] as? String == "ok")
+            let errorCode = (json["error"] as? [String: Any])?["code"] as? String
+            print("[WS] Subscription response: \(messageType.rawValue) success=\(success) error=\(errorCode ?? "none")")
+            #endif
+
+        // MARK: Phase 1 — broadcast decoding
+        // Each branch yields a typed Event with the raw JSON payload attached so
+        // downstream consumers can introspect fields as needed. Phase 2 will
+        // tighten payload modelling; for now `WebSocketPayload` is sufficient.
+        case .cameraModeChanged:
+            eventContinuation?.yield(.cameraModeChanged(payload))
+
+        case .factoryPresetsChanged:
+            eventContinuation?.yield(.factoryPresetsChanged(payload))
+
+        case .effectPresetsSaved:
+            eventContinuation?.yield(.effectPresetsSaved(payload))
+
+        case .effectPresetsDeleted:
+            eventContinuation?.yield(.effectPresetsDeleted(payload))
+
+        case .colourCorrectionSetGamma:
+            eventContinuation?.yield(.colourCorrectionSetGamma(payload))
+
+        case .colourCorrectionSetAutoExposure:
+            eventContinuation?.yield(.colourCorrectionSetAutoExposure(payload))
+
+        case .colourCorrectionSetBrownGuardrail:
+            eventContinuation?.yield(.colourCorrectionSetBrownGuardrail(payload))
+
+        // MARK: Phase 2 — STM and VRMS streams (text message dispatch)
+        case .stmSubscribed, .stmUnsubscribed:
+            eventContinuation?.yield(.stmSubscriptionAck(payload))
+
+        case .vrmsSubscribed, .vrmsUnsubscribed:
+            eventContinuation?.yield(.vrmsSubscriptionAck(payload))
+
+        case .vrmsFrame:
+            // The firmware emits VRMS as a JSON text message rather than a
+            // binary frame (see WebServer.cpp lines 884-924). Decode the
+            // envelope into our typed `VRMSFrame` struct.
+            if let frame = decodeVRMSFrame(from: data) {
+                eventContinuation?.yield(.vrmsFrame(frame.metrics, timestamp: frame.timestamp))
+            }
+
+        // MARK: Phase 2 — show transport WS commands
+        // `show.status` is the canonical playback frame and is yielded as a
+        // dedicated event. `show.list`, `show.play`, `show.pause`, `show.resume`,
+        // `show.stop`, `show.seek` arrive as command acks (with `cmd` and
+        // `success` keys); we yield them via `.showAck` so consumers can
+        // decide whether to surface them in UI.
+        case .showStatus:
+            eventContinuation?.yield(.showStatus(payload))
+
+        case .showList, .showPlay, .showPause, .showResume, .showStop, .showSeek:
+            eventContinuation?.yield(.showAck(payload))
+
+        case .unknown:
+            break
+        }
+    }
+
+    /// Decode a `vrms.frame` JSON envelope from raw text-message bytes.
+    private func decodeVRMSFrame(from data: Data) -> VRMSEnvelope? {
+        try? JSONDecoder().decode(VRMSEnvelope.self, from: data)
+    }
+
+    // LED stream constants matching firmware LedStreamConfig
+    private static let ledFrameV1Size = 966       // v1: 4-byte header + 2×(1 + 160×3)
+    private static let ledFrameLegacySize = 961   // v0: 1 magic + 320×3
+    private static let ledMagicByte: UInt8 = 0xFE
+    private static let ledsPerStrip = 160
+    private static let rgbPerStrip = 160 * 3      // 480 bytes
+
+    private func handleBinaryMessage(_ data: Data) {
+        // Inspector capture — non-blocking, O(1) actor send. We pass the
+        // raw `Data` so the inspector can read the magic byte and length;
+        // it does NOT retain the underlying bytes (would saturate the ring
+        // buffer at 30 FPS LED streaming).
+        Task.detached(priority: .background) {
+            await WSInspector.shared.recordInboundBinary(data)
+        }
+
+        // MARK: Phase 2 — STM and VRMS streams (binary dispatch)
+        // STM frame: 250 bytes, magic 0xFD (first byte). Distinct from LED 0xFE
+        // and audio metrics 0x41 (low byte of little-endian 0x00445541).
+        if data.count == STMFrame.frameSize, data.first == STMFrame.magic {
+            if let frame = STMFrame(data: data) {
+                eventContinuation?.yield(.stmFrame(frame))
+                return
+            }
+            // Length matched but magic-aware decode failed — fall through and
+            // drop silently rather than misroute as another frame type.
+            return
+        }
+
+        // Audio metrics frame: 464 bytes, magic 0x00445541
+        if data.count == AudioMetricsFrame.frameSize {
+            let magic = data.withUnsafeBytes { $0.load(as: UInt32.self) }
+            if magic == AudioMetricsFrame.magic {
+                if let frame = AudioMetricsFrame(data: data) {
+                    eventContinuation?.yield(.audioMetrics(frame))
+                    return
+                }
+            }
+        }
+
+        guard data.first == Self.ledMagicByte else { return }
+
+        // LED stream v1 format (966 bytes): [0xFE][version][numStrips][ledsPerStrip][stripId][RGB×160][stripId][RGB×160]
+        if data.count == Self.ledFrameV1Size {
+            var rgb = Data(capacity: 960)
+            // Strip 0: header(4) + stripId(1) = offset 5, length 480
+            let strip0Start = 5
+            rgb.append(data[strip0Start ..< strip0Start + Self.rgbPerStrip])
+            // Strip 1: strip0Start + 480 + stripId(1) = offset 486, length 480
+            let strip1Start = strip0Start + Self.rgbPerStrip + 1
+            rgb.append(data[strip1Start ..< strip1Start + Self.rgbPerStrip])
+            eventContinuation?.yield(.ledData(rgb))
+            return
+        }
+
+        // Legacy format (961 bytes): [0xFE][RGB×320]
+        if data.count == Self.ledFrameLegacySize {
+            eventContinuation?.yield(.ledData(Data(data.dropFirst())))
+            return
+        }
+    }
+
+    // MARK: - Message Sending
+
+    private func sendRaw(_ message: [String: Any]) {
+        guard let data = try? JSONSerialization.data(withJSONObject: message),
+              let text = String(data: data, encoding: .utf8) else {
+            return
+        }
+
+        Task {
+            await sendText(text)
+        }
+    }
+
+    private func sendText(_ text: String) async {
+        // Inspector capture — non-blocking, O(1) actor send. Records on
+        // every dispatch attempt; failures are still useful in the
+        // inspector because they show what the app TRIED to send.
+        Task.detached(priority: .background) {
+            await WSInspector.shared.recordOutboundText(text)
+        }
+
+        do {
+            try await webSocketTask?.send(.string(text))
+        } catch {
+            // Connection error will be handled by receive loop or monitor
+            #if DEBUG
+            print("[WS] send failed: \(error.localizedDescription)")
+            #endif
+        }
+    }
+
+    // MARK: - Connection Monitoring & Reconnection
+
+    private func monitorConnection() async {
+        // Periodically ping to detect disconnection
+        while shouldReconnect {
+            try? await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds
+
+            guard let task = webSocketTask, task.state == .running else {
+                // Task is not running — trigger reconnect
+                if shouldReconnect {
+                    isConnected = false
+                    scheduleReconnect()
+                }
+                return
+            }
+
+            task.sendPing { [weak self] error in
+                if let error = error {
+                    Task {
+                        await self?.handleConnectionError(error)
+                    }
+                }
+            }
+        }
+    }
+
+    private func handleConnectionError(_ error: Error) {
+        isConnected = false
+        eventContinuation?.yield(.disconnected(error))
+
+        if shouldReconnect {
+            scheduleReconnect()
+        }
+    }
+
+    private func scheduleReconnect() {
+        reconnectTask?.cancel()
+
+        let backoff = min(
+            initialBackoff * pow(backoffMultiplier, Double(reconnectAttempts)),
+            maxBackoff
+        )
+
+        reconnectAttempts += 1
+
+        reconnectTask = Task {
+            try? await Task.sleep(for: .seconds(backoff))
+
+            guard !Task.isCancelled, shouldReconnect else { return }
+
+            performConnect()
+        }
+    }
+
+    // MARK: Phase 2 — preset CRUD WS commands
+    //
+    // Typed helpers around `send(_:params:)` for the effect / zone preset
+    // commands consumed by `PresetsViewModel`. Each method dispatches the
+    // exact WS command name registered by the firmware in
+    // `WsEffectPresetCommands.cpp` / `WsZonePresetCommands.cpp`. Broadcast
+    // responses (`effectPresets.saved` / `effectPresets.deleted` /
+    // `zonePresets.saved` / `zonePresets.deleted`) are decoded by the Phase 1
+    // broadcast cases at the top of this file.
+
+    /// Save the current live effect configuration into a slot.
+    func saveCurrentEffectPreset(slot: Int, name: String) {
+        send("effectPresets.saveCurrent", params: ["slot": slot, "name": name])
+    }
+
+    /// Apply a stored effect preset by slot id.
+    func loadEffectPreset(id: Int) {
+        send("effectPresets.load", params: ["id": id])
+    }
+
+    /// Delete an effect preset by slot id.
+    func deleteEffectPreset(id: Int) {
+        send("effectPresets.delete", params: ["id": id])
+    }
+
+    /// Save the current live zone configuration into a slot.
+    func saveCurrentZonePreset(slot: Int, name: String) {
+        send("zonePresets.saveCurrent", params: ["slot": slot, "name": name])
+    }
+
+    /// Apply a stored zone preset by id.
+    func loadZonePreset(id: Int) {
+        send("zonePresets.load", params: ["id": id])
+    }
+
+    /// Delete a user-saved zone preset by id. Built-in presets are
+    /// rejected by the firmware — UI must not call this for `builtin == true`
+    /// rows.
+    func deleteZonePreset(id: Int) {
+        send("zonePresets.delete", params: ["id": id])
+    }
+
+    // MARK: Phase 2 — colour correction WS commands
+    //
+    // Firmware exposes the working colour-correction surface only via WS
+    // (`WsColorCommands.cpp:247-352`). The matching REST endpoints at
+    // `/api/v1/colorCorrection/config` are stubs that return 404
+    // (`ColorCorrectionHandlers.cpp:22-30`). iOS uses these helpers to drive
+    // the panel; replies arrive as `.colourCorrectionConfigUpdated`.
+
+    /// `colorCorrection.getConfig` — fetch the live ColorCorrectionEngine state.
+    /// Reply yields `.colourCorrectionConfigUpdated(payload)`.
+    func sendColourCorrectionGetConfig(requestId: String? = nil) {
+        var params: [String: any Sendable] = [:]
+        if let requestId = requestId {
+            params["requestId"] = requestId
+        }
+        send("colorCorrection.getConfig", params: params)
+    }
+
+    /// `colorCorrection.setConfig` — push the full config (gamma + AE +
+    /// brown-guardrail + mode) atomically. Firmware applies and replies with
+    /// the new state, surfaced via `.colourCorrectionConfigUpdated`.
+    func sendColourCorrectionSetConfig(
+        gammaEnabled: Bool,
+        gammaValue: Float,
+        autoExposureEnabled: Bool,
+        autoExposureTarget: Int,
+        brownGuardrailEnabled: Bool,
+        mode: Int,
+        requestId: String? = nil
+    ) {
+        var params: [String: any Sendable] = [
+            "gammaEnabled": gammaEnabled,
+            "gammaValue": gammaValue,
+            "autoExposureEnabled": autoExposureEnabled,
+            "autoExposureTarget": autoExposureTarget,
+            "brownGuardrailEnabled": brownGuardrailEnabled,
+            "mode": mode,
+        ]
+        if let requestId = requestId {
+            params["requestId"] = requestId
+        }
+        send("colorCorrection.setConfig", params: params)
+    }
+}
+
+// MARK: - Phase 2 — preset CRUD test seam
+
+/// Conform `WebSocketService` to the `PresetWebSocketCommanding` protocol so
+/// `PresetsViewModel` can dispatch commands without depending on the concrete
+/// actor type. Tests substitute a recording double.
+///
+/// The protocol takes `[String: any Sendable]` so the parameter map can cross
+/// the actor boundary under Swift 6 strict concurrency. Inside the actor the
+/// existing synchronous `send(_:params:)` is reused — the dictionary is
+/// upcast to `[String: Any]` once isolation is established.
+@available(iOS 17.0, *)
+extension WebSocketService: PresetWebSocketCommanding {
+    func sendCommand(_ command: String, params: [String: any Sendable]) async {
+        // `send(_:params:)` now accepts the same Sendable map type, so the
+        // protocol pass-through is a direct call — no upcast required.
+        send(command, params: params)
+    }
+}
+
+
+
+================================================================================
+FILE: lightwave-ios-v2/LightwaveOS/Network/UDPStreamReceiver.swift
+DESCRIPTION: Actor-isolated UDP receiver — high-frequency LED stream ingest from K1 (telemetry mirror).
+================================================================================
+
+//
+//  UDPStreamReceiver.swift
+//  LightwaveOS
+//
+//  UDP datagram receiver for LED and audio binary frames from LightwaveOS firmware.
+//  Demultiplexes LED (966 bytes, magic 0xFE) and audio (464 bytes, magic 0x00445541) frames.
+//  iOS 17+, Swift 6 with @Observable @MainActor. British English comments.
+//
+
+import Foundation
+import Network
+import Observation
+
+@MainActor
+@Observable
+class UDPStreamReceiver {
+    // MARK: - State
+
+    var isListening = false
+    private(set) var ledFrameCount: Int = 0
+    private(set) var audioFrameCount: Int = 0
+
+    // MARK: - Callbacks
+
+    var onLedFrame: (([UInt8]) -> Void)?
+    var onAudioFrame: ((Data) -> Void)?
+
+    // MARK: - Private
+
+    private var listener: NWListener?
+    private let port: NWEndpoint.Port = 41234
+    private let queue = DispatchQueue(label: "com.lightwaveos.udp-receiver", qos: .userInteractive)
+
+    // MARK: - Lifecycle
+
+    func start() {
+        guard listener == nil else { return }
+
+        do {
+            let params = NWParameters.udp
+            params.allowLocalEndpointReuse = true
+            listener = try NWListener(using: params, on: port)
+        } catch {
+            print("[UDP] Failed to create listener: \(error)")
+            return
+        }
+
+        listener?.stateUpdateHandler = { [weak self] state in
+            Task { @MainActor [weak self] in
+                switch state {
+                case .ready:
+                    self?.isListening = true
+                    print("[UDP] Listening on port \(self?.port.rawValue ?? 0)")
+                case .failed(let error):
+                    print("[UDP] Listener failed: \(error)")
+                    self?.isListening = false
+                case .cancelled:
+                    self?.isListening = false
+                default:
+                    break
+                }
+            }
+        }
+
+        listener?.newConnectionHandler = { [weak self] connection in
+            self?.handleConnection(connection)
+        }
+
+        listener?.start(queue: queue)
+    }
+
+    func stop() {
+        listener?.cancel()
+        listener = nil
+        isListening = false
+        ledFrameCount = 0
+        audioFrameCount = 0
+    }
+
+    func reset() {
+        ledFrameCount = 0
+        audioFrameCount = 0
+    }
+
+    /// Wait until the UDP listener is ready (or time out).
+    func waitUntilReady(timeout: TimeInterval = 2.0, pollInterval: TimeInterval = 0.05) async -> Bool {
+        if isListening { return true }
+
+        let deadline = Date().addingTimeInterval(timeout)
+        while !isListening && Date() < deadline {
+            let sleepMs = UInt64(max(1.0, pollInterval * 1000.0))
+            try? await Task.sleep(for: .milliseconds(Int(sleepMs)))
+        }
+
+        return isListening
+    }
+
+    // MARK: - Connection Handling (nonisolated — runs on background queue)
+
+    nonisolated private func handleConnection(_ connection: NWConnection) {
+        connection.start(queue: queue)
+        receiveLoop(connection)
+    }
+
+    nonisolated private func receiveLoop(_ connection: NWConnection) {
+        connection.receiveMessage { [weak self] content, _, isComplete, error in
+            guard let self = self else { return }
+
+            if let data = content, !data.isEmpty {
+                self.processFrame(data)
+            }
+
+            if error == nil {
+                self.receiveLoop(connection)
+            }
+        }
+    }
+
+    nonisolated private func processFrame(_ data: Data) {
+        guard data.count >= 4 else { return }
+
+        // Check magic bytes to identify frame type
+        let firstByte = data[data.startIndex]
+
+        if firstByte == 0xFE && data.count >= 966 {
+            // LED frame (magic 0xFE, 966 bytes v1 format)
+            let bytes = [UInt8](data)
+            Task { @MainActor [weak self] in
+                self?.ledFrameCount += 1
+                self?.onLedFrame?(bytes)
+            }
+        } else if data.count >= 464 {
+            // Check for audio magic: 0x00445541 at offset 0 (little-endian)
+            // In memory: bytes are [0x41, 0x55, 0x44, 0x00]
+            let magic: UInt32 = data.withUnsafeBytes { ptr in
+                ptr.load(as: UInt32.self)
+            }
+            if magic == 0x00445541 {
+                let capturedData = data
+                Task { @MainActor [weak self] in
+                    self?.audioFrameCount += 1
+                    self?.onAudioFrame?(capturedData)
+                }
+            }
+        }
+    }
+}
+
+
+================================================================================
+FILE: lightwave-ios-v2/LightwaveOS/Network/DeviceDiscoveryService.swift
+DESCRIPTION: K1 discovery on the local AP network — Bonjour/mDNS browsing + connection state surface.
+================================================================================
+
+//
+//  DeviceDiscoveryService.swift
+//  LightwaveOS
+//
+//  mDNS/Bonjour device discovery actor using Network.framework.
+//  Discovers LightwaveOS devices on local network via _http._tcp and _lightwaveos._tcp services.
+//  iOS 17+, Swift 6 with strict concurrency.
+//
+
+import Foundation
+import Network
+
+/// Actor-based device discovery service for LightwaveOS devices.
+/// Provides reactive device updates via AsyncStream and eliminates data races
+/// present in the previous @unchecked Sendable implementation.
+@available(iOS 17.0, *)
+actor DeviceDiscoveryService {
+    // MARK: - Actor-Isolated State
+
+    private(set) var discoveredDevices: [DeviceInfo] = []
+    private(set) var isSearching: Bool = false
+
+    private var browser: NWBrowser?
+    private var pendingResolutions: [String: Task<Void, Never>] = [:]
+    private var streamContinuation: AsyncStream<[DeviceInfo]>.Continuation?
+
+    // MARK: - Non-Isolated State
+
+    private let browserQueue = DispatchQueue(label: "com.lightwaveos.discovery", qos: .userInitiated)
+
+    // MARK: - Public Interface
+
+    /// Start discovery and return a stream of device updates.
+    /// Each yielded array contains the current complete list of discovered devices.
+    ///
+    /// - Returns: AsyncStream that yields device lists whenever devices are added/removed.
+    func startDiscovery() -> AsyncStream<[DeviceInfo]> {
+        // Stop any existing discovery
+        if browser != nil {
+            stopDiscoveryInternal()
+        }
+
+        isSearching = true
+
+        return AsyncStream { continuation in
+            self.streamContinuation = continuation
+
+            // Yield initial empty state
+            continuation.yield([])
+
+            // Create and configure browser
+            let parameters = NWParameters()
+            parameters.includePeerToPeer = false
+
+            let browser = NWBrowser(for: .bonjour(type: "_http._tcp", domain: nil), using: parameters)
+            self.browser = browser
+
+            // Set up state handler
+            browser.stateUpdateHandler = { [weak self] state in
+                guard let self = self else { return }
+                Task { await self.handleBrowserState(state) }
+            }
+
+            // Set up results handler
+            browser.browseResultsChangedHandler = { [weak self] results, changes in
+                guard let self = self else { return }
+                Task { await self.handleBrowseChanges(changes) }
+            }
+
+            // Start browsing
+            browser.start(queue: browserQueue)
+
+            // Handle stream termination
+            continuation.onTermination = { [weak self] _ in
+                guard let self = self else { return }
+                Task { await self.stopDiscoveryInternal() }
+            }
+        }
+    }
+
+    /// Stop device discovery and clean up resources.
+    func stopDiscovery() {
+        stopDiscoveryInternal()
+        streamContinuation?.finish()
+        streamContinuation = nil
+    }
+
+    // MARK: - Private Implementation
+
+    private func stopDiscoveryInternal() {
+        browser?.cancel()
+        browser = nil
+        cancelAllResolutions()
+        isSearching = false
+        discoveredDevices.removeAll()
+    }
+
+    // MARK: - Browser State Handling
+
+    private func handleBrowserState(_ state: NWBrowser.State) {
+        switch state {
+        case .ready:
+            isSearching = true
+
+        case .failed(let error):
+            print("Device discovery failed: \(error.localizedDescription)")
+            isSearching = false
+
+        case .cancelled:
+            isSearching = false
+
+        default:
+            break
+        }
+    }
+
+    // MARK: - Browse Results Handling
+
+    private func handleBrowseChanges(_ changes: Set<NWBrowser.Result.Change>) {
+        for change in changes {
+            switch change {
+            case .added(let result):
+                handleAddedResult(result)
+
+            case .removed(let result):
+                handleRemovedResult(result)
+
+            case .changed(old: _, new: let result, flags: _):
+                handleAddedResult(result)
+
+            @unknown default:
+                break
+            }
+        }
+    }
+
+    private func handleAddedResult(_ result: NWBrowser.Result) {
+        guard Self.isLightwaveDevice(result) else { return }
+
+        let deviceId = Self.generateDeviceId(from: result)
+
+        // Cancel any existing resolution for this device
+        pendingResolutions[deviceId]?.cancel()
+
+        // Start new resolution
+        let task = Task {
+            if let deviceInfo = await resolveEndpoint(result) {
+                await addDevice(deviceInfo)
+            }
+        }
+
+        pendingResolutions[deviceId] = task
+    }
+
+    private func handleRemovedResult(_ result: NWBrowser.Result) {
+        let deviceId = Self.generateDeviceId(from: result)
+        pendingResolutions[deviceId]?.cancel()
+        pendingResolutions.removeValue(forKey: deviceId)
+
+        removeDevice(withId: deviceId)
+    }
+
+    // MARK: - Device Filtering
+
+    private static func isLightwaveDevice(_ result: NWBrowser.Result) -> Bool {
+        switch result.endpoint {
+        case .service(let name, _, _, _):
+            let lowercasedName = name.lowercased()
+            return lowercasedName.contains("lightwaveos") || lowercasedName.contains("lightwave")
+
+        default:
+            return false
+        }
+    }
+
+    // MARK: - Endpoint Resolution
+
+    private func resolveEndpoint(_ result: NWBrowser.Result) async -> DeviceInfo? {
+        let connection = NWConnection(to: result.endpoint, using: .tcp)
+
+        // Use a class to wrap the boolean for safe concurrent access
+        final class ResumedFlag: @unchecked Sendable {
+            private let lock = NSLock()
+            private var _value = false
+
+            var value: Bool {
+                get {
+                    lock.lock()
+                    defer { lock.unlock() }
+                    return _value
+                }
+                set {
+                    lock.lock()
+                    defer { lock.unlock() }
+                    _value = newValue
+                }
+            }
+        }
+
+        let resumed = ResumedFlag()
+
+        return await withCheckedContinuation { continuation in
+            connection.stateUpdateHandler = { state in
+                guard !resumed.value else { return }
+
+                switch state {
+                case .ready:
+                    resumed.value = true
+                    let info = Self.extractDeviceInfo(from: connection, result: result)
+                    connection.cancel()
+                    continuation.resume(returning: info)
+
+                case .failed, .cancelled:
+                    resumed.value = true
+                    continuation.resume(returning: nil)
+
+                default:
+                    break
+                }
+            }
+
+            connection.start(queue: self.browserQueue)
+
+            // Timeout after 5 seconds
+            self.browserQueue.asyncAfter(deadline: .now() + 5) {
+                guard !resumed.value else { return }
+                resumed.value = true
+                connection.cancel()
+                continuation.resume(returning: nil)
+            }
+        }
+    }
+
+    // MARK: - Device Info Extraction
+
+    /// Extract device information from an active NWConnection.
+    /// This is a static method to avoid actor isolation issues in the continuation callback.
+    private static func extractDeviceInfo(from connection: NWConnection, result: NWBrowser.Result) -> DeviceInfo? {
+        guard case .service(let name, _, _, _) = result.endpoint else {
+            return nil
+        }
+
+        var ipAddress: String?
+        var port: Int = 80
+        var hostname = name
+
+        if let path = connection.currentPath {
+            if let endpoint = path.remoteEndpoint {
+                switch endpoint {
+                case .hostPort(let host, let hostPort):
+                    port = Int(hostPort.rawValue)
+
+                    switch host {
+                    case .ipv4(let address):
+                        ipAddress = "\(address)".components(separatedBy: "%").first
+                    case .ipv6(let address):
+                        ipAddress = "\(address)".components(separatedBy: "%").first
+                    case .name(let hostName, _):
+                        hostname = hostName
+                    @unknown default:
+                        break
+                    }
+
+                default:
+                    break
+                }
+            }
+        }
+
+        guard let ip = ipAddress else {
+            return nil
+        }
+
+        return DeviceInfo(
+            hostname: hostname,
+            ipAddress: ip,
+            port: port
+        )
+    }
+
+    // MARK: - Device Management
+
+    private func addDevice(_ device: DeviceInfo) {
+        if let index = discoveredDevices.firstIndex(where: { $0.id == device.id }) {
+            // Update existing device
+            discoveredDevices[index] = device
+        } else {
+            // Add new device
+            discoveredDevices.append(device)
+        }
+
+        // Yield updated list
+        streamContinuation?.yield(discoveredDevices)
+    }
+
+    private func removeDevice(withId id: String) {
+        discoveredDevices.removeAll { $0.id == id }
+
+        // Yield updated list
+        streamContinuation?.yield(discoveredDevices)
+    }
+
+    // MARK: - Utilities
+
+    private static func generateDeviceId(from result: NWBrowser.Result) -> String {
+        switch result.endpoint {
+        case .service(let name, let type, let domain, _):
+            return "\(name).\(type).\(domain ?? "local")"
+        default:
+            return UUID().uuidString
+        }
+    }
+
+    private func cancelAllResolutions() {
+        pendingResolutions.values.forEach { $0.cancel() }
+        pendingResolutions.removeAll()
+    }
+}
+

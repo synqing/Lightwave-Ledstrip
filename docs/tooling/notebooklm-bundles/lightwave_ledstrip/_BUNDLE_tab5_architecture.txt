@@ -1,0 +1,3349 @@
+# Bundle: tab5-encoder architecture
+# Purpose: Show NotebookLM the M5Stack Tab5 controller architecture (LVGL + WS client + encoder mapping).
+# Files included: 8
+# Generated: 2026-05-04 (lightwave-ledstrip notebooklm curation)
+
+================================================================================
+FILE: tab5-encoder/src/network/WebSocketClient.h
+DESCRIPTION: WebSocket client public interface — connection state, reconnect, subscribe/send.
+================================================================================
+
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
+#pragma once
+// ============================================================================
+// WebSocketClient - Tab5.encoder
+// ============================================================================
+// Bidirectional WebSocket client for LightwaveOS communication.
+// Ported from K1.8encoderS3 with Tab5-specific extensions (zone support).
+//
+// ESP32-P4 uses ESP32-C6 co-processor for WiFi via SDIO.
+// Requires WiFi.setPins() before WiFi.begin() - see Config.h for pin defs.
+// ============================================================================
+
+#include "config/Config.h"
+
+#if ENABLE_WIFI
+
+#include <WebSocketsClient.h>
+#include <ArduinoJson.h>
+#include <functional>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+#include "config/network_config.h"
+#include "../zones/ZoneDefinition.h"
+
+// State Machine:
+//   DISCONNECTED -> CONNECTING -> CONNECTED -> ERROR
+//        ^              |             |          |
+//        |              v             v          v
+//        +-------------+-------------+-----------+
+//
+// Key Features:
+//   - Non-blocking update() for main loop integration
+//   - Exponential backoff reconnection (1s initial, 30s max)
+//   - Per-parameter rate limiting (50ms throttle)
+//   - Deferred hello message pattern
+//   - Zone-specific command support (Tab5 extension)
+//   - Uses constants from network_config.h
+//
+// WebSocket Protocol (LightwaveOS v2):
+//   Outbound:
+//     {"type": "effects.setCurrent", "effectId": N}
+//     {"type": "parameters.set", "brightness": N, ...}
+//     {"type": "zone.setEffect", "zoneId": 1..3, "effectId": N}
+//     {"type": "zone.setBrightness", "zoneId": 1..3, "value": N}
+//     {"type": "getStatus"}
+//
+// Wire-format note (post-2026-05-02 K1 B2 migration):
+//   - Wire `zoneId` is 1-indexed across REST, WebSocket, and SerialJSON.
+//   - Valid wire values: 1, 2, 3. Wire value 0 is RESERVED (K1 rejects it).
+//   - Tab5 internally indexes zones 0..2 (matches ParameterId::ZoneN,
+//     ZoneState[3], ParamIndex::ZONE1_EFFECT base). Conversion is performed
+//     at the WS boundary only: outbound wire = internal + 1; inbound
+//     internal = wire - 1 after range check (wire ∈ {1,2,3}).
+//   - Internal storage (ZoneSegment::zoneId, _selectedZone, sidebar caches)
+//     remains 0-indexed; do NOT migrate persisted preset/NVS payloads.
+//
+//   Inbound:
+//     {"type": "status", ...} - Full state sync
+//     {"type": "effect.changed", ...} - Effect updates
+//     {"type": "parameters.updated", ...} - Parameter changes
+
+enum class WebSocketStatus {
+    DISCONNECTED,
+    CONNECTING,
+    CONNECTED,
+    ERROR
+};
+
+// Callback type for received messages
+// Uses JsonDocument (ArduinoJson v7+) for flexible document handling
+// Note: ArduinoJson 7 deprecated StaticJsonDocument in favor of JsonDocument
+using WebSocketMessageCallback = std::function<void(JsonDocument& doc)>;
+
+// ============================================================================
+// Color Correction State (cached from LightwaveOS v2 server)
+// ============================================================================
+// Populated by colorCorrection.getConfig response, used by PresetManager
+// to capture/apply gamma, auto-exposure, and brown guardrail settings.
+
+struct ColorCorrectionState {
+    bool gammaEnabled = true;
+    float gammaValue = 2.2f;
+    bool autoExposureEnabled = false;
+    uint8_t autoExposureTarget = 110;
+    bool brownGuardrailEnabled = false;
+    uint8_t maxGreenPercentOfRed = 28;
+    uint8_t maxBluePercentOfRed = 8;
+    uint8_t mode = 2;  // 0=OFF, 1=HSV, 2=RGB, 3=BOTH
+    bool valid = false;  // True after first sync from server
+};
+
+struct EdgeMixerState {
+    uint8_t mode     = 0;   // 0=MIRROR, 1=ANALOGOUS, 2=COMPLEMENTARY, 3=SPLIT_COMPLEMENTARY, 4=SATURATION_VEIL
+    uint8_t spread   = 30;  // 0-60 degrees
+    uint8_t strength = 255; // 0-255
+    uint8_t spatial  = 0;   // 0=UNIFORM, 1=CENTRE_GRADIENT
+    uint8_t temporal = 0;   // 0=STATIC, 1=RMS_GATE
+    bool valid = false;
+};
+
+class WebSocketClient {
+public:
+    WebSocketClient();
+    ~WebSocketClient();
+
+    // Initialize WebSocket connection to host (by hostname)
+    // @param host Hostname (e.g., "lightwaveos.local")
+    // @param port Port number (default: 80)
+    // @param path WebSocket path (default: "/ws")
+    void begin(const char* host, uint16_t port = 80, const char* path = "/ws");
+
+    // Initialize WebSocket connection to host (by IP address)
+    // @param ip IP address
+    // @param port Port number (default: 80)
+    // @param path WebSocket path (default: "/ws")
+    void begin(IPAddress ip, uint16_t port = 80, const char* path = "/ws");
+
+    // Update WebSocket connection and handle events (call from loop())
+    // Non-blocking: returns immediately, handles state transitions internally
+    void update();
+
+    // Get connection status
+    WebSocketStatus getStatus() const { return _status; }
+    bool isConnected() const { return _status == WebSocketStatus::CONNECTED; }
+    bool isConnecting() const { return _status == WebSocketStatus::CONNECTING; }
+
+    // Get reconnect delay (for observability/debugging)
+    unsigned long getReconnectDelay() const { return _reconnectDelay; }
+
+    // ========================================================================
+    // Global Parameter Commands (Unit A, encoders 0-7)
+    // ========================================================================
+
+    void sendEffectChange(uint16_t effectId);
+    void sendNextEffect();
+    void sendPrevEffect();
+    void requestCurrentEffect();  // Request effects.getCurrent (reads live renderer state)
+    void sendPaletteChange(uint8_t paletteId);
+    void sendSpeedChange(uint8_t speed);
+    void sendMoodChange(uint8_t mood);
+    void sendFadeAmountChange(uint8_t fadeAmount);
+    void sendBrightnessChange(uint8_t brightness);
+    void sendComplexityChange(uint8_t complexity);
+    void sendVariationChange(uint8_t variation);
+
+    // ========================================================================
+    // Zone Commands (Tab5 extension for Unit B, encoders 8-13, 3 zones)
+    // ========================================================================
+
+    void sendZoneEnable(bool enable);
+    void sendZoneEffect(uint8_t zoneId, uint16_t effectId);
+    void sendZoneBrightness(uint8_t zoneId, uint8_t value);
+    void sendZoneSpeed(uint8_t zoneId, uint8_t value);
+    void sendZonePalette(uint8_t zoneId, uint8_t paletteId);
+    void sendZoneBlend(uint8_t zoneId, uint8_t blendMode);
+    void sendZonesSetLayout(const struct zones::ZoneSegment* segments, uint8_t zoneCount);
+    void sendZoneLoadPreset(uint8_t presetId);
+
+    // ========================================================================
+    // Color Correction Commands
+    // ========================================================================
+
+    void requestColorCorrectionConfig();
+    void sendColorCorrectionConfig(bool gammaEnabled, float gammaValue,
+                                   bool autoExposureEnabled, uint8_t autoExposureTarget,
+                                   bool brownGuardrailEnabled, uint8_t mode = 2);
+    // REMOVED: sendGammaChange, sendAutoExposureChange, sendBrownGuardrailChange
+    // K1 has no handlers for these. Use sendColorCorrectionConfig() instead.
+    void sendColourCorrectionMode(uint8_t mode);
+
+    // Color correction state accessors
+    const ColorCorrectionState& getColorCorrectionState() const { return _colorCorrectionState; }
+    void setColorCorrectionState(const ColorCorrectionState& state) { _colorCorrectionState = state; }
+
+    // ========================================================================
+    // EdgeMixer Commands
+    // ========================================================================
+
+    void sendEdgeMixerSet(uint8_t mode, uint8_t spread, uint8_t strength,
+                          uint8_t spatial, uint8_t temporal);
+    void requestEdgeMixerGet();
+
+    // EdgeMixer state accessors
+    const EdgeMixerState& getEdgeMixerState() const { return _edgeMixerState; }
+    void setEdgeMixerState(const EdgeMixerState& state) { _edgeMixerState = state; }
+
+    // ========================================================================
+    // Camera Mode Commands (Control Surface)
+    // ========================================================================
+
+    void sendCameraModeSet(bool enabled);
+    void requestCameraModeGet();
+
+    // ========================================================================
+    // Preset Commands (Control Surface - uses K1's EffectPresetManager)
+    // ========================================================================
+
+    void requestEffectPresetsList();
+    void sendEffectPresetSave(uint8_t slot, const char* name);
+    void sendEffectPresetLoad(uint8_t slot);
+    void sendEffectPresetDelete(uint8_t slot);
+
+    // ========================================================================
+    // Generic Commands
+    // ========================================================================
+
+    void sendGenericParameter(const char* fieldName, uint8_t value);
+
+    // ========================================================================
+    // Metadata Requests (names for UI)
+    // ========================================================================
+    // These request lists from LightwaveOS. Responses come back as WebSocket
+    // messages with the same "type" (e.g. "effects.list", "palettes.list").
+    void requestEffectsList(uint8_t page, uint8_t limit, const char* requestId);
+    void requestPalettesList(uint8_t page, uint8_t limit, const char* requestId);
+    void requestEffectParameters(uint16_t effectId, const char* requestId = nullptr);
+    void sendEffectParameterChange(uint8_t throttleIndex, uint16_t effectId, const char* paramName, float value);
+    void requestZonesState();
+    /** Set flag to send zones.get on next update() (avoids sending inside WS receive callback). */
+    void setPendingZonesRefresh() { _pendingZonesRefresh = true; }
+    /** Defer effects.parameters.get to update() to avoid WS callback re-entrancy. */
+    void setPendingEffectParamsRefresh(uint16_t effectId) {
+        _pendingEffectParamsEffectId = effectId;
+        _pendingEffectParamsRefresh = true;
+    }
+
+    // ========================================================================
+    // Message Handling
+    // ========================================================================
+
+    void onMessage(WebSocketMessageCallback callback) { _messageCallback = callback; }
+    void disconnect();
+    const char* getStatusString() const;
+
+    // Current effect tracking (16-bit IDs from firmware-v3)
+    void setCurrentEffectId(uint16_t effectId) {
+        _currentEffectId = effectId;
+        _currentEffectKnown = true;
+    }
+    bool hasCurrentEffectId() const { return _currentEffectKnown; }
+    uint16_t getCurrentEffectId() const { return _currentEffectId; }
+
+private:
+    WebSocketsClient _ws;
+    WebSocketStatus _status;
+    WebSocketMessageCallback _messageCallback;
+
+    // Color correction state (cached from server)
+    ColorCorrectionState _colorCorrectionState;
+
+    // EdgeMixer state (locally tracked, updated on button press)
+    EdgeMixerState _edgeMixerState;
+
+    // Reconnection state
+    unsigned long _lastReconnectAttempt;
+    unsigned long _reconnectDelay;
+    bool _shouldReconnect;
+    IPAddress _serverIP;
+    const char* _serverHost;
+    uint16_t _serverPort;
+    const char* _serverPath;
+    bool _useIP;
+    bool _pendingHello;
+    bool _pendingZonesRefresh = false;
+    bool _pendingEffectParamsRefresh = false;
+    uint16_t _pendingEffectParamsEffectId = 0;
+    uint16_t _currentEffectId = 0;
+    bool _currentEffectKnown = false;
+
+    // Rate limiting state (14 parameters: 8 global + 6 zone)
+    struct RateLimiter {
+        unsigned long lastSend[14];
+    };
+    RateLimiter _rateLimiter;
+
+    // Send queue for parameter changes (prevents blocking on rapid encoder changes)
+    struct PendingMessage {
+        uint8_t paramIndex;
+        uint8_t value;
+        uint8_t zoneId;  // INTERNAL 0-based zone index (0..2) for zone parameters,
+                          // or 255 for global params. Translated to 1-indexed
+                          // wire format on send (see processSendQueue()).
+        uint32_t timestamp;
+        const char* type;
+        bool valid;
+        
+        void reset() {
+            valid = false;
+            paramIndex = 0;
+            value = 0;
+            zoneId = 0;
+            timestamp = 0;
+            type = nullptr;
+        }
+    };
+    static constexpr size_t SEND_QUEUE_SIZE = 16;  // One per parameter
+    PendingMessage _sendQueue[SEND_QUEUE_SIZE];
+    uint32_t _consecutiveSendFailures;
+    bool _sendDegraded;
+
+    // Mutex protection for _jsonBuffer (prevents concurrent access corruption)
+    SemaphoreHandle_t _sendMutex;
+    static constexpr uint32_t SEND_MUTEX_TIMEOUT_MS = 10;  // 10ms max wait
+    static constexpr uint32_t SEND_TIMEOUT_MS = 50;  // 50ms max send time
+    uint32_t _sendAttemptStartTime;
+
+    // Parameter indices for rate limiting (3 zones, 1-indexed user-facing)
+    // Note: Zone functions called from UI use 0-based zoneId internally
+    enum ParamIndex : uint8_t {
+        EFFECT = 0, BRIGHTNESS = 1, PALETTE = 2, SPEED = 3,
+        MOOD = 4, FADEAMOUNT = 5, COMPLEXITY = 6, VARIATION = 7,
+        ZONE1_EFFECT = 8, ZONE1_SPEED = 9,
+        ZONE2_EFFECT = 10, ZONE2_SPEED = 11,
+        ZONE3_EFFECT = 12, ZONE3_SPEED = 13
+    };
+
+    // Fixed buffer for JSON serialization
+    static constexpr size_t JSON_BUFFER_SIZE = 256;
+    char _jsonBuffer[JSON_BUFFER_SIZE];
+
+    void handleEvent(WStype_t type, uint8_t* payload, size_t length);
+    void attemptReconnect();
+    void resetReconnectBackoff();
+    void increaseReconnectBackoff();
+    void sendHelloMessage();
+    
+    // Check if parameter send is allowed (rate limiting)
+    bool canSend(uint8_t paramIndex);
+    
+    // Send JSON message (non-blocking, protected by mutex)
+    void sendJSON(const char* type, JsonDocument& doc);
+    // Internal: send without taking mutex (caller must hold _sendMutex)
+    void sendJSONUnlocked(const char* type, JsonDocument& doc);
+    
+    // Queue parameter change for later sending (prevents blocking)
+    void queueParameterChange(uint8_t paramIndex, uint8_t value, const char* type, uint8_t zoneId = 255);
+    
+    // Process send queue (called from update())
+    void processSendQueue();
+    
+    // Mutex helpers
+    bool takeSendLock(uint32_t timeoutMs = SEND_MUTEX_TIMEOUT_MS);
+    void releaseSendLock();
+};
+
+#endif // ENABLE_WIFI
+
+
+================================================================================
+FILE: tab5-encoder/src/network/WsMessageRouter.h
+DESCRIPTION: Inbound WebSocket message router — dispatches K1 status events to UI/parameter handlers (CONSUMER side of the K1 WS protocol).
+================================================================================
+
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
+#pragma once
+// ============================================================================
+// WsMessageRouter - WebSocket Message Router for Tab5.encoder
+// ============================================================================
+// Routes incoming WebSocket JSON messages by "type" field to appropriate
+// handlers. Handles parameter synchronization with echo prevention.
+//
+// Supported message types:
+// - "status"             : Full parameter sync from LightwaveOS
+// - "device.status"      : Device info (logged, not processed)
+// - "parameters.changed" : Parameter change notification (triggers refresh)
+// - "zone.status"        : Zone-specific sync (NEW for Tab5)
+//
+// Ported from K1.8encoderS3, extended for:
+// - 16 parameters (dual M5ROTATE8)
+// - Zone status handling
+// - JsonDocument (ArduinoJson v7+)
+// ============================================================================
+
+#include <ArduinoJson.h>
+#include <cstring>
+#include <cmath>
+#include "../parameters/ParameterHandler.h"
+#include "../parameters/ParameterMap.h"
+#include "../zones/ZoneDefinition.h"
+#include "../ui/ZoneComposerUI.h"
+#include "../ui/ControlSurfaceUI.h"
+#include "../ui/DisplayUI.h"
+#include "WebSocketClient.h"
+
+// External function to cache palette names (defined in main.cpp)
+extern void cachePaletteName(uint8_t id, const char* name);
+extern void cacheEffectName(uint16_t id, const char* name);
+extern bool isEffectNameHoldoffActive();
+
+// ============================================================================
+// Router logging (compile-time, default off)
+// ============================================================================
+#ifndef TAB5_WS_TRACE
+#define TAB5_WS_TRACE 0
+#endif
+
+#if TAB5_WS_TRACE
+#define TAB5_WS_PRINTF(...) Serial.printf(__VA_ARGS__)
+#define TAB5_WS_PRINTLN(...) Serial.println(__VA_ARGS__)
+#else
+#define TAB5_WS_PRINTF(...) ((void)0)
+#define TAB5_WS_PRINTLN(...) ((void)0)
+#endif
+
+/**
+ * @class WsMessageRouter
+ * @brief Static class for routing incoming WebSocket messages
+ *
+ * Usage:
+ *   WsMessageRouter::init(&parameterHandler, &wsClient);
+ *   // In WebSocketClient message callback:
+ *   WsMessageRouter::route(doc);
+ */
+class WsMessageRouter {
+public:
+    /**
+     * @brief Initialize router with parameter handler and optional WebSocket client
+     * @param paramHandler Parameter handler for status messages
+     * @param wsClient WebSocket client for requesting status refreshes (optional)
+     * @param zoneComposerUI Zone composer UI for zone state updates (optional)
+     * @param displayUI Display UI for color correction updates (optional)
+     */
+    static void init(ParameterHandler* paramHandler, WebSocketClient* wsClient = nullptr, ZoneComposerUI* zoneComposerUI = nullptr, DisplayUI* displayUI = nullptr) {
+        s_paramHandler = paramHandler;
+        s_wsClient = wsClient;
+        s_zoneComposerUI = zoneComposerUI;
+        s_displayUI = displayUI;
+    }
+
+    /**
+     * @brief Route incoming WebSocket message by type
+     * @param doc Parsed JSON document
+     * @return true if message was handled, false if unknown/ignored
+     */
+    static bool route(JsonDocument& doc) {
+        // Must have "type" field (LightwaveOS protocol)
+        // ArduinoJson 7 pattern: use is<T>() instead of containsKey()
+        if (!doc["type"].is<const char*>()) {
+            return false;
+        }
+
+        const char* type = doc["type"];
+        if (!type) {
+            return false;
+        }
+
+        // Route by message type
+        if (strcmp(type, "status") == 0) {
+            handleStatus(doc);
+            return true;
+        }
+
+        if (strcmp(type, "device.status") == 0) {
+            handleDeviceStatus(doc);
+            return true;
+        }
+
+        if (strcmp(type, "parameters.changed") == 0) {
+            handleParametersChanged(doc);
+            return true;
+        }
+
+        if (strcmp(type, "zone.status") == 0) {
+            handleZoneStatus(doc);
+            return true;
+        }
+
+        if (strcmp(type, "zones.changed") == 0 || strcmp(type, "zones.stateChanged") == 0 || strcmp(type, "zones.enabledChanged") == 0) {
+            handleZonesChanged(doc);
+            return true;
+        }
+
+        if (strcmp(type, "zones.list") == 0) {
+            handleZonesList(doc);
+            return true;
+        }
+
+        if (strcmp(type, "effects.changed") == 0 || strcmp(type, "effectChanged") == 0) {
+            handleEffectsChanged(doc);
+            return true;
+        }
+
+        if (strcmp(type, "effects.current") == 0) {
+            handleEffectsCurrent(doc);
+            return true;
+        }
+
+        if (strcmp(type, "colorCorrection.getConfig") == 0) {
+            handleColorCorrectionConfig(doc);
+            return true;
+        }
+
+        if (strcmp(type, "effects.parameters") == 0) {
+            handleEffectParameters(doc);
+            return true;
+        }
+
+        if (strcmp(type, "cameraMode.changed") == 0) {
+            handleCameraModeChanged(doc);
+            return true;
+        }
+
+        if (strcmp(type, "effectPresets.list") == 0) {
+            handleEffectPresetsList(doc);
+            return true;
+        }
+
+        // Unknown message type - ignore silently
+        // (Rate-limited logging could be added here for debugging)
+        return false;
+    }
+
+private:
+    static inline ParameterHandler* s_paramHandler = nullptr;
+    static inline WebSocketClient* s_wsClient = nullptr;
+    static inline ZoneComposerUI* s_zoneComposerUI = nullptr;
+    static inline DisplayUI* s_displayUI = nullptr;
+    static inline uint16_t s_lastKnownEffectId = 0xFFFF;  // Track effect changes for auto-request
+
+    /**
+     * @brief Handle "status" message from LightwaveOS
+     *
+     * Applies all parameter values from status message.
+     * Echo prevention: uses setValue(..., false) to avoid triggering callbacks.
+     * Also extracts uptime if present and updates DisplayUI footer.
+     */
+    static void handleStatus(JsonDocument& doc) {
+        if (s_paramHandler) {
+            bool updated = s_paramHandler->applyStatus(doc);
+            if (updated) {
+                TAB5_WS_PRINTLN("[WsRouter] Status applied");
+            }
+        }
+
+        // Forward global params to Control Surface (read-only global row)
+        if (s_displayUI && s_displayUI->getCurrentScreen() == UIScreen::CONTROL_SURFACE) {
+            ControlSurfaceUI* csUI = s_displayUI->getControlSurfaceUI();
+            if (csUI) {
+                // Global row: BRI(0), SPD(1), MOOD(2), FADE(3), CPLX(4), VAR(5), HUE(6), SAT(7)
+                static const char* kFields[] = {"brightness", "speed", "mood", "fadeAmount",
+                                                 "complexity", "variation", "hue", "saturation"};
+                for (uint8_t i = 0; i < 8; i++) {
+                    if (doc[kFields[i]].is<int>()) {
+                        csUI->updateGlobalParam(i, static_cast<uint8_t>(doc[kFields[i]].as<int>()));
+                    }
+                }
+            }
+        }
+
+        // Extract uptime from status message if present and update footer
+        if (doc["uptime"].is<unsigned long>() || doc["uptime"].is<uint32_t>()) {
+            uint32_t uptimeSeconds = 0;
+            if (doc["uptime"].is<unsigned long>()) {
+                uptimeSeconds = doc["uptime"].as<unsigned long>();
+            } else if (doc["uptime"].is<uint32_t>()) {
+                uptimeSeconds = doc["uptime"].as<uint32_t>();
+            }
+            
+            if (uptimeSeconds > 0) {
+                TAB5_WS_PRINTF("[WsRouter] Status message uptime: %lu sec\n", uptimeSeconds);
+                
+                // Update footer if DisplayUI is available
+                if (s_displayUI) {
+                    s_displayUI->updateHostUptime(uptimeSeconds);
+                }
+            }
+        }
+
+        // Extract and cache paletteName from status message if present
+        // This ensures palette names display immediately without waiting for palettes.list
+        if (doc["paletteName"].is<const char*>() && doc["paletteId"].is<uint8_t>()) {
+            uint8_t id = doc["paletteId"].as<uint8_t>();
+            const char* name = doc["paletteName"].as<const char*>();
+            if (name && name[0]) {
+                cachePaletteName(id, name);
+            }
+        }
+
+        // Extract and cache effectName from status message if present.
+        // Skip during holdoff (after encoder turn) — status reads stale K1 cache
+        // and would overwrite the fresh name from effects.getCurrent.
+        if (doc["effectName"].is<const char*>() && !isEffectNameHoldoffActive()) {
+            uint16_t effectId = 0;
+            bool hasEffectId = false;
+            if (doc["effectId"].is<int>()) {
+                int effectIdInt = doc["effectId"].as<int>();
+                if (effectIdInt >= 0 && effectIdInt <= 0xFFFF) {
+                    effectId = static_cast<uint16_t>(effectIdInt);
+                    hasEffectId = true;
+                }
+            } else if (doc["effectId"].is<uint16_t>()) {
+                effectId = doc["effectId"].as<uint16_t>();
+                hasEffectId = true;
+            }
+
+            if (hasEffectId) {
+                const char* effectName = doc["effectName"].as<const char*>();
+                if (effectName && effectName[0]) {
+                    cacheEffectName(effectId, effectName);
+                }
+
+                // Auto-request effect params when effect changes and Control Surface is active
+                if (effectId != s_lastKnownEffectId) {
+                    s_lastKnownEffectId = effectId;
+                    if (s_displayUI && s_wsClient &&
+                        s_displayUI->getCurrentScreen() == UIScreen::CONTROL_SURFACE) {
+                        s_wsClient->setPendingEffectParamsRefresh(effectId);
+                        TAB5_WS_PRINTF("[WsRouter] Effect changed to %u, queued params refresh\n", effectId);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * @brief Handle "device.status" message
+     *
+     * Device information (uptime, firmware version, etc.)
+     * Extracts uptime and updates DisplayUI footer.
+     */
+    static void handleDeviceStatus(JsonDocument& doc) {
+        // Extract uptime and update footer
+        if (doc["uptime"].is<unsigned long>()) {
+            uint32_t uptimeSeconds = doc["uptime"].as<unsigned long>();
+            TAB5_WS_PRINTF("[WsRouter] Device uptime: %lu sec\n", uptimeSeconds);
+            
+            // Update footer if DisplayUI is available
+            if (s_displayUI) {
+                s_displayUI->updateHostUptime(uptimeSeconds);
+            }
+        }
+    }
+
+    /**
+     * @brief Handle "parameters.changed" message
+     *
+     * Notification that parameters have changed on the server.
+     * Could trigger a status refresh request.
+     */
+    static void handleParametersChanged(JsonDocument& doc) {
+        // Optional: Request fresh status from server
+        // For now, rely on periodic status broadcasts from LightwaveOS
+        TAB5_WS_PRINTLN("[WsRouter] Parameters changed notification");
+        (void)doc;
+    }
+
+    /**
+     * @brief Handle "zone.status" message (NEW for Tab5)
+     *
+     * Zone-specific parameter sync for multi-zone LED configurations.
+     * Supports up to 3 zones, each with independent effect/brightness.
+     *
+     * Wire format (post-2026-05-02 K1 B2): the "id" field carries a
+     * 1-indexed wire zoneId (1..3). Wire 0 is RESERVED. We translate to
+     * the INTERNAL 0-based index (0..2) before mapping to ParameterId.
+     */
+    static void handleZoneStatus(JsonDocument& doc) {
+        if (!s_paramHandler) {
+            return;
+        }
+
+        // Hard gate: Unit-B zone cache updates are only valid while the
+        // Zone Composer tab is active. Global screen repurposes Unit-B for
+        // effect-modifier slots and must not receive zone writes.
+        if (!s_displayUI || s_displayUI->getCurrentScreen() != UIScreen::ZONE_COMPOSER) {
+            return;
+        }
+
+        // Check if zones array exists (ArduinoJson 7 pattern)
+        if (!doc["zones"].is<JsonArray>()) {
+            TAB5_WS_PRINTLN("[WsRouter] zone.status: missing zones array");
+            return;
+        }
+
+        JsonArray zones = doc["zones"].as<JsonArray>();
+        int zoneCount = 0;
+
+        for (JsonObject zone : zones) {
+            if (!zone["id"].is<uint8_t>()) continue;
+
+            uint8_t wireZoneId = zone["id"].as<uint8_t>();
+
+            // Wire-format: zoneId is 1-indexed (1..3). Reject wire 0
+            // (reserved) and out-of-range values; convert to internal 0..2.
+            if (wireZoneId < 1 || wireZoneId > 3) {
+                TAB5_WS_PRINTF("[WsRouter] Wire zoneId %u out of range (1..3)\n", wireZoneId);
+                continue;
+            }
+            const uint8_t zoneId = static_cast<uint8_t>(wireZoneId - 1);
+
+            // Map internal zone ID to the correct ParameterId enum values.
+            // zoneId 0 -> Zone1Effect (8), Zone1Speed (9)  [Zone 1 user-facing]
+            // zoneId 1 -> Zone2Effect (10), Zone2Speed (11) [Zone 2 user-facing]
+            // zoneId 2 -> Zone3Effect (12), Zone3Speed (13) [Zone 3 user-facing]
+            ParameterId effectParam, speedParam;
+            switch (zoneId) {
+                case 0:
+                    effectParam = ParameterId::Zone1Effect;
+                    speedParam = ParameterId::Zone1Speed;
+                    break;
+                case 1:
+                    effectParam = ParameterId::Zone2Effect;
+                    speedParam = ParameterId::Zone2Speed;
+                    break;
+                case 2:
+                    effectParam = ParameterId::Zone3Effect;
+                    speedParam = ParameterId::Zone3Speed;
+                    break;
+                default:
+                    continue;  // Should not reach here
+            }
+
+            // Zone effectId (16-bit — K1 firmware uses hex IDs such as 0x1100)
+            if (zone["effectId"].is<int>()) {
+                uint16_t effectId = static_cast<uint16_t>(zone["effectId"].as<int>());
+                s_paramHandler->setValue(effectParam, static_cast<uint8_t>(effectId & 0xFF));
+            }
+
+            // Zone speed
+            if (zone["speed"].is<uint8_t>()) {
+                uint8_t speed = zone["speed"].as<uint8_t>();
+                s_paramHandler->setValue(speedParam, speed);
+            }
+
+            // Zone palette (optional, when in palette mode)
+            if (zone["paletteId"].is<uint8_t>()) {
+                // Note: palette is controlled via the same encoder as speed (toggled)
+                // We'll store it but won't update the encoder value directly
+                // The UI can display it separately
+            }
+
+            zoneCount++;
+        }
+
+        if (zoneCount > 0) {
+            TAB5_WS_PRINTF("[WsRouter] Zone status: %d zones synced\n", zoneCount);
+        }
+    }
+
+    /**
+     * @brief Handle "effects.changed" message
+     *
+     * Notification that effects list has changed on the server.
+     * Could trigger effect metadata refresh.
+     */
+    static void handleEffectsChanged(JsonDocument& doc) {
+        // Extract effectId and effectName from effects.changed notification
+        extractAndCacheEffectName(doc);
+
+        // Auto-request effect params when effect changes and Control Surface is active
+        if (s_displayUI && s_wsClient &&
+            s_displayUI->getCurrentScreen() == UIScreen::CONTROL_SURFACE) {
+            // Extract effectId from data or root
+            uint16_t effectId = 0;
+            bool hasId = false;
+            JsonObject data = doc["data"].is<JsonObject>() ? doc["data"].as<JsonObject>() : JsonObject();
+            if (data && data["effectId"].is<int>()) {
+                effectId = static_cast<uint16_t>(data["effectId"].as<int>());
+                hasId = true;
+            } else if (data && data["id"].is<int>()) {
+                effectId = static_cast<uint16_t>(data["id"].as<int>());
+                hasId = true;
+            } else if (doc["effectId"].is<int>()) {
+                effectId = static_cast<uint16_t>(doc["effectId"].as<int>());
+                hasId = true;
+            }
+            if (hasId && effectId != s_lastKnownEffectId) {
+                s_lastKnownEffectId = effectId;
+                s_wsClient->setPendingEffectParamsRefresh(effectId);
+                TAB5_WS_PRINTF("[WsRouter] effects.changed: queued params refresh for %u\n", effectId);
+            }
+        }
+    }
+
+    /**
+     * @brief Handle "effects.current" response
+     *
+     * Response to effects.getCurrent request. Contains live renderer state
+     * (not cached), so effectId/effectName are always up-to-date.
+     */
+    static void handleEffectsCurrent(JsonDocument& doc) {
+        extractAndCacheEffectName(doc);
+    }
+
+    /**
+     * @brief Extract effectId + effectName from any message that carries them
+     * and update the display cache.
+     */
+    static void extractAndCacheEffectName(JsonDocument& doc) {
+        const char* effectName = nullptr;
+        uint16_t effectId = 0;
+        bool hasEffectId = false;
+
+        // Try "data" sub-object first (effects.current / effects.changed format)
+        JsonObject data;
+        if (doc["data"].is<JsonObject>()) {
+            data = doc["data"].as<JsonObject>();
+        }
+
+        // Search for effectName (check data first, then root)
+        if (data && data["effectName"].is<const char*>()) {
+            effectName = data["effectName"].as<const char*>();
+        } else if (data && data["name"].is<const char*>()) {
+            effectName = data["name"].as<const char*>();
+        } else if (doc["effectName"].is<const char*>()) {
+            effectName = doc["effectName"].as<const char*>();
+        }
+
+        // Search for effectId
+        if (data && data["effectId"].is<int>()) {
+            int v = data["effectId"].as<int>();
+            if (v >= 0 && v <= 0xFFFF) { effectId = v; hasEffectId = true; }
+        } else if (data && data["id"].is<int>()) {
+            int v = data["id"].as<int>();
+            if (v >= 0 && v <= 0xFFFF) { effectId = v; hasEffectId = true; }
+        } else if (doc["effectId"].is<int>()) {
+            int v = doc["effectId"].as<int>();
+            if (v >= 0 && v <= 0xFFFF) { effectId = v; hasEffectId = true; }
+        }
+
+        if (hasEffectId && effectName && effectName[0]) {
+            cacheEffectName(effectId, effectName);
+        }
+    }
+
+    /**
+     * @brief Handle "zones.changed" message
+     *
+     * Notification that zone configuration has changed.
+     * Defer zone refresh to next update() to avoid sending inside WS receive callback
+     * (prevents deadlock / long block inside _ws.loop()).
+     */
+    static void handleZonesChanged(JsonDocument& doc) {
+        TAB5_WS_PRINTLN("[WsRouter] Zones changed notification");
+        if (s_wsClient) {
+            s_wsClient->setPendingZonesRefresh();
+        }
+        (void)doc;
+    }
+
+    /**
+     * @brief Handle "zones.list" message
+     *
+     * Zone state list from server (response to zones.get).
+     * Updates zone composer UI with current zone states, segments, and blendMode.
+     */
+    static void handleZonesList(JsonDocument& doc) {
+        if (!s_zoneComposerUI) {
+            // Fallback to handleZoneStatus if no UI available
+            if (doc["zones"].is<JsonArray>()) {
+                handleZoneStatus(doc);
+            }
+            TAB5_WS_PRINTLN("[WsRouter] Zones list received (no UI)");
+            return;
+        }
+
+        // Parse enabled and zoneCount
+        bool enabled = doc["enabled"].as<bool>();
+        uint8_t zoneCount = doc["zoneCount"].as<uint8_t>();
+        if (zoneCount > zones::MAX_ZONES) {
+            zoneCount = zones::MAX_ZONES;
+        }
+
+        // Parse segments array if present.
+        // Wire format: each segment carries a 1-indexed zoneId (1..3).
+        // We translate to internal 0-based (0..2) on ingest. Segments with
+        // out-of-range wire values (0 or > 3) are skipped — internal storage
+        // and downstream UI assume 0..2.
+        if (doc["segments"].is<JsonArray>()) {
+            JsonArray segmentsArray = doc["segments"].as<JsonArray>();
+            zones::ZoneSegment segments[zones::MAX_ZONES];
+            uint8_t segCount = 0;
+
+            for (JsonObject seg : segmentsArray) {
+                if (segCount >= zones::MAX_ZONES) break;
+
+                uint8_t wireZoneId = seg["zoneId"].as<uint8_t>();
+                if (wireZoneId < 1 || wireZoneId > 3) {
+                    TAB5_WS_PRINTF("[WsRouter] zones.list segment wire zoneId %u out of range (1..3)\n", wireZoneId);
+                    continue;
+                }
+                segments[segCount].zoneId = static_cast<uint8_t>(wireZoneId - 1);
+                segments[segCount].s1LeftStart = seg["s1LeftStart"].as<uint8_t>();
+                segments[segCount].s1LeftEnd = seg["s1LeftEnd"].as<uint8_t>();
+                segments[segCount].s1RightStart = seg["s1RightStart"].as<uint8_t>();
+                segments[segCount].s1RightEnd = seg["s1RightEnd"].as<uint8_t>();
+                segments[segCount].totalLeds = seg["totalLeds"].as<uint8_t>();
+                segCount++;
+            }
+
+            // Update UI with segments (internal 0-indexed)
+            s_zoneComposerUI->updateSegments(segments, segCount);
+        }
+
+        // Parse zones array for runtime state (effect, palette, blend, speed).
+        // Wire format: each zone row carries a 1-indexed "id" (1..3).
+        if (doc["zones"].is<JsonArray>()) {
+            JsonArray zones = doc["zones"].as<JsonArray>();
+
+            for (JsonObject zone : zones) {
+                if (!zone["id"].is<uint8_t>()) continue;
+
+                uint8_t wireZoneId = zone["id"].as<uint8_t>();
+                if (wireZoneId < 1 || wireZoneId > 3) {
+                    TAB5_WS_PRINTF("[WsRouter] zones.list row wire zoneId %u out of range (1..3)\n", wireZoneId);
+                    continue;
+                }
+                const uint8_t zoneId = static_cast<uint8_t>(wireZoneId - 1);
+                if (zoneId >= zones::MAX_ZONES) continue;
+
+                // Update ZoneState for UI
+                ZoneState state;
+                if (zone["effectId"].is<int>()) {
+                    int v = zone["effectId"].as<int>();
+                    state.effectId = (v >= 0 && v <= 0xFFFF) ? static_cast<uint16_t>(v) : 0;
+                } else {
+                    state.effectId = 0;
+                }
+                if (zone["effectName"].is<const char*>()) {
+                    const char* name = zone["effectName"].as<const char*>();
+                    strncpy(state.effectName, name, sizeof(state.effectName) - 1);
+                    state.effectName[sizeof(state.effectName) - 1] = '\0';
+                }
+                state.speed = zone["speed"].as<uint8_t>();
+                state.paletteId = zone["paletteId"].as<uint8_t>();
+                if (zone["paletteName"].is<const char*>()) {
+                    const char* name = zone["paletteName"].as<const char*>();
+                    strncpy(state.paletteName, name, sizeof(state.paletteName) - 1);
+                    state.paletteName[sizeof(state.paletteName) - 1] = '\0';
+                }
+                state.blendMode = zone["blendMode"].as<uint8_t>();
+                if (zone["blendModeName"].is<const char*>()) {
+                    const char* name = zone["blendModeName"].as<const char*>();
+                    strncpy(state.blendModeName, name, sizeof(state.blendModeName) - 1);
+                    state.blendModeName[sizeof(state.blendModeName) - 1] = '\0';
+                }
+                state.enabled = zone["enabled"].as<bool>();
+                state.brightness = zone["brightness"].is<uint8_t>()
+                    ? zone["brightness"].as<uint8_t>() : 128;
+
+                // Calculate LED range from segments (if available)
+                // For now, use placeholder — will be updated from segments
+                state.ledStart = 0;
+                state.ledEnd = 0;
+
+                s_zoneComposerUI->updateZone(zoneId, state);
+            }
+
+            // Also update parameter handler for encoder sync
+            handleZoneStatus(doc);
+
+            // Update sidebar zone state cache (independent of active screen).
+            // Wire format: zone "id" is 1-indexed (1..3); sidebar storage is
+            // 0-indexed (0..2).
+            if (s_displayUI) {
+                for (JsonObject zone : zones) {
+                    if (!zone["id"].is<uint8_t>()) continue;
+                    uint8_t wireZid = zone["id"].as<uint8_t>();
+                    if (wireZid < 1 || wireZid > 3) continue;
+                    const uint8_t zid = static_cast<uint8_t>(wireZid - 1);
+
+                    uint16_t eid = 0;
+                    if (zone["effectId"].is<int>()) {
+                        int v = zone["effectId"].as<int>();
+                        if (v >= 0 && v <= 0xFFFF) eid = static_cast<uint16_t>(v);
+                    }
+                    const char* eName = zone["effectName"].is<const char*>()
+                        ? zone["effectName"].as<const char*>() : "";
+                    uint8_t spd = zone["speed"].as<uint8_t>();
+                    uint8_t palId = zone["paletteId"].as<uint8_t>();
+                    const char* palName = zone["paletteName"].is<const char*>()
+                        ? zone["paletteName"].as<const char*>() : "";
+                    uint8_t blend = zone["blendMode"].as<uint8_t>();
+                    uint8_t bri = zone["brightness"].is<uint8_t>()
+                        ? zone["brightness"].as<uint8_t>() : 128;
+
+                    s_displayUI->updateZoneSidebarState(zid, eid, eName, spd, palId, palName, blend, bri);
+                }
+            }
+        }
+
+        // Sync zone mode button state from K1 (enabled flag)
+        if (s_zoneComposerUI) {
+            s_zoneComposerUI->updateZoneModeButton(enabled);
+        }
+        if (s_displayUI) {
+            s_displayUI->updateZoneModeButton(enabled);
+        }
+
+        TAB5_WS_PRINTF("[WsRouter] Zones list: enabled=%d, count=%d\n", enabled, zoneCount);
+    }
+
+    /**
+     * @brief Handle "effects.parameters" message for Control Surface.
+     */
+    static void handleEffectParameters(JsonDocument& doc) {
+        if (!s_displayUI) return;
+        ControlSurfaceUI* csUI = s_displayUI->getControlSurfaceUI();
+        if (!csUI) return;
+
+        if (doc["success"].is<bool>() && !doc["success"].as<bool>()) {
+            return;
+        }
+
+        JsonObject data = doc["data"].is<JsonObject>()
+            ? doc["data"].as<JsonObject>()
+            : doc.as<JsonObject>();
+
+        uint16_t effectId = 0;
+        if (data["effectId"].is<int>()) {
+            int v = data["effectId"].as<int>();
+            if (v >= 0 && v <= 0xFFFF) effectId = static_cast<uint16_t>(v);
+        } else if (data["effectId"].is<uint16_t>()) {
+            effectId = data["effectId"].as<uint16_t>();
+        }
+
+        const char* effectName = data["name"].is<const char*>()
+            ? data["name"].as<const char*>()
+            : "";
+
+        CSEffectParam params[CS_MAX_EFFECT_PARAMS];
+        uint8_t paramCount = 0;
+
+        if (data["parameters"].is<JsonArray>()) {
+            JsonArray paramArray = data["parameters"].as<JsonArray>();
+            for (JsonObject p : paramArray) {
+                if (paramCount >= CS_MAX_EFFECT_PARAMS) break;
+                if (!p["name"].is<const char*>()) continue;
+
+                CSEffectParam& out = params[paramCount];
+                const char* name = p["name"].as<const char*>();
+                const char* displayName = p["displayName"].is<const char*>()
+                    ? p["displayName"].as<const char*>()
+                    : name;
+
+                strncpy(out.name, name, sizeof(out.name) - 1);
+                out.name[sizeof(out.name) - 1] = '\0';
+                strncpy(out.displayName, displayName, sizeof(out.displayName) - 1);
+                out.displayName[sizeof(out.displayName) - 1] = '\0';
+
+                out.minValue = p["min"] | 0.0f;
+                out.maxValue = p["max"] | 1.0f;
+                if (out.maxValue <= out.minValue) {
+                    out.maxValue = out.minValue + 1.0f;
+                }
+
+                out.defaultValue = p["default"] | out.minValue;
+                out.currentValue = p["value"] | out.defaultValue;
+
+                out.step = p["step"] | ((out.maxValue - out.minValue) / 255.0f);
+                if (out.step <= 0.0f) {
+                    out.step = (out.maxValue - out.minValue) / 255.0f;
+                    if (out.step <= 0.0f) out.step = 0.01f;
+                }
+
+                if (p["unit"].is<const char*>()) {
+                    const char* unit = p["unit"].as<const char*>();
+                    if (unit) {
+                        strncpy(out.unit, unit, sizeof(out.unit) - 1);
+                        out.unit[sizeof(out.unit) - 1] = '\0';
+                    }
+                }
+
+                // Infer type when firmware does not provide explicit type metadata.
+                const bool minInt = fabsf(out.minValue - roundf(out.minValue)) < 0.001f;
+                const bool maxInt = fabsf(out.maxValue - roundf(out.maxValue)) < 0.001f;
+                const bool defInt = fabsf(out.defaultValue - roundf(out.defaultValue)) < 0.001f;
+                if (minInt && maxInt && defInt &&
+                    out.minValue == 0.0f && out.maxValue == 1.0f) {
+                    out.type = CSParamType::BOOL;
+                } else if (minInt && maxInt) {
+                    out.type = CSParamType::INT;
+                } else {
+                    out.type = CSParamType::FLOAT;
+                }
+
+                out.valid = true;
+                paramCount++;
+            }
+        }
+
+        csUI->onEffectParametersReceived(effectId, effectName, params, paramCount);
+    }
+
+    /**
+     * @brief Handle "cameraMode.changed" broadcast for Control Surface.
+     */
+    static void handleCameraModeChanged(JsonDocument& doc) {
+        if (!s_displayUI) return;
+        ControlSurfaceUI* csUI = s_displayUI->getControlSurfaceUI();
+        if (!csUI) return;
+
+        JsonObject data = doc["data"].is<JsonObject>()
+            ? doc["data"].as<JsonObject>()
+            : doc.as<JsonObject>();
+
+        bool enabled = false;
+        if (data["enabled"].is<bool>()) {
+            enabled = data["enabled"].as<bool>();
+        } else if (data["active"].is<bool>()) {
+            enabled = data["active"].as<bool>();
+        }
+
+        csUI->setCameraMode(enabled);
+    }
+
+    /**
+     * @brief Handle "effectPresets.list" response for Control Surface + sidebar.
+     */
+    static void handleEffectPresetsList(JsonDocument& doc) {
+        if (!s_displayUI) return;
+
+        if (doc["success"].is<bool>() && !doc["success"].as<bool>()) {
+            return;
+        }
+
+        CSPresetSlot slots[CS_MAX_PRESET_SLOTS];
+        for (uint8_t i = 0; i < CS_MAX_PRESET_SLOTS; i++) {
+            slots[i] = CSPresetSlot();
+        }
+
+        JsonObject data = doc["data"].is<JsonObject>()
+            ? doc["data"].as<JsonObject>()
+            : doc.as<JsonObject>();
+
+        if (data["presets"].is<JsonArray>()) {
+            JsonArray presets = data["presets"].as<JsonArray>();
+            for (JsonObject p : presets) {
+                if (!p["id"].is<int>()) continue;
+                int slot = p["id"].as<int>();
+                if (slot < 0 || slot >= CS_MAX_PRESET_SLOTS) continue;
+
+                CSPresetSlot& out = slots[slot];
+                out.occupied = p["occupied"] | true;
+                if (p["name"].is<const char*>()) {
+                    const char* name = p["name"].as<const char*>();
+                    if (name) {
+                        strncpy(out.name, name, sizeof(out.name) - 1);
+                        out.name[sizeof(out.name) - 1] = '\0';
+                    }
+                }
+                if (p["effectId"].is<int>()) {
+                    int v = p["effectId"].as<int>();
+                    if (v >= 0 && v <= 0xFFFF) {
+                        out.effectId = static_cast<uint16_t>(v);
+                    }
+                }
+            }
+        }
+
+        // Forward to Control Surface if available
+        ControlSurfaceUI* csUI = s_displayUI->getControlSurfaceUI();
+        if (csUI) {
+            csUI->onPresetListReceived(slots, CS_MAX_PRESET_SLOTS);
+        }
+
+        // Update sidebar preset slots (independent of Control Surface screen)
+        DisplayUI::PresetSidebarSlot sidebarSlots[8];
+        for (uint8_t i = 0; i < CS_MAX_PRESET_SLOTS && i < 8; i++) {
+            sidebarSlots[i].occupied = slots[i].occupied;
+            strncpy(sidebarSlots[i].name, slots[i].name, sizeof(sidebarSlots[i].name) - 1);
+            sidebarSlots[i].name[sizeof(sidebarSlots[i].name) - 1] = '\0';
+            sidebarSlots[i].effectId = slots[i].effectId;
+        }
+        s_displayUI->updatePresetSidebarSlots(sidebarSlots, 8);
+    }
+
+    /**
+     * @brief Handle "colorCorrection.getConfig" response
+     *
+     * Caches color correction state from LightwaveOS v2 server.
+     * Used by PresetManager to capture/apply gamma, auto-exposure, brown guardrail.
+     */
+    static void handleColorCorrectionConfig(JsonDocument& doc) {
+        if (!s_wsClient) {
+            TAB5_WS_PRINTLN("[WsRouter] ColorCorrection: no wsClient");
+            return;
+        }
+
+        // Check for success field (v2 API pattern)
+        if (doc["success"].is<bool>() && !doc["success"].as<bool>()) {
+            TAB5_WS_PRINTLN("[WsRouter] ColorCorrection: request failed");
+            return;
+        }
+
+        // Data can be in "data" object or at root level
+        JsonObject data = doc["data"].is<JsonObject>()
+            ? doc["data"].as<JsonObject>()
+            : doc.as<JsonObject>();
+
+        ColorCorrectionState state;
+        state.gammaEnabled = data["gammaEnabled"] | true;
+        state.gammaValue = data["gammaValue"] | 2.2f;
+        state.autoExposureEnabled = data["autoExposureEnabled"] | false;
+        state.autoExposureTarget = data["autoExposureTarget"] | 110;
+        state.brownGuardrailEnabled = data["brownGuardrailEnabled"] | false;
+        state.maxGreenPercentOfRed = data["maxGreenPercentOfRed"] | 28;
+        state.maxBluePercentOfRed = data["maxBluePercentOfRed"] | 8;
+        state.mode = data["mode"] | 2;
+        state.valid = true;
+
+        s_wsClient->setColorCorrectionState(state);
+        if (s_displayUI) {
+            s_displayUI->setColourCorrectionState(state);
+        }
+
+        TAB5_WS_PRINTF("[WsRouter] ColorCorrection synced: gamma=%s (%.1f), ae=%s, brown=%s\n",
+                      state.gammaEnabled ? "ON" : "OFF", state.gammaValue,
+                      state.autoExposureEnabled ? "ON" : "OFF",
+                      state.brownGuardrailEnabled ? "ON" : "OFF");
+    }
+
+};
+
+
+================================================================================
+FILE: tab5-encoder/src/input/DualEncoderService.h
+DESCRIPTION: Unified 16-encoder service — Unit A (0-7) + Unit B (8-15) M5ROTATE8 abstraction, click/long-press detection, encoder-to-parameter mapping.
+================================================================================
+
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
+#pragma once
+// ============================================================================
+// DualEncoderService - Unified 16-Encoder Interface for Tab5
+// ============================================================================
+// Manages TWO M5ROTATE8 encoder units on the SAME I2C bus with different
+// addresses, providing a clean 16-parameter API (indices 0-15).
+//
+// Hardware Layout:
+//   Unit A (0x42): Encoders 0-7,  LEDs 0-7,  Status LED 8
+//   Unit B (0x41): Encoders 8-15, LEDs 8-15, Status LED 8 (on Unit B)
+//
+// I2C Address Configuration:
+//   Unit A must be reprogrammed to 0x42 using register 0xFF
+//   Unit B uses factory default 0x41
+//   Both units connect to Grove Port.A (GPIO 53/54)
+//
+// Usage:
+//   Wire.begin(53, 54, 100000);  // Grove Port.A
+//   DualEncoderService encoders(&Wire, 0x42, 0x41);  // Different addresses
+//   encoders.setChangeCallback([](uint8_t idx, uint16_t val, bool reset) { ... });
+//   encoders.begin();
+//   // In loop:
+//   encoders.update();
+//
+// CRITICAL SAFETY NOTE:
+// This service contains NO I2C recovery logic. Tab5's shared I2C bus
+// architecture means aggressive recovery patterns are forbidden.
+// ============================================================================
+
+#include <Arduino.h>
+#include <Wire.h>
+#include <esp_task_wdt.h>
+#include "Rotate8Transport.h"
+#include "EncoderProcessing.h"
+#include "../config/Config.h"
+
+// Forward declaration (for class members)
+class ButtonHandler;
+class CoarseModeManager;
+
+class DualEncoderService {
+public:
+    // Callback signature: (encoder_index 0-15, new_value, was_button_reset)
+    using ChangeCallback = void (*)(uint8_t index, uint16_t value, bool wasReset);
+
+    // Number of encoders per unit and total
+    static constexpr uint8_t ENCODERS_PER_UNIT = 8;
+    static constexpr uint8_t TOTAL_ENCODERS = 16;
+
+    /**
+     * Constructor for same-bus dual-address operation
+     * @param wire Pointer to TwoWire instance (both units share same bus)
+     * @param addressA I2C address for Unit A (0-7), default 0x42 (reprogrammed)
+     * @param addressB I2C address for Unit B (8-15), default 0x41 (factory)
+     */
+    DualEncoderService(TwoWire* wire, uint8_t addressA = 0x42, uint8_t addressB = 0x41);
+
+    /**
+     * Initialize both encoder units
+     * @return true if at least one unit initialized successfully
+     */
+    bool begin();
+
+    /**
+     * Poll all 16 encoders and process changes
+     * Call this in the main loop (recommended: every 5-20ms)
+     */
+    void update();
+
+    // ========================================================================
+    // Value Access (indices 0-15)
+    // ========================================================================
+
+    /**
+     * Get current value for a parameter
+     * @param param Parameter index (0-15)
+     * @return Current parameter value
+     */
+    uint16_t getValue(uint8_t param) const;
+
+    /**
+     * Set parameter value externally (e.g., from WebSocket sync)
+     * @param param Parameter index (0-15)
+     * @param value New value (will be clamped/wrapped to valid range)
+     * @param triggerCallback If true, invokes the change callback
+     */
+    void setValue(uint8_t param, uint16_t value, bool triggerCallback = false);
+
+    /**
+     * Simulate a button press (fires callback with wasReset=true)
+     * Used by encoder simulation API (serial/REST injection).
+     * @param index Encoder index (0-15)
+     */
+    void simulatePress(uint8_t index);
+
+    /**
+     * Get all current values
+     * @param values Array to fill (must have 16 elements)
+     */
+    void getAllValues(uint16_t values[TOTAL_ENCODERS]) const;
+
+    /**
+     * Reset all parameters to their default values
+     * @param triggerCallbacks If true, invokes callback for each parameter
+     */
+    void resetToDefaults(bool triggerCallbacks = true);
+
+    // ========================================================================
+    // Callback Registration
+    // ========================================================================
+
+    /**
+     * Register callback for parameter changes
+     * Single unified callback for all 16 encoders
+     * @param callback Function to call when any parameter changes
+     */
+    void setChangeCallback(ChangeCallback callback);
+
+    /**
+     * Set button handler for special button behaviors
+     * @param handler ButtonHandler instance (can be nullptr to disable)
+     */
+    void setButtonHandler(ButtonHandler* handler) { _buttonHandler = handler; }
+
+    /**
+     * Set coarse mode manager for ENC-A acceleration
+     * @param manager CoarseModeManager instance (can be nullptr to disable)
+     */
+    void setCoarseModeManager(CoarseModeManager* manager) { _coarseModeManager = manager; }
+
+    // ========================================================================
+    // Status
+    // ========================================================================
+
+    /**
+     * Check if Unit A (encoders 0-7) is available
+     * @return true if Unit A was successfully initialized
+     */
+    bool isUnitAAvailable() const;
+
+    /**
+     * Check if Unit B (encoders 8-15) is available
+     * @return true if Unit B was successfully initialized
+     */
+    bool isUnitBAvailable() const;
+
+    /**
+     * Check if any unit is available
+     * @return true if at least one unit is available
+     */
+    bool isAnyAvailable() const;
+
+    /**
+     * Check if both units are available
+     * @return true if both units are available
+     */
+    bool areBothAvailable() const;
+
+    /**
+     * Get cached button state for an encoder index.
+     * This is sampled during update() and avoids extra direct I2C reads.
+     * @param index Global encoder index (0-15)
+     * @return true if pressed in the latest poll
+     */
+    bool getButtonPressed(uint8_t index) const;
+
+    /**
+     * Get cached switch state for a unit.
+     * @param unit 0 for Unit A, 1 for Unit B
+     * @return Raw switch value from latest poll
+     */
+    uint8_t getSwitchState(uint8_t unit) const;
+
+    // ========================================================================
+    // LED Control
+    // ========================================================================
+
+    /**
+     * Flash an encoder LED briefly
+     * @param index Encoder index (0-15): 0-7 = Unit A, 8-15 = Unit B
+     * @param r Red component (0-255)
+     * @param g Green component (0-255)
+     * @param b Blue component (0-255)
+     */
+    void flashLed(uint8_t index, uint8_t r, uint8_t g, uint8_t b);
+
+    /**
+     * Set status LED color for a unit
+     * Each unit has LED 8 as its status LED
+     * @param unit Unit index (0 = Unit A, 1 = Unit B)
+     * @param r Red component (0-255)
+     * @param g Green component (0-255)
+     * @param b Blue component (0-255)
+     */
+    void setStatusLed(uint8_t unit, uint8_t r, uint8_t g, uint8_t b);
+
+    /**
+     * Turn off all LEDs on both units
+     */
+    void allLedsOff();
+
+    // ========================================================================
+    // Direct Access (for advanced use)
+    // ========================================================================
+
+    /**
+     * Get reference to Unit A transport layer
+     * Use with caution - bypasses service-level state management
+     * @return Reference to Rotate8Transport for Unit A
+     */
+    Rotate8Transport& transportA() { return _transportA; }
+
+    /**
+     * Get reference to Unit B transport layer
+     * Use with caution - bypasses service-level state management
+     * @return Reference to Rotate8Transport for Unit B
+     */
+    Rotate8Transport& transportB() { return _transportB; }
+
+private:
+    // Transport layers for both units
+    Rotate8Transport _transportA;
+    Rotate8Transport _transportB;
+
+    // Unified value storage (0-15)
+    uint16_t _values[TOTAL_ENCODERS];
+    bool _buttonStates[TOTAL_ENCODERS] = {false};
+    uint8_t _switchStateA = 0;
+    uint8_t _switchStateB = 0;
+
+    // Processing state for all 16 encoders
+    DetentDebounce _detentDebounce[TOTAL_ENCODERS];
+    ButtonDebounce _buttonDebounce[TOTAL_ENCODERS];
+    CallbackThrottle _callbackThrottle[TOTAL_ENCODERS];
+
+    // LED flash state
+    struct LedFlash {
+        uint32_t start_time = 0;
+        bool active = false;
+        static const uint32_t DURATION_MS = 100;
+    };
+    LedFlash _ledFlash[TOTAL_ENCODERS];
+
+    // Unified callback
+    ChangeCallback _callback = nullptr;
+
+    // Button handler for special behaviors (zone mode, speed/palette toggle)
+    ButtonHandler* _buttonHandler = nullptr;
+
+    // Coarse mode manager for ENC-A acceleration (encoders 0-7)
+    CoarseModeManager* _coarseModeManager = nullptr;
+
+    // ========================================================================
+    // Internal Methods
+    // ========================================================================
+
+    /**
+     * Process encoder delta for a global index
+     * @param globalIdx Global encoder index (0-15)
+     * @param rawDelta Raw delta from M5ROTATE8
+     * @param now Current time in milliseconds
+     */
+    void processEncoderDelta(uint8_t globalIdx, int32_t rawDelta, uint32_t now);
+
+    /**
+     * Process button state for a global index
+     * @param globalIdx Global encoder index (0-15)
+     * @param isPressed Current button state
+     * @param now Current time in milliseconds
+     */
+    void processButton(uint8_t globalIdx, bool isPressed, uint32_t now);
+
+    /**
+     * Update LED flash states (turn off LEDs after flash duration)
+     * @param now Current time in milliseconds
+     */
+    void updateLedFlash(uint32_t now);
+
+    /**
+     * Invoke the change callback if registered
+     * @param globalIdx Global encoder index (0-15)
+     * @param value Current value
+     * @param wasReset true if this was a button reset
+     */
+    void invokeCallback(uint8_t globalIdx, uint16_t value, bool wasReset);
+
+    // ========================================================================
+    // Helper Methods
+    // ========================================================================
+
+    /**
+     * Get the transport layer for a global index
+     * @param globalIdx Global encoder index (0-15)
+     * @return Reference to appropriate Rotate8Transport (A for 0-7, B for 8-15)
+     */
+    Rotate8Transport& getTransport(uint8_t globalIdx);
+
+    /**
+     * Convert global index to local index within a unit
+     * @param globalIdx Global encoder index (0-15)
+     * @return Local index (0-7), maps 8-15 to 0-7
+     */
+    uint8_t toLocalIdx(uint8_t globalIdx) const;
+
+    /**
+     * Check if global index belongs to Unit A
+     * @param globalIdx Global encoder index (0-15)
+     * @return true if index is 0-7 (Unit A)
+     */
+    bool isUnitA(uint8_t globalIdx) const;
+
+    /**
+     * Get default value for a global parameter index
+     * @param globalIdx Global encoder index (0-15)
+     * @return Default value for the parameter
+     */
+    uint16_t getDefaultValue(uint8_t globalIdx) const;
+
+    /**
+     * Apply wrap/clamp behavior for a global index
+     * @param globalIdx Global encoder index (0-15)
+     * @param value Value to process
+     * @return Processed value with wrap/clamp applied
+     */
+    uint16_t applyRangeConstraint(uint8_t globalIdx, int32_t value) const;
+
+    /**
+     * Check if a global index should wrap (vs clamp)
+     * @param globalIdx Global encoder index (0-15)
+     * @return true if parameter should wrap
+     */
+    bool shouldWrapGlobal(uint8_t globalIdx) const;
+};
+
+// ============================================================================
+// Inline Implementation
+// ============================================================================
+
+inline DualEncoderService::DualEncoderService(TwoWire* wire, uint8_t addressA, uint8_t addressB)
+    : _transportA(wire, addressA)  // Same bus, address 0x42 (reprogrammed)
+    , _transportB(wire, addressB)  // Same bus, address 0x41 (factory)
+{
+    // Initialize values to defaults
+    // Unit A (indices 0-7): Global parameters
+    // CRITICAL: Order must match Parameter enum and PARAMETER_TABLE!
+    // Index 0=Effect, 1=Palette, 2=Speed, 3=Mood, 4=FadeAmount, 5=Complexity, 6=Variation, 7=Brightness
+    _values[0] = ParamDefault::EFFECT;       // Index 0 = Effect (0)
+    _values[1] = ParamDefault::PALETTE;      // Index 1 = Palette (0, wraps 0-74)
+    _values[2] = ParamDefault::SPEED;        // Index 2 = Speed (25)
+    _values[3] = ParamDefault::MOOD;         // Index 3 = Mood (0)
+    _values[4] = ParamDefault::FADEAMOUNT;   // Index 4 = FadeAmount (0)
+    _values[5] = ParamDefault::COMPLEXITY;   // Index 5 = Complexity (128)
+    _values[6] = ParamDefault::VARIATION;    // Index 6 = Variation (0)
+    _values[7] = ParamDefault::BRIGHTNESS;   // Index 7 = Brightness (128)
+
+    // Unit B (indices 8-13): Zone parameters (3 zones, 1-indexed user-facing)
+    _values[8] = ParamDefault::ZONE1_EFFECT;
+    _values[9] = ParamDefault::ZONE1_SPEED;
+    _values[10] = ParamDefault::ZONE2_EFFECT;
+    _values[11] = ParamDefault::ZONE2_SPEED;
+    _values[12] = ParamDefault::ZONE3_EFFECT;
+    _values[13] = ParamDefault::ZONE3_SPEED;
+}
+
+inline bool DualEncoderService::begin() {
+    bool unitAOk = _transportA.begin();
+    bool unitBOk = _transportB.begin();
+
+    // Set status LEDs to indicate unit availability
+    if (unitAOk) {
+        // Unit A status LED: dim green
+        // #region agent log (DISABLED)
+        // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"boot\",\"hypothesisId\":\"H1\",\"location\":\"DualEncoderService.h:begin\",\"message\":\"statusLed.unitA.set\",\"data\":{\"channel\":8,\"r\":0,\"g\":32,\"b\":0},\"timestamp\":%lu}\n",
+                      // static_cast<unsigned long>(millis()));
+                // #endregion
+        _transportA.setLED(8, 0, 32, 0);
+    }
+    if (unitBOk) {
+        // Unit B status LED: dim blue (to differentiate from Unit A)
+        // #region agent log (DISABLED)
+        // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"boot\",\"hypothesisId\":\"H1\",\"location\":\"DualEncoderService.h:begin\",\"message\":\"statusLed.unitB.set\",\"data\":{\"channel\":8,\"r\":0,\"g\":0,\"b\":32},\"timestamp\":%lu}\n",
+                      // static_cast<unsigned long>(millis()));
+                // #endregion
+        _transportB.setLED(8, 0, 0, 32);
+    }
+
+    // Return true if at least one unit is available (graceful degradation)
+    return unitAOk || unitBOk;
+}
+
+inline void DualEncoderService::update() {
+    uint32_t now = millis();
+
+    // Poll Unit A encoders (indices 0-7)
+    if (_transportA.isAvailable()) {
+        _switchStateA = _transportA.getInputSwitch();
+        const uint32_t _dbg_t0 = millis();
+        for (uint8_t localIdx = 0; localIdx < ENCODERS_PER_UNIT; localIdx++) {
+            uint8_t globalIdx = localIdx;  // 0-7
+
+            // Read raw encoder delta
+            int32_t rawDelta = _transportA.getRelCounter(localIdx);
+            processEncoderDelta(globalIdx, rawDelta, now);
+
+            // Check button state
+            bool isPressed = _transportA.getKeyPressed(localIdx);
+            _buttonStates[globalIdx] = isPressed;
+            processButton(globalIdx, isPressed, now);
+
+            // Feed WDT every 4 encoders to prevent timeout cascade
+            // (each encoder = 2-5 I2C txns × up to 10ms timeout = 20-50ms)
+            if ((localIdx & 3) == 3) esp_task_wdt_reset();
+        }
+        const uint32_t _dbg_dt = millis() - _dbg_t0;
+        // #region agent log (DISABLED)
+        static uint32_t s_lastI2CSlowMs = 0;
+        const uint32_t _dbg_now = millis();
+        if (false) {
+            if (_dbg_dt > 250 && (_dbg_now - s_lastI2CSlowMs) > 500) {
+                s_lastI2CSlowMs = _dbg_now;
+                Serial.printf(
+                    "{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\",\"location\":\"Tab5.encoder/src/input/DualEncoderService.h:update\",\"message\":\"i2c.poll.slow\",\"data\":{\"unit\":\"A\",\"dtMs\":%lu,\"timeoutMs\":%u},\"timestamp\":%lu}\n",
+                    (unsigned long)_dbg_dt,
+                    (unsigned)I2C::TIMEOUT_MS,
+                    (unsigned long)_dbg_now
+                );
+            }
+        }
+        // #endregion
+    }
+
+    // WDT reset between units — Unit A polling may have taken up to 800ms
+    esp_task_wdt_reset();
+
+    // Poll Unit B encoders (indices 8-15)
+    if (_transportB.isAvailable()) {
+        _switchStateB = _transportB.getInputSwitch();
+        const uint32_t _dbg_t0 = millis();
+        for (uint8_t localIdx = 0; localIdx < ENCODERS_PER_UNIT; localIdx++) {
+            uint8_t globalIdx = localIdx + ENCODERS_PER_UNIT;  // 8-15
+
+            // Read raw encoder delta
+            int32_t rawDelta = _transportB.getRelCounter(localIdx);
+            processEncoderDelta(globalIdx, rawDelta, now);
+
+            // Check button state
+            bool isPressed = _transportB.getKeyPressed(localIdx);
+            _buttonStates[globalIdx] = isPressed;
+            processButton(globalIdx, isPressed, now);
+
+            // Feed WDT every 4 encoders
+            if ((localIdx & 3) == 3) esp_task_wdt_reset();
+        }
+        const uint32_t _dbg_dt = millis() - _dbg_t0;
+        // #region agent log (DISABLED)
+        static uint32_t s_lastI2CSlowMs = 0;
+        const uint32_t _dbg_now = millis();
+        if (false) {
+            if (_dbg_dt > 250 && (_dbg_now - s_lastI2CSlowMs) > 500) {
+                s_lastI2CSlowMs = _dbg_now;
+                Serial.printf(
+                    "{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\",\"location\":\"Tab5.encoder/src/input/DualEncoderService.h:update\",\"message\":\"i2c.poll.slow\",\"data\":{\"unit\":\"B\",\"dtMs\":%lu,\"timeoutMs\":%u},\"timestamp\":%lu}\n",
+                    (unsigned long)_dbg_dt,
+                    (unsigned)I2C::TIMEOUT_MS,
+                    (unsigned long)_dbg_now
+                );
+            }
+        }
+        // #endregion
+    }
+
+    // Update LED flash states for all 16 encoders
+    updateLedFlash(now);
+}
+
+inline uint16_t DualEncoderService::getValue(uint8_t param) const {
+    if (param >= TOTAL_ENCODERS) return 0;
+    return _values[param];
+}
+
+inline void DualEncoderService::setValue(uint8_t param, uint16_t value, bool triggerCallback) {
+    if (param >= TOTAL_ENCODERS) return;
+
+    // Apply range constraint
+    _values[param] = applyRangeConstraint(param, static_cast<int32_t>(value));
+
+    if (triggerCallback) {
+        invokeCallback(param, _values[param], false);
+    }
+}
+
+inline void DualEncoderService::simulatePress(uint8_t index) {
+    if (index >= TOTAL_ENCODERS) return;
+    invokeCallback(index, _values[index], true);
+}
+
+inline void DualEncoderService::getAllValues(uint16_t values[TOTAL_ENCODERS]) const {
+    for (uint8_t i = 0; i < TOTAL_ENCODERS; i++) {
+        values[i] = _values[i];
+    }
+}
+
+inline void DualEncoderService::resetToDefaults(bool triggerCallbacks) {
+    // Reset Unit A parameters (0-7)
+    // CRITICAL: Order must match Parameter enum and PARAMETER_TABLE!
+    // Index 0=Effect, 1=Palette, 2=Speed, 3=Mood, 4=FadeAmount, 5=Complexity, 6=Variation, 7=Brightness
+    _values[0] = ParamDefault::EFFECT;       // Index 0 = Effect (0)
+    _values[1] = ParamDefault::PALETTE;      // Index 1 = Palette (0, wraps 0-74)
+    _values[2] = ParamDefault::SPEED;        // Index 2 = Speed (25)
+    _values[3] = ParamDefault::MOOD;         // Index 3 = Mood (0)
+    _values[4] = ParamDefault::FADEAMOUNT;   // Index 4 = FadeAmount (0)
+    _values[5] = ParamDefault::COMPLEXITY;   // Index 5 = Complexity (128)
+    _values[6] = ParamDefault::VARIATION;    // Index 6 = Variation (0)
+    _values[7] = ParamDefault::BRIGHTNESS;   // Index 7 = Brightness (128)
+
+    // Reset Unit B parameters (8-13) to zone defaults (3 zones, 1-indexed user-facing)
+    _values[8] = ParamDefault::ZONE1_EFFECT;
+    _values[9] = ParamDefault::ZONE1_SPEED;
+    _values[10] = ParamDefault::ZONE2_EFFECT;
+    _values[11] = ParamDefault::ZONE2_SPEED;
+    _values[12] = ParamDefault::ZONE3_EFFECT;
+    _values[13] = ParamDefault::ZONE3_SPEED;
+
+    // Reset all processing states
+    for (uint8_t i = 0; i < TOTAL_ENCODERS; i++) {
+        _detentDebounce[i].reset();
+        _buttonDebounce[i].reset();
+        _callbackThrottle[i].reset();
+    }
+
+    if (triggerCallbacks && _callback) {
+        for (uint8_t i = 0; i < TOTAL_ENCODERS; i++) {
+            _callback(i, _values[i], true);
+        }
+    }
+}
+
+inline void DualEncoderService::setChangeCallback(ChangeCallback callback) {
+    _callback = callback;
+}
+
+inline bool DualEncoderService::isUnitAAvailable() const {
+    return _transportA.isAvailable();
+}
+
+inline bool DualEncoderService::isUnitBAvailable() const {
+    return _transportB.isAvailable();
+}
+
+inline bool DualEncoderService::isAnyAvailable() const {
+    return _transportA.isAvailable() || _transportB.isAvailable();
+}
+
+inline bool DualEncoderService::areBothAvailable() const {
+    return _transportA.isAvailable() && _transportB.isAvailable();
+}
+
+inline bool DualEncoderService::getButtonPressed(uint8_t index) const {
+    if (index >= TOTAL_ENCODERS) return false;
+    return _buttonStates[index];
+}
+
+inline uint8_t DualEncoderService::getSwitchState(uint8_t unit) const {
+    if (unit == 0) return _switchStateA;
+    if (unit == 1) return _switchStateB;
+    return 0;
+}
+
+inline void DualEncoderService::flashLed(uint8_t index, uint8_t r, uint8_t g, uint8_t b) {
+    if (index >= TOTAL_ENCODERS) return;
+
+    _ledFlash[index].start_time = millis();
+    _ledFlash[index].active = true;
+
+    uint8_t localIdx = toLocalIdx(index);
+    if (isUnitA(index)) {
+        _transportA.setLED(localIdx, r, g, b);
+    } else {
+        _transportB.setLED(localIdx, r, g, b);
+    }
+}
+
+inline void DualEncoderService::setStatusLed(uint8_t unit, uint8_t r, uint8_t g, uint8_t b) {
+    if (unit == 0) {
+        _transportA.setLED(8, r, g, b);
+    } else if (unit == 1) {
+        _transportB.setLED(8, r, g, b);
+    }
+}
+
+inline void DualEncoderService::allLedsOff() {
+    _transportA.allLEDsOff();
+    _transportB.allLEDsOff();
+
+    // Clear all flash states
+    for (uint8_t i = 0; i < TOTAL_ENCODERS; i++) {
+        _ledFlash[i].active = false;
+    }
+}
+
+// Include CoarseModeManager before inline method that uses it
+#include "CoarseModeManager.h"
+
+inline void DualEncoderService::processEncoderDelta(uint8_t globalIdx, int32_t rawDelta, uint32_t now) {
+    if (globalIdx >= TOTAL_ENCODERS) return;
+
+    // Process through DetentDebounce
+    if (_detentDebounce[globalIdx].processRawDelta(rawDelta, now)) {
+        int32_t normalizedDelta = _detentDebounce[globalIdx].consumeNormalisedDelta();
+
+        if (normalizedDelta != 0) {
+            // Apply coarse mode multiplier if enabled (ENC-A only, indices 0-7)
+            if (_coarseModeManager && globalIdx < 8) {
+                normalizedDelta = _coarseModeManager->applyCoarseMode(globalIdx, normalizedDelta, now);
+            }
+
+            // Apply delta with wrap/clamp
+            uint16_t oldValue = _values[globalIdx];
+            int32_t newValue = static_cast<int32_t>(_values[globalIdx]) + normalizedDelta;
+            _values[globalIdx] = applyRangeConstraint(globalIdx, newValue);
+
+            // #region agent log (DISABLED)
+            // Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"WRAP2\",\"location\":\"DualEncoderService.h:503\",\"message\":\"processEncoderDelta\",\"data\":{\"globalIdx\":%d,\"oldValue\":%d,\"normalizedDelta\":%ld,\"newValueBeforeConstraint\":%ld,\"newValueAfterConstraint\":%d,\"shouldWrap\":%d},\"timestamp\":%lu}\n", globalIdx, oldValue, (long)normalizedDelta, (long)newValue, _values[globalIdx], shouldWrapGlobal(globalIdx) ? 1 : 0, (unsigned long)now);
+                        // #endregion
+
+            // Flash LED for activity feedback (bright green)
+            flashLed(globalIdx, 0, 255, 0);
+
+            // Invoke callback (with throttling)
+            if (_callbackThrottle[globalIdx].shouldFire(now)) {
+                invokeCallback(globalIdx, _values[globalIdx], false);
+            }
+        }
+    }
+}
+
+// Include ButtonHandler before inline method that uses it
+#include "ButtonHandler.h"
+
+inline void DualEncoderService::processButton(uint8_t globalIdx, bool isPressed, uint32_t now) {
+    if (globalIdx >= TOTAL_ENCODERS) return;
+
+    if (_buttonDebounce[globalIdx].processState(isPressed, now)) {
+        // Check if ButtonHandler wants to handle this button
+        bool handled = false;
+        if (_buttonHandler) {
+            handled = _buttonHandler->handleButtonPress(globalIdx);
+        }
+
+        if (!handled) {
+            // Default behavior: reset to default
+            uint16_t defaultVal = getDefaultValue(globalIdx);
+            _values[globalIdx] = defaultVal;
+
+            // Reset debounce state
+            _detentDebounce[globalIdx].reset();
+
+            // Force callback (resets always propagate)
+            _callbackThrottle[globalIdx].force(now);
+
+            // Flash LED cyan for reset
+            flashLed(globalIdx, 0, 128, 255);
+
+            // Invoke callback
+            invokeCallback(globalIdx, _values[globalIdx], true);
+        } else {
+            // Button was handled by ButtonHandler - flash LED green to indicate special action
+            flashLed(globalIdx, 0, 255, 0);
+        }
+    }
+}
+
+inline void DualEncoderService::updateLedFlash(uint32_t now) {
+    for (uint8_t i = 0; i < TOTAL_ENCODERS; i++) {
+        if (_ledFlash[i].active) {
+            if (now - _ledFlash[i].start_time >= LedFlash::DURATION_MS) {
+                // Turn off the LED
+                uint8_t localIdx = toLocalIdx(i);
+                if (isUnitA(i)) {
+                    _transportA.setLED(localIdx, 0, 0, 0);
+                } else {
+                    _transportB.setLED(localIdx, 0, 0, 0);
+                }
+                _ledFlash[i].active = false;
+            }
+        }
+    }
+}
+
+inline void DualEncoderService::invokeCallback(uint8_t globalIdx, uint16_t value, bool wasReset) {
+    if (_callback) {
+        _callback(globalIdx, value, wasReset);
+    }
+}
+
+inline Rotate8Transport& DualEncoderService::getTransport(uint8_t globalIdx) {
+    if (globalIdx < ENCODERS_PER_UNIT) {
+        return _transportA;
+    }
+    return _transportB;
+}
+
+inline uint8_t DualEncoderService::toLocalIdx(uint8_t globalIdx) const {
+    if (globalIdx < ENCODERS_PER_UNIT) {
+        return globalIdx;
+    }
+    return globalIdx - ENCODERS_PER_UNIT;  // Maps 8-15 to 0-7
+}
+
+inline bool DualEncoderService::isUnitA(uint8_t globalIdx) const {
+    return globalIdx < ENCODERS_PER_UNIT;
+}
+
+inline uint16_t DualEncoderService::getDefaultValue(uint8_t globalIdx) const {
+    if (globalIdx < ENCODERS_PER_UNIT) {
+        // Unit A: Use defined parameter defaults
+        Parameter param = static_cast<Parameter>(globalIdx);
+        return getParameterDefault(param);
+    }
+    // Unit B: Placeholder default
+    return 128;
+}
+
+inline uint16_t DualEncoderService::applyRangeConstraint(uint8_t globalIdx, int32_t value) const {
+    if (globalIdx < ENCODERS_PER_UNIT) {
+        // Unit A: Use EncoderProcessing utilities
+        if (shouldWrapGlobal(globalIdx)) {
+            return EncoderProcessing::wrapValue(globalIdx, value);
+        } else {
+            return EncoderProcessing::clampValue(globalIdx, value);
+        }
+    }
+
+    // Unit B: Simple clamp to 0-255 (placeholder range)
+    if (value < 0) return 0;
+    if (value > 255) return 255;
+    return static_cast<uint16_t>(value);
+}
+
+inline bool DualEncoderService::shouldWrapGlobal(uint8_t globalIdx) const {
+    if (globalIdx < ENCODERS_PER_UNIT) {
+        // Unit A: Check wrap behavior via EncoderProcessing
+        return EncoderProcessing::shouldWrap(globalIdx);
+    }
+    // Unit B: No wrap (clamp only)
+    return false;
+}
+
+
+================================================================================
+FILE: tab5-encoder/src/parameters/ParameterMap.h
+DESCRIPTION: Parameter definition table — name, range, encoder slot, default value for every controllable parameter.
+================================================================================
+
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
+#pragma once
+// ============================================================================
+// ParameterMap - Parameter Definition Table for Tab5.encoder
+// ============================================================================
+// Single source of truth for parameter mapping.
+// Maps encoder indices to parameter IDs, field names, and validation ranges.
+// Eliminates duplicated mapping logic across encoder and WebSocket handlers.
+//
+// Supports 14 parameters across dual M5ROTATE8 units:
+// - Unit A (indices 0-7): Core LightwaveOS parameters
+// - Unit B (indices 8-13): Zone parameters (3 zones, 1-indexed user-facing)
+//
+// Ported from K1.8encoderS3, extended for dual-unit support.
+// ============================================================================
+
+#include <cstdint>
+
+// Total number of parameters (Unit A: 8 global + Unit B: 6 zone = 14)
+constexpr uint8_t PARAMETER_COUNT = 14;
+
+/**
+ * Parameter identifiers matching encoder indices
+ */
+enum class ParameterId : uint8_t {
+    // Unit A (0-7) - Global LightwaveOS parameters
+    // Note: Enum values match encoder indices for direct mapping
+    EffectId = 0,     // Encoder 0
+    PaletteId = 1,    // Encoder 1
+    Speed = 2,        // Encoder 2
+    Mood = 3,         // Encoder 3
+    FadeAmount = 4,   // Encoder 4
+    Complexity = 5,   // Encoder 5
+    Variation = 6,    // Encoder 6
+    Brightness = 7,   // Encoder 7
+    // Unit B (8-13) - Zone parameters (3 zones, 1-indexed user-facing)
+    // Pattern: [Zone N Effect, Zone N Speed/Palette] pairs
+    // Note: Encoders 9, 11, 13 toggle between Speed and Palette via button
+    // Internal array index is 0-based; zoneId=0 means Zone 1 (user-facing)
+    Zone1Effect = 8,
+    Zone1Speed = 9,      // Also Zone1Palette when button toggled
+    Zone2Effect = 10,
+    Zone2Speed = 11,     // Also Zone2Palette when button toggled
+    Zone3Effect = 12,
+    Zone3Speed = 13      // Also Zone3Palette when button toggled
+};
+
+/**
+ * Parameter definition structure
+ */
+struct ParameterDef {
+    ParameterId id;            // Parameter identifier
+    uint8_t encoderIndex;      // Encoder/parameter index (0-15)
+    const char* statusField;   // Field name in LightwaveOS "status" message
+    const char* wsCommandType; // WebSocket command type for sending changes
+    uint8_t min;               // Minimum valid value
+    uint8_t max;               // Maximum valid value
+    uint8_t defaultValue;      // Default/reset value
+};
+
+/**
+ * Get parameter definition by encoder index
+ * @param index Encoder index (0-15)
+ * @return Parameter definition, or nullptr if invalid
+ */
+const ParameterDef* getParameterByIndex(uint8_t index);
+
+/**
+ * Get parameter definition by parameter ID
+ * @param id Parameter ID
+ * @return Parameter definition, or nullptr if invalid
+ */
+const ParameterDef* getParameterById(ParameterId id);
+
+/**
+ * Get parameter definition by status field name
+ * @param fieldName Field name from "status" message (e.g., "brightness", "effectId")
+ * @return Parameter definition, or nullptr if not found
+ */
+const ParameterDef* getParameterByField(const char* fieldName);
+
+/**
+ * Get total number of parameters
+ * @return Number of parameters (14)
+ */
+constexpr uint8_t getParameterCount() { return PARAMETER_COUNT; }
+
+/**
+ * Parameter metadata structure for runtime min/max values
+ */
+struct ParameterMetadata {
+    uint8_t min;               // Minimum valid value
+    uint8_t max;               // Maximum valid value
+    bool isDynamic;            // true if max was updated from server, false if using hardcoded default
+};
+
+/**
+ * Update parameter metadata with dynamic values from server
+ * @param index Parameter index (0-15)
+ * @param min Minimum value
+ * @param max Maximum value
+ */
+void updateParameterMetadata(uint8_t index, uint8_t min, uint8_t max);
+
+/**
+ * Get parameter max value (dynamic if available, else falls back to hardcoded)
+ * @param index Parameter index (0-15)
+ * @return Maximum value for the parameter
+ */
+uint8_t getParameterMax(uint8_t index);
+
+/**
+ * Get parameter min value (dynamic if available, else falls back to hardcoded)
+ * @param index Parameter index (0-15)
+ * @return Minimum value for the parameter
+ */
+uint8_t getParameterMin(uint8_t index);
+
+
+================================================================================
+FILE: tab5-encoder/src/parameters/ParameterMap.cpp
+DESCRIPTION: Parameter table data — concrete definitions used by ParameterMap.h.
+================================================================================
+
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
+// ============================================================================
+// ParameterMap - Parameter Definition Table for Tab5.encoder
+// ============================================================================
+// Extended for 14 parameters across dual M5ROTATE8 units.
+// Ported from K1.8encoderS3.
+// ============================================================================
+
+#include "ParameterMap.h"
+#include <Arduino.h>
+#include <cstring>
+
+// Runtime metadata storage (initialized from PARAMETER_TABLE, can be updated dynamically)
+static ParameterMetadata s_parameterMetadata[PARAMETER_COUNT];
+static bool s_metadataInitialized = false;
+
+// Parameter definitions table - single source of truth
+// Indices 0-7: Unit A (Global LightwaveOS parameters)
+// Indices 8-13: Unit B (Zone parameters, 3 zones, 1-indexed user-facing)
+static const ParameterDef PARAMETER_TABLE[] = {
+    // id, encoderIndex, statusField, wsCommandType, min, max, defaultValue
+
+    // Unit A (0-7) - Global LightwaveOS parameters
+    // New order: Effect, Palette, Speed, Mood, Fade, Complexity, Variation, Brightness
+    {ParameterId::EffectId,   0, "effectId",   "effects.setCurrent", 0,  187,  0},  // Encoder 0: Effect (188 effects 0-187, K1 display-order index)
+    {ParameterId::PaletteId,  1, "paletteId",  "parameters.set",     0,   74,  0},  // Encoder 1: Palette (75 palettes 0-74)
+    {ParameterId::Speed,      2, "speed",      "parameters.set",     1,   100, 25}, // Encoder 2: Speed
+    {ParameterId::Mood,       3, "mood",       "parameters.set",     0,   255, 0},  // Encoder 3: Mood
+    {ParameterId::FadeAmount, 4, "fadeAmount", "parameters.set",     0,   255, 0},  // Encoder 4: Fade
+    {ParameterId::Complexity, 5, "complexity", "parameters.set",     0,   255, 128}, // Encoder 5: Complexity
+    {ParameterId::Variation,  6, "variation",  "parameters.set",     0,   255, 0},  // Encoder 6: Variation
+    {ParameterId::Brightness, 7, "brightness", "parameters.set",     0,   255, 128}, // Encoder 7: Brightness
+
+    // Unit B (8-13) - Zone parameters (3 zones, 1-indexed user-facing)
+    // Pattern: [Zone N Effect, Zone N Speed/Palette] pairs
+    // Note: Encoders 9, 11, 13 can toggle between Speed and Palette via button
+    // Default mode is Speed; when toggled, encoder controls Palette instead
+    // String identifiers use 1-indexed naming (zone1Effect, zone2Effect, zone3Effect)
+    {ParameterId::Zone1Effect, 8,  "zone1Effect", "zone.setEffect",   0,  187,  0},  // 188 effects (0-187)
+    {ParameterId::Zone1Speed,  9,  "zone1Speed",  "zone.setSpeed",    1,  100, 25},  // Also zone1Palette when toggled
+    {ParameterId::Zone2Effect, 10, "zone2Effect", "zone.setEffect",   0,  187,  0},  // 188 effects (0-187)
+    {ParameterId::Zone2Speed,  11, "zone2Speed",  "zone.setSpeed",    1,  100, 25},  // Also zone2Palette when toggled
+    {ParameterId::Zone3Effect, 12, "zone3Effect", "zone.setEffect",   0,  187,  0},  // 188 effects (0-187)
+    {ParameterId::Zone3Speed,  13, "zone3Speed",  "zone.setSpeed",    1,  100, 25}   // Also zone3Palette when toggled
+};
+
+const ParameterDef* getParameterByIndex(uint8_t index) {
+    if (index >= getParameterCount()) {
+        return nullptr;
+    }
+    return &PARAMETER_TABLE[index];
+}
+
+const ParameterDef* getParameterById(ParameterId id) {
+    uint8_t index = static_cast<uint8_t>(id);
+    if (index >= getParameterCount()) {
+        return nullptr;
+    }
+    return &PARAMETER_TABLE[index];
+}
+
+const ParameterDef* getParameterByField(const char* fieldName) {
+    if (!fieldName) {
+        return nullptr;
+    }
+
+    for (uint8_t i = 0; i < getParameterCount(); i++) {
+        if (strcmp(PARAMETER_TABLE[i].statusField, fieldName) == 0) {
+            return &PARAMETER_TABLE[i];
+        }
+    }
+
+    return nullptr;
+}
+
+// Initialize metadata from hardcoded defaults (called on first access)
+static void initializeMetadata() {
+    if (s_metadataInitialized) {
+        return;
+    }
+
+    for (uint8_t i = 0; i < PARAMETER_COUNT; i++) {
+        const ParameterDef* param = &PARAMETER_TABLE[i];
+        s_parameterMetadata[i].min = param->min;
+        s_parameterMetadata[i].max = param->max;
+        s_parameterMetadata[i].isDynamic = false;  // Start with hardcoded defaults
+    }
+
+    s_metadataInitialized = true;
+}
+
+void updateParameterMetadata(uint8_t index, uint8_t min, uint8_t max) {
+    if (index >= PARAMETER_COUNT) {
+        return;
+    }
+
+    // Ensure metadata is initialized
+    if (!s_metadataInitialized) {
+        initializeMetadata();
+    }
+
+    s_parameterMetadata[index].min = min;
+    s_parameterMetadata[index].max = max;
+    s_parameterMetadata[index].isDynamic = true;
+
+    // Log the update for debugging
+    const ParameterDef* param = getParameterByIndex(index);
+    if (param) {
+        Serial.printf("[ParamMap] Updated metadata for %s: min=%u, max=%u (was %u)\n",
+                      param->statusField, min, max, param->max);
+    }
+}
+
+uint8_t getParameterMax(uint8_t index) {
+    if (index >= PARAMETER_COUNT) {
+        return 255;  // Safe fallback
+    }
+
+    // Ensure metadata is initialized
+    if (!s_metadataInitialized) {
+        initializeMetadata();
+    }
+
+    // Return dynamic max if available, else fall back to hardcoded
+    if (s_parameterMetadata[index].isDynamic) {
+        return s_parameterMetadata[index].max;
+    }
+
+    // Fallback to hardcoded value from PARAMETER_TABLE
+    const ParameterDef* param = getParameterByIndex(index);
+    return param ? param->max : 255;
+}
+
+uint8_t getParameterMin(uint8_t index) {
+    if (index >= PARAMETER_COUNT) {
+        return 0;  // Safe fallback
+    }
+
+    // Ensure metadata is initialized
+    if (!s_metadataInitialized) {
+        initializeMetadata();
+    }
+
+    // Return dynamic min if available, else fall back to hardcoded
+    if (s_parameterMetadata[index].isDynamic) {
+        return s_parameterMetadata[index].min;
+    }
+
+    // Fallback to hardcoded value from PARAMETER_TABLE
+    const ParameterDef* param = getParameterByIndex(index);
+    return param ? param->min : 0;
+}
+
+
+================================================================================
+FILE: tab5-encoder/src/parameters/ParameterHandler.h
+DESCRIPTION: Parameter sync controller — owns local cache, debounces encoder updates, publishes via WebSocket, applies inbound K1 changes.
+================================================================================
+
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
+#pragma once
+// ============================================================================
+// ParameterHandler - Parameter Synchronization for Tab5.encoder
+// ============================================================================
+// Business logic for parameter synchronization between:
+// - EncoderService (local encoder input)
+// - WebSocketClient (LightwaveOS server)
+// - Display (optional, via callback interface)
+//
+// Adapted from K1.8encoderS3 for Tab5's EncoderService interface.
+// Extended for 16 parameters across dual M5ROTATE8 units.
+//
+// Key differences from K1.8encoderS3:
+// - Uses EncoderService instead of EncoderController
+// - Display updates via abstract callback (display built by another agent)
+// - No direct DisplayUI dependency
+// - Supports 16 parameters (dual M5ROTATE8)
+// ============================================================================
+
+#include <ArduinoJson.h>
+#include "ParameterMap.h"
+#include <cstdint>
+#include <functional>
+
+// Forward declarations
+class DualEncoderService;
+class WebSocketClient;
+class ButtonHandler;
+
+/**
+ * Display update callback type
+ * @param index Parameter index that changed (0-15)
+ * @param value New value for the parameter
+ */
+using DisplayCallback = std::function<void(uint8_t index, uint16_t value)>;
+
+class ParameterHandler {
+public:
+    /**
+     * Constructor
+     * @param encoderService Pointer to DualEncoderService (Tab5 dual encoder interface)
+     * @param wsClient Optional pointer to WebSocketClient (can be null)
+     */
+    ParameterHandler(DualEncoderService* encoderService, WebSocketClient* wsClient = nullptr);
+
+    /**
+     * Handle encoder value change
+     * Called by EncoderService callback when encoder is rotated or reset
+     * @param index Encoder index (0-15)
+     * @param value New value
+     * @param wasReset True if value was reset via button press
+     */
+    void onEncoderChanged(uint8_t index, uint16_t value, bool wasReset);
+
+    /**
+     * Apply status message from LightwaveOS
+     * Updates local state and encoder values without triggering callbacks
+     * @param doc JSON document with "type": "status" and parameter fields
+     * @return true if any parameters were updated
+     */
+    bool applyStatus(JsonDocument& doc);
+
+    /**
+     * Get current parameter value
+     * @param id Parameter ID
+     * @return Current value, or 0 if invalid
+     */
+    uint8_t getValue(ParameterId id) const;
+
+    /**
+     * Set parameter value (for UI state tracking)
+     * @param id Parameter ID
+     * @param value New value
+     */
+    void setValue(ParameterId id, uint8_t value);
+
+    /**
+     * Get all current values
+     * @param values Array to fill (must have 16 elements)
+     */
+    void getAllValues(uint8_t values[PARAMETER_COUNT]) const;
+
+    /**
+     * Set display update callback
+     * Called when parameters change and display needs updating
+     * @param callback Display update function
+     */
+    void setDisplayCallback(DisplayCallback callback) { m_displayCallback = callback; }
+
+    /**
+     * Mark a parameter as locally changed (for holdoff/anti-snapback)
+     * Call this when encoder changes before sending to server.
+     * @param index Parameter index (0-15)
+     */
+    void markLocalChange(uint8_t index) {
+        if (index < PARAMETER_COUNT) {
+            m_lastLocalChangeMs[index] = millis();
+        }
+    }
+
+    /**
+     * Check if a parameter is currently under local-change holdoff.
+     * When true, incoming server status for this parameter should be ignored.
+     * @param index Parameter index (0-15)
+     * @return true if holdoff is active
+     */
+    bool isInLocalHoldoff(uint8_t index) const {
+        if (index >= PARAMETER_COUNT) return false;
+        uint32_t last = m_lastLocalChangeMs[index];
+        if (last == 0) return false;
+        uint32_t nowMs = millis();
+        return (nowMs - last) < LOCAL_OVERRIDE_HOLDOFF_MS;
+    }
+
+    /**
+     * Set button handler for checking speed/palette mode
+     * @param handler ButtonHandler instance (can be nullptr)
+     */
+    void setButtonHandler(ButtonHandler* handler) { m_buttonHandler = handler; }
+
+private:
+    DualEncoderService* m_encoderService;
+    WebSocketClient* m_wsClient;
+    ButtonHandler* m_buttonHandler = nullptr;
+    DisplayCallback m_displayCallback;
+
+    // Local state cache (for UI updates) - 16 parameters
+    uint8_t m_values[PARAMETER_COUNT];
+
+    // Echo/snapback prevention: when a parameter was just changed locally (encoder),
+    // ignore incoming server status updates for a generous hold window.
+    // 1 second is enough to cover network RTT + server processing + broadcast delay.
+    uint32_t m_lastLocalChangeMs[PARAMETER_COUNT] = {0};
+    static constexpr uint32_t LOCAL_OVERRIDE_HOLDOFF_MS = 1000;
+
+    /**
+     * Send parameter change via WebSocket
+     * @param param Parameter definition
+     * @param value Parameter value
+     */
+    void sendParameterChange(const ParameterDef* param, uint8_t value);
+
+    /**
+     * Clamp value to parameter range
+     * @param param Parameter definition
+     * @param value Value to clamp
+     * @return Clamped value
+     */
+    uint8_t clampValue(const ParameterDef* param, uint8_t value) const;
+
+    /**
+     * Notify display of parameter change
+     * @param index Index of parameter that changed (0-15), or -1 for bulk refresh
+     */
+    void notifyDisplay(int index);
+};
+
+
+================================================================================
+FILE: tab5-encoder/src/ui/ControlSurfaceUI.h
+DESCRIPTION: FX PARAMS tab UI — encoder-to-effect-parameter binding surface (Unit B / Row 2).
+================================================================================
+
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
+#pragma once
+// ============================================================================
+// ControlSurfaceUI - Effect Parameter Tuning + Presets + Camera Mode
+// ============================================================================
+// Phase 0 Control Surface for deterministic recording.
+// Maps 16 encoders to effect-specific parameters, with dedicated slots
+// for camera mode toggle (encoder 14) and preset bank (encoder 15).
+//
+// Layout (1280x720):
+//   Row A (enc 0-7):  Effect params 0-7
+//   Row B (enc 8-15): Effect params 8-13, Camera Mode, Preset Bank
+//   Global Row:       Read-only global params (brightness, speed, etc.)
+// ============================================================================
+
+#include <M5GFX.h>
+#include <lvgl.h>
+#include <cstdint>
+
+// Forward declarations
+class WebSocketClient;
+
+// Maximum effect parameters (matches firmware-v3 IEffect.h)
+static constexpr uint8_t CS_MAX_EFFECT_PARAMS = 16;
+
+// Encoder slot assignments
+static constexpr uint8_t CS_ENCODER_CAMERA_MODE = 14;
+static constexpr uint8_t CS_ENCODER_PRESET_BANK = 15;
+static constexpr uint8_t CS_MAX_PARAM_ENCODERS = 14;  // 0-13 for params
+
+// Preset slots
+static constexpr uint8_t CS_MAX_PRESET_SLOTS = 8;
+
+/**
+ * Effect parameter type (mirrors firmware-v3 EffectParameterType)
+ */
+enum class CSParamType : uint8_t {
+    FLOAT = 0,
+    INT = 1,
+    BOOL = 2,
+    ENUM = 3
+};
+
+/**
+ * Cached effect parameter metadata + current value
+ */
+struct CSEffectParam {
+    char name[32] = {0};
+    char displayName[32] = {0};
+    char unit[8] = {0};
+    float minValue = 0.0f;
+    float maxValue = 1.0f;
+    float currentValue = 0.0f;
+    float defaultValue = 0.0f;
+    float step = 0.01f;
+    CSParamType type = CSParamType::FLOAT;
+    bool valid = false;  // True if populated from server response
+};
+
+/**
+ * Preset slot display state
+ */
+struct CSPresetSlot {
+    bool occupied = false;
+    char name[32] = {0};
+    uint16_t effectId = 0;
+};
+
+class ControlSurfaceUI {
+public:
+    ControlSurfaceUI(M5GFX& display);
+    ~ControlSurfaceUI();
+
+    /**
+     * Create LVGL widgets on the given parent screen object
+     */
+    void begin(lv_obj_t* parent = nullptr);
+
+    /**
+     * Main loop - throttled rendering updates
+     */
+    void loop();
+
+    // ========================================================================
+    // Encoder Input (called from main.cpp routing)
+    // ========================================================================
+
+    /**
+     * Handle encoder rotation
+     * @param encoderIndex 0-15 physical encoder index
+     * @param delta Rotation delta (positive = clockwise)
+     */
+    void handleEncoderChange(uint8_t encoderIndex, int32_t delta);
+
+    /**
+     * Handle encoder button press
+     * @param encoderIndex 0-15 physical encoder index
+     * @param isLongPress True for long press, false for short
+     */
+    void handleEncoderButton(uint8_t encoderIndex, bool isLongPress);
+
+    // ========================================================================
+    // WebSocket Response Handlers
+    // ========================================================================
+
+    /**
+     * Called when K1 responds with effect parameter metadata
+     * Populates param slots and rebinds encoder display
+     */
+    void onEffectParametersReceived(uint16_t effectId, const char* effectName,
+                                     const CSEffectParam* params, uint8_t paramCount);
+
+    /**
+     * Called when K1 responds with preset list
+     */
+    void onPresetListReceived(const CSPresetSlot* slots, uint8_t slotCount);
+
+    /**
+     * Update camera mode state (from K1 broadcast)
+     */
+    void setCameraMode(bool active);
+
+    /**
+     * Update a global param value (from status broadcast)
+     */
+    void updateGlobalParam(uint8_t index, uint8_t value);
+
+    // ========================================================================
+    // Wiring
+    // ========================================================================
+
+    void setWebSocketClient(WebSocketClient* wsClient) { _wsClient = wsClient; }
+
+    typedef void (*BackButtonCallback)();
+    void setBackButtonCallback(BackButtonCallback callback) { _backButtonCallback = callback; }
+
+    /**
+     * Called when this screen becomes active - requests param metadata
+     */
+    void onScreenEnter();
+
+    /**
+     * Mark UI dirty for redraw
+     */
+    void markDirty() { _dirty = true; }
+    void forceDirty() {
+        _dirty = true;
+        _lastRenderTime = 0;
+    }
+
+private:
+    M5GFX& _display;
+    WebSocketClient* _wsClient = nullptr;
+    BackButtonCallback _backButtonCallback = nullptr;
+
+    // ========================================================================
+    // Effect Parameter State
+    // ========================================================================
+
+    CSEffectParam _params[CS_MAX_EFFECT_PARAMS];
+    uint8_t _paramCount = 0;
+    uint16_t _currentEffectId = 0;
+    char _currentEffectName[48] = {0};
+
+    // ========================================================================
+    // Camera Mode State
+    // ========================================================================
+
+    bool _cameraModeActive = false;
+
+    // ========================================================================
+    // Preset State
+    // ========================================================================
+
+    CSPresetSlot _presetSlots[CS_MAX_PRESET_SLOTS];
+    uint8_t _selectedPresetSlot = 0;
+
+    // ========================================================================
+    // LVGL Widgets - Row A (encoders 0-7, params 0-7)
+    // ========================================================================
+
+    lv_obj_t* _rowA_container = nullptr;
+    lv_obj_t* _rowA_cards[8] = {nullptr};
+    lv_obj_t* _rowA_labels[8] = {nullptr};
+    lv_obj_t* _rowA_values[8] = {nullptr};
+    lv_obj_t* _rowA_bars[8] = {nullptr};
+
+    // ========================================================================
+    // LVGL Widgets - Row B (encoders 8-15, params 8-13 + camera + preset)
+    // ========================================================================
+
+    lv_obj_t* _rowB_container = nullptr;
+    lv_obj_t* _rowB_cards[8] = {nullptr};
+    lv_obj_t* _rowB_labels[8] = {nullptr};
+    lv_obj_t* _rowB_values[8] = {nullptr};
+    lv_obj_t* _rowB_bars[8] = {nullptr};
+
+    // ========================================================================
+    // LVGL Widgets - Global Params Row (read-only)
+    // ========================================================================
+
+    lv_obj_t* _globalRow_container = nullptr;
+    lv_obj_t* _globalRow_labels[8] = {nullptr};
+    lv_obj_t* _globalRow_values[8] = {nullptr};
+
+    // ========================================================================
+    // LVGL Widgets - Navigation
+    // ========================================================================
+
+    lv_obj_t* _backButton = nullptr;
+
+    // ========================================================================
+    // Rendering State
+    // ========================================================================
+
+    bool _dirty = true;
+    uint32_t _lastRenderTime = 0;
+    static constexpr uint32_t FRAME_INTERVAL_MS = 33;  // ~30 FPS
+
+    // ========================================================================
+    // Private Methods
+    // ========================================================================
+
+    // UI Construction
+    void createParamRow(lv_obj_t* parent, lv_obj_t** cards, lv_obj_t** labels,
+                        lv_obj_t** values, lv_obj_t** bars, lv_obj_t*& container,
+                        int32_t yPos, const char* rowLabel);
+    void createGlobalRow(lv_obj_t* parent);
+    void createBackButton(lv_obj_t* parent);
+
+    // Param Display
+    void rebindEncoders();
+    void updateParamCard(uint8_t encoderIndex);
+    void updateCameraCard();
+    void updatePresetCard();
+    void formatParamValue(char* buf, size_t bufSize, const CSEffectParam& param);
+
+    // Encoder Mapping
+    float applyEncoderDelta(uint8_t paramIndex, int32_t delta);
+
+    // Static callbacks
+    static void backButtonCb(lv_event_t* e);
+};
+
+
+================================================================================
+FILE: tab5-encoder/src/ui/ControlSurfaceUI.cpp
+DESCRIPTION: FX PARAMS tab implementation — gauge cards, parameter cycling, encoder routing for effect-specific params.
+================================================================================
+
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
+// ============================================================================
+// ControlSurfaceUI - Effect Parameter Tuning + Presets + Camera Mode
+// ============================================================================
+// Phase 0 Control Surface implementation.
+// Maps 16 encoders to effect-specific parameters for deterministic recording.
+// ============================================================================
+
+#include "ControlSurfaceUI.h"
+
+#if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
+
+#include <Arduino.h>
+#include <esp_task_wdt.h>
+#include <cstdio>
+#include <cstring>
+#include <algorithm>
+#include "fonts/bebas_neue_fonts.h"
+#include "fonts/experimental_fonts.h"
+#include "../network/WebSocketClient.h"
+#include "DesignTokens.h"
+
+// ============================================================================
+// Layout Constants (ControlSurface-specific)
+// ============================================================================
+
+static constexpr int32_t CS_PARAM_ROW_HEIGHT = 110;
+static constexpr int32_t CS_GLOBAL_ROW_HEIGHT = 50;
+
+// Global param names (read-only row)
+static constexpr const char* kGlobalParamNames[8] = {
+    "BRI", "SPD", "MOOD", "FADE", "CPLX", "VAR", "HUE", "SAT"
+};
+
+// ============================================================================
+// Constructor / Destructor
+// ============================================================================
+
+ControlSurfaceUI::ControlSurfaceUI(M5GFX& display) : _display(display) {
+}
+
+ControlSurfaceUI::~ControlSurfaceUI() {
+}
+
+// ============================================================================
+// begin() - Create LVGL widgets
+// ============================================================================
+
+void ControlSurfaceUI::begin(lv_obj_t* parent) {
+    if (!parent) return;
+
+    esp_task_wdt_reset();
+
+    // Set page background
+    lv_obj_set_style_bg_color(parent, lv_color_hex(DesignTokens::BG_PAGE), LV_PART_MAIN);
+    lv_obj_set_style_pad_all(parent, 0, LV_PART_MAIN);
+
+    // Content starts below header area (header is shared, managed by DisplayUI)
+    int32_t contentTop = DesignTokens::STATUSBAR_HEIGHT + DesignTokens::GRID_GAP + 7;
+    int32_t nextRowY = contentTop;
+
+    // Grid column template (8 equal columns)
+    static const lv_coord_t col_dsc[9] = {
+        LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
+        LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
+        LV_GRID_TEMPLATE_LAST
+    };
+
+    // ====================================================================
+    // Row A: Effect Params 0-7 (encoders 0-7)
+    // ====================================================================
+    createParamRow(parent, _rowA_cards, _rowA_labels, _rowA_values, _rowA_bars,
+                   _rowA_container, nextRowY, "A");
+    nextRowY += CS_PARAM_ROW_HEIGHT + DesignTokens::GRID_GAP;
+
+    esp_task_wdt_reset();  // After Row A (8 cards x 4 widgets = 32 LVGL objects)
+
+    // ====================================================================
+    // Row B: Effect Params 8-13 + Camera Mode + Preset Bank (encoders 8-15)
+    // ====================================================================
+    createParamRow(parent, _rowB_cards, _rowB_labels, _rowB_values, _rowB_bars,
+                   _rowB_container, nextRowY, "B");
+    nextRowY += CS_PARAM_ROW_HEIGHT + DesignTokens::GRID_GAP;
+
+    esp_task_wdt_reset();  // After Row B (another 32 LVGL objects)
+
+    // Override cards 6 and 7 in Row B for Camera Mode and Preset Bank
+    updateCameraCard();
+    updatePresetCard();
+
+    // ====================================================================
+    // Global Params Row (read-only)
+    // ====================================================================
+    createGlobalRow(parent);
+
+    esp_task_wdt_reset();  // After Global Row (8 cells x 3 widgets = 24 LVGL objects)
+
+    // ====================================================================
+    // Back Button
+    // ====================================================================
+    createBackButton(parent);
+
+    // Initialize all param cards to empty state
+    rebindEncoders();
+
+    esp_task_wdt_reset();
+
+    Serial.println("[ControlSurface] UI initialized");
+}
+
+// ============================================================================
+// createParamRow() - Create a row of 8 gauge cards
+// ============================================================================
+
+void ControlSurfaceUI::createParamRow(lv_obj_t* parent,
+                                       lv_obj_t** cards, lv_obj_t** labels,
+                                       lv_obj_t** values, lv_obj_t** bars,
+                                       lv_obj_t*& container,
+                                       int32_t yPos, const char* rowLabel) {
+    static const lv_coord_t col_dsc[9] = {
+        LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
+        LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
+        LV_GRID_TEMPLATE_LAST
+    };
+    static const lv_coord_t row_dsc[2] = {CS_PARAM_ROW_HEIGHT, LV_GRID_TEMPLATE_LAST};
+
+    container = lv_obj_create(parent);
+    lv_obj_set_size(container, 1280 - 2 * DesignTokens::GRID_MARGIN, CS_PARAM_ROW_HEIGHT);
+    lv_obj_align(container, LV_ALIGN_TOP_MID, 0, yPos);
+    lv_obj_set_style_bg_opa(container, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(container, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(container, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(container, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_layout(container, LV_LAYOUT_GRID);
+    lv_obj_set_grid_dsc_array(container, col_dsc, row_dsc);
+    lv_obj_set_style_pad_column(container, DesignTokens::GRID_GAP, LV_PART_MAIN);
+
+    for (uint8_t i = 0; i < 8; ++i) {
+        cards[i] = make_card(container, false);
+        lv_obj_set_grid_cell(cards[i], LV_GRID_ALIGN_STRETCH, i, 1,
+                             LV_GRID_ALIGN_STRETCH, 0, 1);
+
+        // Parameter name label
+        labels[i] = lv_label_create(cards[i]);
+        lv_label_set_text(labels[i], "--");
+        lv_obj_set_style_text_font(labels[i], RAJDHANI_MED_24, LV_PART_MAIN);
+        lv_obj_set_style_text_color(labels[i], lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
+        lv_obj_set_width(labels[i], LV_PCT(100));
+        lv_label_set_long_mode(labels[i], LV_LABEL_LONG_DOT);
+        lv_obj_set_style_text_align(labels[i], LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+        lv_obj_align(labels[i], LV_ALIGN_TOP_MID, 0, -2);
+
+        // Value label
+        values[i] = lv_label_create(cards[i]);
+        lv_label_set_text(values[i], "--");
+        lv_obj_set_style_text_font(values[i], JETBRAINS_MONO_REG_24, LV_PART_MAIN);
+        lv_obj_set_style_text_color(values[i], lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
+        lv_obj_align(values[i], LV_ALIGN_TOP_MID, 0, 22);
+
+        // Progress bar
+        bars[i] = lv_bar_create(cards[i]);
+        lv_bar_set_range(bars[i], 0, 1000);  // 0-1000 for float precision
+        lv_bar_set_value(bars[i], 0, LV_ANIM_OFF);
+        lv_obj_set_size(bars[i], LV_PCT(90), 8);
+        lv_obj_align(bars[i], LV_ALIGN_BOTTOM_MID, 0, -8);
+        lv_obj_set_style_bg_color(bars[i], lv_color_hex(DesignTokens::BORDER_BASE), LV_PART_MAIN);
+        lv_obj_set_style_bg_color(bars[i], lv_color_hex(DesignTokens::BRAND_PRIMARY), LV_PART_INDICATOR);
+        lv_obj_set_style_radius(bars[i], 6, LV_PART_MAIN);
+        lv_obj_set_style_radius(bars[i], 6, LV_PART_INDICATOR);
+    }
+}
+
+// ============================================================================
+// createGlobalRow() - Read-only global params display
+// ============================================================================
+
+void ControlSurfaceUI::createGlobalRow(lv_obj_t* parent) {
+    static const lv_coord_t col_dsc[9] = {
+        LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
+        LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
+        LV_GRID_TEMPLATE_LAST
+    };
+    static const lv_coord_t row_dsc[2] = {CS_GLOBAL_ROW_HEIGHT, LV_GRID_TEMPLATE_LAST};
+
+    int32_t yPos = DesignTokens::STATUSBAR_HEIGHT + DesignTokens::GRID_GAP + 7 +
+                   2 * (CS_PARAM_ROW_HEIGHT + DesignTokens::GRID_GAP);
+
+    _globalRow_container = lv_obj_create(parent);
+    lv_obj_set_size(_globalRow_container, 1280 - 2 * DesignTokens::GRID_MARGIN, CS_GLOBAL_ROW_HEIGHT);
+    lv_obj_align(_globalRow_container, LV_ALIGN_TOP_MID, 0, yPos);
+    lv_obj_set_style_bg_opa(_globalRow_container, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(_globalRow_container, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(_globalRow_container, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(_globalRow_container, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_layout(_globalRow_container, LV_LAYOUT_GRID);
+    lv_obj_set_grid_dsc_array(_globalRow_container, col_dsc, row_dsc);
+    lv_obj_set_style_pad_column(_globalRow_container, DesignTokens::GRID_GAP, LV_PART_MAIN);
+
+    for (uint8_t i = 0; i < 8; ++i) {
+        lv_obj_t* cell = lv_obj_create(_globalRow_container);
+        lv_obj_set_grid_cell(cell, LV_GRID_ALIGN_STRETCH, i, 1,
+                             LV_GRID_ALIGN_STRETCH, 0, 1);
+        lv_obj_set_style_bg_color(cell, lv_color_hex(DesignTokens::SURFACE_BASE), LV_PART_MAIN);
+        lv_obj_set_style_border_width(cell, 1, LV_PART_MAIN);
+        lv_obj_set_style_border_color(cell, lv_color_hex(DesignTokens::BORDER_BASE), LV_PART_MAIN);
+        lv_obj_set_style_radius(cell, 8, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(cell, 4, LV_PART_MAIN);
+        lv_obj_clear_flag(cell, LV_OBJ_FLAG_SCROLLABLE);
+
+        _globalRow_labels[i] = lv_label_create(cell);
+        lv_label_set_text(_globalRow_labels[i], kGlobalParamNames[i]);
+        lv_obj_set_style_text_font(_globalRow_labels[i], RAJDHANI_MED_24, LV_PART_MAIN);
+        lv_obj_set_style_text_color(_globalRow_labels[i], lv_color_hex(DesignTokens::FG_DIMMED), LV_PART_MAIN);
+        lv_obj_align(_globalRow_labels[i], LV_ALIGN_LEFT_MID, 0, 0);
+
+        _globalRow_values[i] = lv_label_create(cell);
+        lv_label_set_text(_globalRow_values[i], "--");
+        lv_obj_set_style_text_font(_globalRow_values[i], RAJDHANI_MED_24, LV_PART_MAIN);
+        lv_obj_set_style_text_color(_globalRow_values[i], lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
+        lv_obj_align(_globalRow_values[i], LV_ALIGN_RIGHT_MID, 0, 0);
+    }
+}
+
+// ============================================================================
+// createBackButton()
+// ============================================================================
+
+void ControlSurfaceUI::createBackButton(lv_obj_t* parent) {
+    _backButton = lv_obj_create(parent);
+    lv_obj_add_flag(_backButton, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_size(_backButton, 100, 40);
+    lv_obj_set_pos(_backButton, 1280 - 110, DesignTokens::STATUSBAR_HEIGHT + DesignTokens::GRID_GAP + 7 +
+                   2 * (CS_PARAM_ROW_HEIGHT + DesignTokens::GRID_GAP) + CS_GLOBAL_ROW_HEIGHT + 10);
+    lv_obj_set_style_bg_color(_backButton, lv_color_hex(DesignTokens::SURFACE_ELEVATED), LV_PART_MAIN);
+    lv_obj_set_style_border_width(_backButton, 2, LV_PART_MAIN);
+    lv_obj_set_style_border_color(_backButton, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    lv_obj_set_style_radius(_backButton, 10, LV_PART_MAIN);
+
+    lv_obj_t* label = lv_label_create(_backButton);
+    lv_label_set_text(label, "BACK");
+    lv_obj_set_style_text_font(label, RAJDHANI_MED_24, LV_PART_MAIN);
+    lv_obj_set_style_text_color(label, lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
+    lv_obj_center(label);
+
+    lv_obj_add_event_cb(_backButton, backButtonCb, LV_EVENT_CLICKED, this);
+}
+
+// ============================================================================
+// Static Callbacks
+// ============================================================================
+
+void ControlSurfaceUI::backButtonCb(lv_event_t* e) {
+    auto* self = static_cast<ControlSurfaceUI*>(lv_event_get_user_data(e));
+    if (self && self->_backButtonCallback) {
+        self->_backButtonCallback();
+    }
+}
+
+// ============================================================================
+// loop() - Throttled rendering updates
+// ============================================================================
+
+void ControlSurfaceUI::loop() {
+    if (!_dirty) return;
+
+    uint32_t now = millis();
+    if (now - _lastRenderTime < FRAME_INTERVAL_MS) return;
+    _lastRenderTime = now;
+    _dirty = false;
+}
+
+// ============================================================================
+// onScreenEnter() - Called when screen becomes active
+// ============================================================================
+
+void ControlSurfaceUI::onScreenEnter() {
+    if (!_wsClient) return;
+
+    // Request current effect's parameters
+    uint16_t effectId = _wsClient->getCurrentEffectId();
+    if (effectId > 0) {
+        _wsClient->requestEffectParameters(effectId, "cs_enter");
+    }
+
+    // Request preset list
+    _wsClient->requestEffectPresetsList();
+
+    // Request camera mode state
+    _wsClient->requestCameraModeGet();
+}
+
+// ============================================================================
+// handleEncoderChange() - Route encoder rotation to param/camera/preset
+// ============================================================================
+
+void ControlSurfaceUI::handleEncoderChange(uint8_t encoderIndex, int32_t delta) {
+    if (encoderIndex == CS_ENCODER_PRESET_BANK) {
+        // Encoder 15: cycle preset slot selection
+        int8_t newSlot = (int8_t)_selectedPresetSlot + (delta > 0 ? 1 : -1);
+        if (newSlot < 0) newSlot = CS_MAX_PRESET_SLOTS - 1;
+        if (newSlot >= CS_MAX_PRESET_SLOTS) newSlot = 0;
+        _selectedPresetSlot = (uint8_t)newSlot;
+        updatePresetCard();
+        _dirty = true;
+        return;
+    }
+
+    if (encoderIndex == CS_ENCODER_CAMERA_MODE) {
+        // Encoder 14: rotation does nothing (use button for toggle)
+        return;
+    }
+
+    // Encoders 0-13: map to effect parameters
+    if (encoderIndex >= CS_MAX_PARAM_ENCODERS) return;
+    if (encoderIndex >= _paramCount) return;
+    if (!_params[encoderIndex].valid) return;
+
+    float newValue = applyEncoderDelta(encoderIndex, delta);
+    _params[encoderIndex].currentValue = newValue;
+
+    // Update display immediately
+    updateParamCard(encoderIndex);
+
+    // Send to K1 via WebSocket
+    if (_wsClient) {
+        _wsClient->sendEffectParameterChange(
+            encoderIndex, _currentEffectId,
+            _params[encoderIndex].name, newValue);
+    }
+
+    _dirty = true;
+}
+
+// ============================================================================
+// handleEncoderButton() - Button press routing
+// ============================================================================
+
+void ControlSurfaceUI::handleEncoderButton(uint8_t encoderIndex, bool isLongPress) {
+    if (encoderIndex == CS_ENCODER_CAMERA_MODE) {
+        // Toggle camera mode
+        _cameraModeActive = !_cameraModeActive;
+        if (_wsClient) {
+            _wsClient->sendCameraModeSet(_cameraModeActive);
+        }
+        updateCameraCard();
+        _dirty = true;
+        return;
+    }
+
+    if (encoderIndex == CS_ENCODER_PRESET_BANK) {
+        if (isLongPress) {
+            // Long press: delete preset
+            if (_wsClient) {
+                _wsClient->sendEffectPresetDelete(_selectedPresetSlot);
+                Serial.printf("[ControlSurface] Preset %u delete requested\n", _selectedPresetSlot);
+            }
+        } else {
+            // Short press: load or save (load if occupied, save if empty)
+            if (_presetSlots[_selectedPresetSlot].occupied) {
+                // Load existing preset
+                if (_wsClient) {
+                    _wsClient->sendEffectPresetLoad(_selectedPresetSlot);
+                    Serial.printf("[ControlSurface] Preset %u load requested\n", _selectedPresetSlot);
+                }
+            } else {
+                // Save to empty slot
+                char name[32];
+                snprintf(name, sizeof(name), "STUDY_%04X_S%u", _currentEffectId, _selectedPresetSlot);
+                if (_wsClient) {
+                    _wsClient->sendEffectPresetSave(_selectedPresetSlot, name);
+                    Serial.printf("[ControlSurface] Preset %u save requested: %s\n", _selectedPresetSlot, name);
+                }
+            }
+        }
+        return;
+    }
+
+    // Param encoder buttons: reset to default
+    if (encoderIndex < CS_MAX_PARAM_ENCODERS && encoderIndex < _paramCount) {
+        if (_params[encoderIndex].valid) {
+            _params[encoderIndex].currentValue = _params[encoderIndex].defaultValue;
+            updateParamCard(encoderIndex);
+            if (_wsClient) {
+                _wsClient->sendEffectParameterChange(
+                    encoderIndex, _currentEffectId,
+                    _params[encoderIndex].name, _params[encoderIndex].defaultValue);
+            }
+            _dirty = true;
+        }
+    }
+}
+
+// ============================================================================
+// applyEncoderDelta() - Compute new param value from encoder rotation
+// ============================================================================
+
+float ControlSurfaceUI::applyEncoderDelta(uint8_t paramIndex, int32_t delta) {
+    const CSEffectParam& p = _params[paramIndex];
+
+    float newValue = p.currentValue;
+
+    switch (p.type) {
+        case CSParamType::BOOL:
+            // Any delta toggles
+            newValue = (p.currentValue < 0.5f) ? 1.0f : 0.0f;
+            break;
+
+        case CSParamType::INT:
+        case CSParamType::ENUM:
+            newValue = p.currentValue + (delta > 0 ? p.step : -p.step);
+            newValue = roundf(newValue);
+            break;
+
+        case CSParamType::FLOAT:
+        default:
+            newValue = p.currentValue + (float)delta * p.step;
+            break;
+    }
+
+    // Clamp
+    if (newValue < p.minValue) newValue = p.minValue;
+    if (newValue > p.maxValue) newValue = p.maxValue;
+
+    return newValue;
+}
+
+// ============================================================================
+// onEffectParametersReceived() - Update from K1 response
+// ============================================================================
+
+void ControlSurfaceUI::onEffectParametersReceived(uint16_t effectId, const char* effectName,
+                                                    const CSEffectParam* params, uint8_t paramCount) {
+    _currentEffectId = effectId;
+    if (effectName) {
+        strncpy(_currentEffectName, effectName, sizeof(_currentEffectName) - 1);
+        _currentEffectName[sizeof(_currentEffectName) - 1] = '\0';
+    }
+
+    _paramCount = (paramCount > CS_MAX_EFFECT_PARAMS) ? CS_MAX_EFFECT_PARAMS : paramCount;
+
+    for (uint8_t i = 0; i < CS_MAX_EFFECT_PARAMS; ++i) {
+        if (i < _paramCount) {
+            _params[i] = params[i];
+            _params[i].valid = true;
+        } else {
+            _params[i] = CSEffectParam();  // Reset unused slots
+        }
+    }
+
+    rebindEncoders();
+    _dirty = true;
+
+    Serial.printf("[ControlSurface] Effect 0x%04X '%s' loaded, %u params\n",
+                  effectId, _currentEffectName, _paramCount);
+}
+
+// ============================================================================
+// onPresetListReceived() - Update preset slot display
+// ============================================================================
+
+void ControlSurfaceUI::onPresetListReceived(const CSPresetSlot* slots, uint8_t slotCount) {
+    uint8_t count = (slotCount > CS_MAX_PRESET_SLOTS) ? CS_MAX_PRESET_SLOTS : slotCount;
+    for (uint8_t i = 0; i < CS_MAX_PRESET_SLOTS; ++i) {
+        if (i < count) {
+            _presetSlots[i] = slots[i];
+        } else {
+            _presetSlots[i] = CSPresetSlot();
+        }
+    }
+    updatePresetCard();
+    _dirty = true;
+}
+
+// ============================================================================
+// setCameraMode() - Update camera mode state from K1 broadcast
+// ============================================================================
+
+void ControlSurfaceUI::setCameraMode(bool active) {
+    _cameraModeActive = active;
+    updateCameraCard();
+    _dirty = true;
+}
+
+// ============================================================================
+// updateGlobalParam() - Update global param value from status broadcast
+// ============================================================================
+
+void ControlSurfaceUI::updateGlobalParam(uint8_t index, uint8_t value) {
+    if (index >= 8) return;
+    if (!_globalRow_values[index]) return;
+    lv_label_set_text_fmt(_globalRow_values[index], "%u", value);
+}
+
+// ============================================================================
+// rebindEncoders() - Update all param cards after effect change
+// ============================================================================
+
+void ControlSurfaceUI::rebindEncoders() {
+    for (uint8_t i = 0; i < 8; ++i) {
+        // Row A: encoders 0-7
+        updateParamCard(i);
+        // Row B: encoders 8-13 (skip 14=camera, 15=preset)
+        if (i < 6) {
+            updateParamCard(8 + i);
+        }
+    }
+    updateCameraCard();
+    updatePresetCard();
+}
+
+// ============================================================================
+// updateParamCard() - Update a single param gauge card
+// ============================================================================
+
+void ControlSurfaceUI::updateParamCard(uint8_t encoderIndex) {
+    lv_obj_t** cards;
+    lv_obj_t** labels;
+    lv_obj_t** values;
+    lv_obj_t** bars;
+    uint8_t cardIndex;
+
+    if (encoderIndex < 8) {
+        cards = _rowA_cards;
+        labels = _rowA_labels;
+        values = _rowA_values;
+        bars = _rowA_bars;
+        cardIndex = encoderIndex;
+    } else if (encoderIndex < 14) {
+        cards = _rowB_cards;
+        labels = _rowB_labels;
+        values = _rowB_values;
+        bars = _rowB_bars;
+        cardIndex = encoderIndex - 8;
+    } else {
+        return;  // 14 and 15 are camera/preset
+    }
+
+    if (!cards[cardIndex] || !labels[cardIndex] || !values[cardIndex] || !bars[cardIndex]) return;
+
+    if (encoderIndex >= _paramCount || !_params[encoderIndex].valid) {
+        // Unused slot: dim appearance
+        lv_label_set_text(labels[cardIndex], "--");
+        lv_label_set_text(values[cardIndex], "--");
+        lv_bar_set_value(bars[cardIndex], 0, LV_ANIM_OFF);
+        lv_obj_set_style_text_color(labels[cardIndex], lv_color_hex(DesignTokens::FG_DIMMED), LV_PART_MAIN);
+        lv_obj_set_style_text_color(values[cardIndex], lv_color_hex(DesignTokens::FG_DIMMED), LV_PART_MAIN);
+        lv_obj_set_style_border_color(cards[cardIndex], lv_color_hex(DesignTokens::BORDER_BASE), LV_PART_MAIN);
+        return;
+    }
+
+    const CSEffectParam& p = _params[encoderIndex];
+
+    // Update label with displayName (or name as fallback)
+    const char* displayLabel = p.displayName[0] ? p.displayName : p.name;
+    lv_label_set_text(labels[cardIndex], displayLabel);
+    lv_obj_set_style_text_color(labels[cardIndex], lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
+
+    // Format value
+    char buf[24];
+    formatParamValue(buf, sizeof(buf), p);
+    lv_label_set_text(values[cardIndex], buf);
+    lv_obj_set_style_text_color(values[cardIndex], lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
+
+    // Update bar (normalized 0-1000)
+    float range = p.maxValue - p.minValue;
+    int32_t barValue = 0;
+    if (range > 0.0f) {
+        barValue = (int32_t)(((p.currentValue - p.minValue) / range) * 1000.0f);
+        if (barValue < 0) barValue = 0;
+        if (barValue > 1000) barValue = 1000;
+    }
+    lv_bar_set_value(bars[cardIndex], barValue, LV_ANIM_OFF);
+
+    // Default border (subtle — neon highlight reserved for active encoder)
+    lv_obj_set_style_border_color(cards[cardIndex], lv_color_hex(DesignTokens::BORDER_SUBTLE), LV_PART_MAIN);
+}
+
+// ============================================================================
+// formatParamValue() - Format value with unit for display
+// ============================================================================
+
+void ControlSurfaceUI::formatParamValue(char* buf, size_t bufSize, const CSEffectParam& param) {
+    switch (param.type) {
+        case CSParamType::BOOL:
+            snprintf(buf, bufSize, "%s", param.currentValue >= 0.5f ? "ON" : "OFF");
+            break;
+        case CSParamType::INT:
+        case CSParamType::ENUM:
+            if (param.unit[0]) {
+                snprintf(buf, bufSize, "%d%s", (int)param.currentValue, param.unit);
+            } else {
+                snprintf(buf, bufSize, "%d", (int)param.currentValue);
+            }
+            break;
+        case CSParamType::FLOAT:
+        default:
+            if (param.unit[0]) {
+                snprintf(buf, bufSize, "%.1f%s", param.currentValue, param.unit);
+            } else {
+                snprintf(buf, bufSize, "%.2f", param.currentValue);
+            }
+            break;
+    }
+}
+
+// ============================================================================
+// updateCameraCard() - Camera Mode indicator (encoder 14 = Row B slot 6)
+// ============================================================================
+
+void ControlSurfaceUI::updateCameraCard() {
+    if (!_rowB_labels[6] || !_rowB_values[6] || !_rowB_cards[6] || !_rowB_bars[6]) return;
+
+    lv_label_set_text(_rowB_labels[6], "CAMERA");
+    lv_obj_set_style_text_color(_rowB_labels[6], lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
+
+    if (_cameraModeActive) {
+        lv_label_set_text(_rowB_values[6], "REC");
+        lv_obj_set_style_text_color(_rowB_values[6], lv_color_hex(DesignTokens::CAMERA_ACTIVE), LV_PART_MAIN);
+        lv_obj_set_style_border_color(_rowB_cards[6], lv_color_hex(DesignTokens::CAMERA_ACTIVE), LV_PART_MAIN);
+        lv_bar_set_value(_rowB_bars[6], 1000, LV_ANIM_OFF);
+        lv_obj_set_style_bg_color(_rowB_bars[6], lv_color_hex(DesignTokens::CAMERA_ACTIVE), LV_PART_INDICATOR);
+    } else {
+        lv_label_set_text(_rowB_values[6], "STANDBY");
+        lv_obj_set_style_text_color(_rowB_values[6], lv_color_hex(DesignTokens::CAMERA_STANDBY), LV_PART_MAIN);
+        lv_obj_set_style_border_color(_rowB_cards[6], lv_color_hex(DesignTokens::BORDER_SUBTLE), LV_PART_MAIN);
+        lv_bar_set_value(_rowB_bars[6], 0, LV_ANIM_OFF);
+        lv_obj_set_style_bg_color(_rowB_bars[6], lv_color_hex(DesignTokens::BRAND_PRIMARY), LV_PART_INDICATOR);
+    }
+}
+
+// ============================================================================
+// updatePresetCard() - Preset Bank display (encoder 15 = Row B slot 7)
+// ============================================================================
+
+void ControlSurfaceUI::updatePresetCard() {
+    if (!_rowB_labels[7] || !_rowB_values[7] || !_rowB_cards[7] || !_rowB_bars[7]) return;
+
+    lv_label_set_text(_rowB_labels[7], "PRESET");
+    lv_obj_set_style_text_color(_rowB_labels[7], lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
+
+    char buf[16];
+    if (_presetSlots[_selectedPresetSlot].occupied) {
+        snprintf(buf, sizeof(buf), "S%u [*]", _selectedPresetSlot + 1);
+        lv_obj_set_style_border_color(_rowB_cards[7], lv_color_hex(DesignTokens::PRESET_OCCUPIED), LV_PART_MAIN);
+    } else {
+        snprintf(buf, sizeof(buf), "S%u [_]", _selectedPresetSlot + 1);
+        lv_obj_set_style_border_color(_rowB_cards[7], lv_color_hex(DesignTokens::BORDER_SUBTLE), LV_PART_MAIN);
+    }
+    lv_label_set_text(_rowB_values[7], buf);
+    lv_obj_set_style_text_color(_rowB_values[7], lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
+
+    // Bar shows slot position (0-7 mapped to 0-1000)
+    int32_t barVal = (_selectedPresetSlot * 1000) / (CS_MAX_PRESET_SLOTS - 1);
+    lv_bar_set_value(_rowB_bars[7], barVal, LV_ANIM_OFF);
+}
+
+#endif // TAB5_ENCODER_USE_LVGL && !SIMULATOR_BUILD
+
+

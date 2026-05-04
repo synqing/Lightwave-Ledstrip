@@ -158,7 +158,7 @@ M tab5-encoder/docs/PRODUCT_DECISION_PRINCIPLES.md
 ?? instructions/changelog/2026-05-05--repo--cc-audit-remediation-proposal.md
 ?? instructions/changelog/2026-05-05--repo--cc-audit-skill-inventory.md
 ?? instructions/changelog/2026-05-05--repo--claude-transcript-archive-prune-tool.md
-?? notebooklm_bundles/
+?? docs/tooling/notebooklm-bundles/
 ?? tools/cc-audit-collector.sh
 ?? tools/claude-transcript-archive-prune.sh
 ```

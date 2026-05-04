@@ -1,0 +1,3813 @@
+# Bundle: firmware_contracts
+# Purpose: Teach NotebookLM the data contracts between AudioActor (Core 0) and RendererActor (Core 1) plus the EffectContext/IEffect plugin API surface. RenderContext.h does not exist as a separate header — its content is part of EffectContext.h (this bundle includes it).
+# Files included: 14
+# Generated: 2026-05-04 (lightwave-ledstrip notebooklm curation)
+
+
+================================================================================
+FILE: firmware-v3/src/audio/contracts/ControlBus.h
+DESCRIPTION: Shared audio state contract — ControlBusFrame published by AudioActor and consumed by RendererActor; bands[8], chroma[12], bins64/256, onset/tempo, chord, saliency, motion-semantic fields.
+================================================================================
+
+#pragma once
+#include <stdint.h>
+#include <math.h>
+#include "config/features.h"
+#include "AudioTime.h"
+#include "MusicalSaliency.h"
+#include "StyleDetector.h"
+#include "../TranslationEngine.h"
+
+namespace lightwaveos::audio {
+
+static constexpr uint8_t CONTROLBUS_NUM_BANDS  = 8;
+static constexpr uint8_t CONTROLBUS_NUM_CHROMA = 12;
+static constexpr uint8_t CONTROLBUS_WAVEFORM_N = 128;  // Sensory Bridge NATIVE_RESOLUTION waveform points
+
+// Lookahead spike smoothing constants (Sensory Bridge pattern)
+static constexpr size_t LOOKAHEAD_FRAMES = 3;      // 3-frame ring buffer for spike detection
+static constexpr size_t LOOKAHEAD_MAX_BANDS = 64;  // Support future 64-bin expansion
+
+// Zone AGC configuration (Sensory Bridge insight: 4 zones across frequency spectrum)
+// Prevents bass frequencies from dominating the visualization
+static constexpr uint8_t CONTROLBUS_NUM_ZONES = 4;
+
+/**
+ * @brief Chord type enumeration for triad classification.
+ */
+enum class ChordType : uint8_t {
+    NONE = 0,       ///< No chord detected / insufficient confidence
+    MAJOR = 1,      ///< Major triad (root + major 3rd + perfect 5th)
+    MINOR = 2,      ///< Minor triad (root + minor 3rd + perfect 5th)
+    DIMINISHED = 3, ///< Diminished triad (root + minor 3rd + diminished 5th)
+    AUGMENTED = 4   ///< Augmented triad (root + major 3rd + augmented 5th)
+};
+
+/**
+ * @brief Chord detection state published per frame.
+ *
+ * Detects triads from chromagram by finding dominant pitch class (root)
+ * and checking intervals for third (+3 or +4 semitones) and fifth (+6, +7, or +8).
+ */
+struct ChordState {
+    uint8_t rootNote = 0;           ///< 0-11 (C=0, C#=1, D=2, ..., B=11)
+    ChordType type = ChordType::NONE;
+    float confidence = 0.0f;        ///< 0.0-1.0 triad energy ratio
+    float rootStrength = 0.0f;      ///< Energy at root pitch class
+    float thirdStrength = 0.0f;     ///< Energy at third interval
+    float fifthStrength = 0.0f;     ///< Energy at fifth interval
+};
+
+/**
+ * @brief Compact Q15 event field for semantic transient channels.
+ */
+struct AudioEventQ15 {
+    uint16_t strength = 0;     ///< 0..65535 event strength
+    uint16_t confidence = 0;   ///< 0..65535 event confidence
+    uint16_t ageMs = 65535;    ///< Milliseconds since last trigger, saturated
+    uint16_t flags = 0;        ///< Bit 0 active, bit 1 valid, bit 2 degraded, bit 3 clipped-source
+};
+
+/**
+ * @brief Raw (unsmoothed) per-hop measurements produced by the audio thread.
+ */
+struct ControlBusRawInput {
+    float rms = 0.0f;   // 0..1
+    float rmsUngated = 0.0f;  // 0..1 (mapped RMS before activity gate; used for silence detection)
+    float flux = 0.0f;  // 0..1 (novelty proxy)
+
+    float bands[CONTROLBUS_NUM_BANDS] = {0};     // 0..1
+    float chroma[CONTROLBUS_NUM_CHROMA] = {0};   // 0..1 (optional in Phase 2)
+    int16_t waveform[CONTROLBUS_WAVEFORM_N] = {0};  // Time-domain samples (int16_t range: -32768 to 32767)
+
+    // Phase 1.2: Onset detection for percussive elements
+    float snareEnergy = 0.0f;       // 0..1 snare band energy (150-300 Hz)
+    float hihatEnergy = 0.0f;       // 0..1 hi-hat band energy (6-12 kHz)
+    bool snareTrigger = false;      // True on snare onset frame
+    bool hihatTrigger = false;      // True on hi-hat onset frame
+
+    // FFT onset detection (OnsetDetector — 1024-point spectral flux)
+    float onsetFlux = 0.0f;         ///< Raw log-spectral flux [0, ∞)
+    float onsetEnv = 0.0f;          ///< Thresholded onset envelope [0, ∞)
+    float onsetEvent = 0.0f;        ///< Discrete onset event (0 or strength)
+    float onsetBassFlux = 0.0f;     ///< Low-freq flux (kick detection) [0, ∞)
+    float onsetMidFlux = 0.0f;      ///< Mid-freq flux (snare detection) [0, ∞)
+    float onsetHighFlux = 0.0f;     ///< High-freq flux (hihat detection) [0, ∞)
+    bool  kickTrigger = false;      ///< FFT-based kick onset detected
+
+    // Phase 2: Full 64-bin Goertzel spectrum (110 Hz - 4186 Hz)
+    static constexpr uint8_t BINS_64_COUNT = 64;
+    float bins64[BINS_64_COUNT] = {0};  // 0..1 normalized magnitudes
+    float bins64Adaptive[BINS_64_COUNT] = {0};  // 0..1 adaptive normalised (Sensory Bridge max follower)
+
+    // PipelineCore: Full 256-bin FFT magnitude spectrum
+    static constexpr uint16_t BINS_256_COUNT = 256;
+    float bins256[BINS_256_COUNT] = {0};  ///< 0..1 normalised magnitudes (62.5 Hz spacing @ 32kHz/512-pt)
+    float binHz = 0.0f;                   ///< Frequency resolution (sampleRate / fftSize)
+
+    // STM dual-edge decomposition
+    static constexpr uint8_t STM_MEL_BANDS = 16;
+    static constexpr uint8_t STM_SPECTRAL_BINS = 42;
+    float stmTemporal[STM_MEL_BANDS] = {0};      ///< Temporal modulation per mel band [0,1]
+    float stmSpectral[STM_SPECTRAL_BINS] = {0};  ///< Spectral modulation magnitudes [0,1]
+    float stmTemporalEnergy = 0.0f;              ///< Mean temporal modulation energy [0,1]
+    float stmSpectralEnergy = 0.0f;              ///< Mean spectral modulation energy [0,1]
+    bool stmReady = false;                       ///< True once STM history is warm
+
+    // Tempo tracker output (saliency computation ONLY - effects read MusicalGrid)
+    bool tempoLocked = false;       ///< TempoTracker lock state (saliency; effects read MusicalGrid)
+    float tempoConfidence = 0.0f;   ///< TempoTracker confidence (saliency; effects read MusicalGrid.confidence)
+    bool tempoBeatTick = false;     ///< TempoTracker beat tick gated by lock (saliency support)
+    bool tempoDownbeatTick = false; ///< Backend-neutral downbeat tick (4/4)
+    float tempoBpm = 120.0f;        ///< Tempo BPM estimate (PipelineCore/TempoTracker)
+    float tempoBeatStrength = 0.0f; ///< Beat event strength [0,1] (0 = no beat this hop)
+};
+
+/**
+ * @brief Published control frame consumed by renderer (BY VALUE).
+ */
+struct ControlBusFrame {
+    AudioTime t;
+    uint32_t hop_seq = 0;
+
+    static constexpr uint8_t BINS_64_COUNT = ControlBusRawInput::BINS_64_COUNT;
+
+    float rms = 0.0f;
+    float flux = 0.0f;
+    float fast_rms = 0.0f;
+    float fast_flux = 0.0f;
+
+    // Audio-driven liveliness scalar for global speed trim (0..1)
+    float liveliness = 0.0f;
+
+    // Perceptual translation output consumed by renderer/effects helper path.
+    SceneParameters scene = kDefaultSceneParameters;
+
+    float bands[CONTROLBUS_NUM_BANDS] = {0};
+    float chroma[CONTROLBUS_NUM_CHROMA] = {0};
+    float heavy_bands[CONTROLBUS_NUM_BANDS] = {0};
+    float heavy_chroma[CONTROLBUS_NUM_CHROMA] = {0};
+    int16_t waveform[CONTROLBUS_WAVEFORM_N] = {0};  // Time-domain samples (int16_t range: -32768 to 32767)
+
+    // -----------------------------------------------------------------------
+    // Sensory Bridge parity fields (side-car pipeline)
+    // -----------------------------------------------------------------------
+    int16_t sb_waveform[CONTROLBUS_WAVEFORM_N] = {0};  // 3.1.0 waveform (post capture scaling)
+    float sb_waveform_peak_scaled = 0.0f;
+    float sb_waveform_peak_scaled_last = 0.0f;
+    float sb_note_chromagram[CONTROLBUS_NUM_CHROMA] = {0};  // 3.1.0 chroma
+    float sb_chromagram_max_val = 0.0f;
+
+    float sb_spectrogram[BINS_64_COUNT] = {0};        // 4.1.1 spectrogram (normalised)
+    float sb_spectrogram_smooth[BINS_64_COUNT] = {0}; // 4.1.1 smoothed spectrogram
+    float sb_chromagram_smooth[CONTROLBUS_NUM_CHROMA] = {0}; // 4.1.1 chroma
+    float sb_hue_position = 0.0f;
+    float sb_hue_shifting_mix = -0.35f;
+
+    ChordState chordState;  // Chord detection results (root, type, confidence)
+
+    MusicalSaliencyFrame saliency;  // Musical saliency metrics (harmonic, rhythmic, timbral, dynamic novelty)
+
+    // MIS Phase 2: Adaptive style detection
+    MusicStyle currentStyle = MusicStyle::UNKNOWN;  ///< Detected music style classification
+    float styleConfidence = 0.0f;                   ///< Style detection confidence (0.0-1.0)
+
+    // Phase 1.2: Onset detection for percussive elements (passthrough from raw)
+    float snareEnergy = 0.0f;       // 0..1 snare band energy (150-300 Hz)
+    float hihatEnergy = 0.0f;       // 0..1 hi-hat band energy (6-12 kHz)
+    bool snareTrigger = false;      // True on snare onset frame
+    bool hihatTrigger = false;      // True on hi-hat onset frame
+
+    // FFT onset detection (OnsetDetector — 1024-point spectral flux)
+    float onsetFlux = 0.0f;         ///< Raw log-spectral flux [0, ∞)
+    float onsetEnv = 0.0f;          ///< Thresholded onset envelope [0, ∞)
+    float onsetEvent = 0.0f;        ///< Discrete onset event (0 or strength)
+    float onsetBassFlux = 0.0f;     ///< Low-freq flux (kick detection) [0, ∞)
+    float onsetMidFlux = 0.0f;      ///< Mid-freq flux (snare detection) [0, ∞)
+    float onsetHighFlux = 0.0f;     ///< High-freq flux (hihat detection) [0, ∞)
+    bool  kickTrigger = false;      ///< FFT-based kick onset detected
+    uint16_t onsetProcessUs = 0;    ///< OnsetDetector self-timed μs (diagnostics)
+
+#if FEATURE_AUDIO_HF_SEMANTICS
+    // Tier 1 high-frequency semantic surface, derived from existing 64-bin/band data.
+    float hfEnergy = 0.0f;                ///< Smooth high-frequency content [0,1]
+    float hfFlux = 0.0f;                  ///< Positive high-frequency change [0,1]
+    AudioEventQ15 hatEvent;               ///< Short hat-like event, not continuous HF energy
+    float cymbalSustain = 0.0f;           ///< Sustained noisy HF envelope [0,1]
+    float airEnergy = 0.0f;               ///< Smooth upper-air shimmer [0,1]
+    float spectralBrightness = 0.0f;      ///< Spectral centroid / upper-balance proxy [0,1]
+    float spectralBrightnessDelta = 0.0f; ///< Signed brightness movement [-1,1]
+#endif
+
+    // Phase 2: Full 64-bin Goertzel spectrum (110 Hz - 4186 Hz)
+    float bins64[BINS_64_COUNT] = {0};  // 0..1 normalized magnitudes
+    float bins64Adaptive[BINS_64_COUNT] = {0};  // 0..1 adaptive normalised (Sensory Bridge max follower)
+
+    // PipelineCore: Full 256-bin FFT magnitude spectrum
+    static constexpr uint16_t BINS_256_COUNT = ControlBusRawInput::BINS_256_COUNT;
+    float bins256[BINS_256_COUNT] = {0};  ///< 0..1 normalised magnitudes
+    float binHz = 0.0f;                   ///< Frequency resolution (Hz per bin)
+    static constexpr uint8_t STM_MEL_BANDS = ControlBusRawInput::STM_MEL_BANDS;
+    static constexpr uint8_t STM_SPECTRAL_BINS = ControlBusRawInput::STM_SPECTRAL_BINS;
+    float stmTemporal[STM_MEL_BANDS] = {0};      ///< Smoothed temporal modulation [0,1]
+    float stmSpectral[STM_SPECTRAL_BINS] = {0};  ///< Smoothed spectral modulation [0,1]
+    float stmTemporalEnergy = 0.0f;              ///< Smoothed temporal modulation energy [0,1]
+    float stmSpectralEnergy = 0.0f;              ///< Smoothed spectral modulation energy [0,1]
+    bool stmReady = false;                       ///< True once STM outputs are valid
+
+    // Tempo tracker output (saliency computation ONLY - effects read MusicalGrid)
+    bool tempoLocked = false;       ///< TempoTracker lock state (saliency; effects read MusicalGrid)
+    float tempoConfidence = 0.0f;   ///< TempoTracker confidence (saliency; effects read MusicalGrid.confidence)
+    bool tempoBeatTick = false;     ///< TempoTracker beat tick gated by lock (saliency support)
+    bool tempoDownbeatTick = false; ///< Backend-neutral downbeat tick (4/4)
+    float tempoBpm = 120.0f;        ///< Tempo BPM estimate
+    float tempoBeatStrength = 0.0f; ///< Beat event strength [0,1]
+
+    // -----------------------------------------------------------------------
+    // ES v1.1_320 tempo extras (FEATURE_AUDIO_BACKEND_ESV11)
+    // -----------------------------------------------------------------------
+    float es_bpm = 120.0f;
+    float es_tempo_confidence = 0.0f;
+    bool  es_beat_tick = false;
+    float es_beat_strength = 0.0f;
+    float es_phase01_at_audio_t = 0.0f;  // Phase at frame timestamp t, [0,1)
+    uint8_t es_beat_in_bar = 0;
+    bool es_downbeat_tick = false;
+
+    // -----------------------------------------------------------------------
+    // ES v1.1_320 raw signals (for ES reference show parity)
+    //
+    // These are the direct ES pipeline outputs before any LWLS contract
+    // normalisation/adaptation is applied. They allow us to port and compare
+    // Emotiscope light shows 1:1 against canonical hardware.
+    // -----------------------------------------------------------------------
+    float es_vu_level_raw = 0.0f;                 // 0..1
+    float es_bins64_raw[BINS_64_COUNT] = {0};     // 0..1 (ES spectrogram_smooth)
+    float es_chroma_raw[CONTROLBUS_NUM_CHROMA] = {0}; // 0..1 (ES chromagram)
+
+    // Silence detection (Sensory Bridge pattern)
+    // silentScale fades from 1.0 to 0.0 after silenceHysteresisMs of silence
+    float silentScale = 1.0f;       ///< 0.0=silent, 1.0=active (multiply with brightness)
+    bool isSilent = false;          ///< True when silence threshold exceeded duration
+
+    // Audio confidence envelope (novelty-assisted, separate from onset triggers).
+    // Answers "is music actively present?" with a smooth 0..1 signal.
+    // Unlike silentScale (10s hysteresis), this responds in ~200-500ms.
+    // Effects can use this for fade behaviour without touching BR triggers.
+    float audioConfidence = 1.0f;   ///< 0.0=silence, 1.0=music active
+    float spectralNovelty = 0.0f;   ///< Frame-to-frame band delta sum [0, inf)
+
+    // -----------------------------------------------------------------------
+    // Stage 2: Motion-Semantic Extension Fields
+    // -----------------------------------------------------------------------
+    // These fields support the Layer 2 motion-semantic inference chain.
+    // Additive extension — no existing fields modified.
+    // See: SPEC · Multi · Firmware Mapping and dsp_frame_t Extension
+
+    float timing_jitter = 0.0f;       ///< CV of inter-onset intervals [0.0=regular, 1.0=irregular]
+    float syncopation_level = 0.0f;   ///< Onset deviation from metric grid [0.0=on-beat, 1.0=off-beat]
+    float pitch_contour_dir = 0.0f;   ///< Spectral centroid movement [-1.0=descending, 0.0=flat, +1.0=ascending]
+};
+
+static_assert(sizeof(ControlBusRawInput) <= 5120, "ControlBusRawInput must remain within 5 KB");
+static_assert(sizeof(ControlBusFrame) <= 5120, "ControlBusFrame must remain within 5 KB");
+
+/**
+ * @brief Lookahead buffer for spike detection (Sensory Bridge pattern).
+ *
+ * Uses a 3-frame ring buffer to detect single-frame spikes that cause
+ * visual flicker. When the middle frame is a spike (direction change),
+ * it's replaced with the average of its neighbors.
+ *
+ * Output is delayed by 2 frames (~32ms at 60fps) which is acceptable
+ * for visual effects but maintains fast transient response.
+ */
+struct LookaheadBuffer {
+    float history[LOOKAHEAD_FRAMES][LOOKAHEAD_MAX_BANDS] = {{0}};
+    size_t current_frame = 0;   // Ring buffer write index
+    size_t num_bands = CONTROLBUS_NUM_BANDS;  // Actual bands in use
+    size_t frames_filled = 0;   // Tracks warmup period (0-3)
+    bool enabled = true;        // Allow runtime disable for beat detection
+
+    void init(size_t bands) {
+        num_bands = (bands <= LOOKAHEAD_MAX_BANDS) ? bands : LOOKAHEAD_MAX_BANDS;
+        for (size_t f = 0; f < LOOKAHEAD_FRAMES; ++f) {
+            for (size_t b = 0; b < LOOKAHEAD_MAX_BANDS; ++b) {
+                history[f][b] = 0.0f;
+            }
+        }
+        current_frame = 0;
+        frames_filled = 0;
+    }
+
+    void reset() {
+        init(num_bands);
+    }
+};
+
+/**
+ * @brief Per-zone automatic gain control state
+ *
+ * Each zone tracks its own maximum magnitude and uses a smoothed follower
+ * for normalization. This prevents loud bass from washing out mid/high content.
+ *
+ * Zone boundaries for 8-band system (2 bands per zone):
+ *   Zone 0: bands 0-1  (60-120 Hz)   - Sub-bass/Bass
+ *   Zone 1: bands 2-3  (250-500 Hz)  - Low-mid
+ *   Zone 2: bands 4-5  (1-2 kHz)     - Mid/High-mid
+ *   Zone 3: bands 6-7  (4-7.8 kHz)   - Presence/Brilliance
+ *
+ * For future 64-band system (16 bins per zone):
+ *   Zone 0: bins 0-15  (110-207 Hz)
+ *   Zone 1: bins 16-31 (220-415 Hz)
+ *   Zone 2: bins 32-47 (440-830 Hz)
+ *   Zone 3: bins 48-63 (880-4186 Hz)
+ */
+struct ZoneAGC {
+    float max_mag = 0.0f;           ///< Current zone maximum magnitude
+    float max_mag_follower = 1.0f;  ///< Smoothed maximum for normalization (starts at 1.0 to avoid initial spike)
+    float attack_rate = 0.05f;      ///< How fast to increase follower (Sensory Bridge default)
+    float release_rate = 0.05f;     ///< How fast to decrease follower (Sensory Bridge default)
+    float min_floor = 0.01f;        ///< Minimum follower value (caps max gain at 100x, was 0.001f/1000x)
+
+    void reset() {
+        max_mag = 0.0f;
+        max_mag_follower = 1.0f;
+    }
+};
+
+/**
+ * @brief Statistics for spike detection effectiveness tracking.
+ * Enables before/after comparison to verify spike removal is helping.
+ */
+struct SpikeDetectionStats {
+    uint32_t totalFrames = 0;          // Frames processed
+    uint32_t spikesDetectedBands = 0;  // Direction changes detected in bands
+    uint32_t spikesDetectedChroma = 0; // Direction changes detected in chroma
+    uint32_t spikesCorrected = 0;      // Corrections applied (above threshold)
+    float totalEnergyRemoved = 0.0f;   // Cumulative correction magnitude
+    float avgSpikesPerFrame = 0.0f;    // Rolling average
+    float avgCorrectionMagnitude = 0.0f; // Rolling average
+
+    void reset() {
+        totalFrames = 0;
+        spikesDetectedBands = 0;
+        spikesDetectedChroma = 0;
+        spikesCorrected = 0;
+        totalEnergyRemoved = 0.0f;
+        avgSpikesPerFrame = 0.0f;
+        avgCorrectionMagnitude = 0.0f;
+    }
+};
+
+/**
+ * @brief Smoothed DSP control signals at hop cadence.
+ *
+ * Audio thread owns a ControlBus instance; each hop:
+ *  - UpdateFromHop(now, raw)
+ *  - Publish(GetFrame()) to SnapshotBuffer<ControlBusFrame>
+ *
+ * Processing pipeline:
+ *  1. Raw input clamped to 0..1
+ *  2. Lookahead spike removal (2-frame delay, removes flicker)
+ *  3. Asymmetric attack/release smoothing
+ *  4. Output to frame
+ */
+class ControlBus {
+public:
+    ControlBus();
+
+    void Reset();
+
+    void UpdateFromHop(const AudioTime& now, const ControlBusRawInput& raw);
+
+    const ControlBusFrame& GetFrameRef() const { return m_frame; }
+    ControlBusFrame GetFrame() const { return m_frame; }
+
+    void setSmoothing(float alphaFast, float alphaSlow);
+    void setAttackRelease(float bandAttack, float bandRelease,
+                          float heavyBandAttack, float heavyBandRelease);
+    float getAlphaFast() const { return m_alpha_fast; }
+    float getAlphaSlow() const { return m_alpha_slow; }
+
+    /**
+     * @brief Set all smoothing parameters from mood value (Sensory Bridge pattern)
+     * @param mood 0-255: 0=reactive (fast attack/slow decay), 255=smooth (slow attack/fast decay)
+     *
+     * Maps mood to both follower smoothing (attack/release) and exponential averaging.
+     * Implements the Sensory Bridge MOOD knob behavior:
+     * - Low mood: More responsive to transients, faster attack, slower decay
+     * - High mood: More sustained, dreamier feel, slower attack, faster decay
+     *
+     * Affects:
+     * - m_alpha_fast/slow: RMS/flux smoothing
+     * - m_band_attack/release: Band energy smoothing
+     * - m_heavy_band_attack/release: Extra-smooth band smoothing
+     */
+    void setMoodSmoothing(uint8_t mood);
+    uint8_t getMood() const { return m_mood; }
+
+    // Lookahead spike smoothing control
+    void setLookaheadEnabled(bool enabled) { m_lookahead_bands.enabled = enabled; }
+    bool getLookaheadEnabled() const { return m_lookahead_bands.enabled; }
+
+    // Zone AGC control (Sensory Bridge pattern)
+    void setZoneAGCEnabled(bool enabled) { m_zone_agc_enabled = enabled; }
+    bool getZoneAGCEnabled() const { return m_zone_agc_enabled; }
+    void setZoneAGCRates(float attack, float release);
+    void setZoneMinFloor(float floor);
+
+    // Chroma Zone AGC control (3 chroma bins per zone: C-D, D#-F, F#-G#, A-B)
+    void setChromaZoneAGCEnabled(bool enabled) { m_chroma_zone_agc_enabled = enabled; }
+    bool getChromaZoneAGCEnabled() const { return m_chroma_zone_agc_enabled; }
+    void setChromaZoneAGCRates(float attack, float release);
+
+    // Access zone state for debugging/visualization
+    float getZoneFollower(uint8_t zone) const {
+        return (zone < CONTROLBUS_NUM_ZONES) ? m_zones[zone].max_mag_follower : 1.0f;
+    }
+    float getZoneMaxMag(uint8_t zone) const {
+        return (zone < CONTROLBUS_NUM_ZONES) ? m_zones[zone].max_mag : 0.0f;
+    }
+    float getChromaZoneFollower(uint8_t zone) const {
+        return (zone < CONTROLBUS_NUM_ZONES) ? m_chroma_zones[zone].max_mag_follower : 1.0f;
+    }
+    float getChromaZoneMaxMag(uint8_t zone) const {
+        return (zone < CONTROLBUS_NUM_ZONES) ? m_chroma_zones[zone].max_mag : 0.0f;
+    }
+
+    // Spike detection telemetry
+    const SpikeDetectionStats& getSpikeStats() const { return m_spikeStats; }
+    void resetSpikeStats() { m_spikeStats.reset(); }
+
+    // Chord detection control (Priority 6: Musical intelligence from chromagram)
+    void setChordDetectionEnabled(bool enabled) { m_chord_detection_enabled = enabled; }
+    bool getChordDetectionEnabled() const { return m_chord_detection_enabled; }
+    const ChordState& getChordState() const { return m_frame.chordState; }
+
+    // Silence detection control (Sensory Bridge silent_scale pattern)
+    void setSilenceParameters(float threshold, float hysteresisMs) {
+        m_silence_threshold = threshold;
+        m_silence_hysteresis_ms = hysteresisMs;
+    }
+    float getSilenceThreshold() const { return m_silence_threshold; }
+    float getSilenceHysteresisMs() const { return m_silence_hysteresis_ms; }
+    bool isSilenceEnabled() const { return m_silence_hysteresis_ms > 0.0f; }
+
+    /**
+     * @brief Apply backend-agnostic derived features (Stage B) to a frame.
+     *
+     * Called after Stage A (backend-specific input conditioning) completes.
+     * Both LWLS path (via UpdateFromHop) and ES path (via AudioActor) call this.
+     *
+     * Requires frame to have normalised: rms, flux, fast_rms, fast_flux,
+     * chroma[0..11], tempoLocked, tempoConfidence, tempoBeatTick.
+     *
+     * Computes: chord detection, liveliness, saliency, silence detection.
+     *
+     * @param frame       Frame with Stage A fields already populated
+     * @param dt          Delta time in seconds (hop cadence)
+     * @param rmsUngated  Pre-gate RMS for silence detection (0..1)
+     */
+    void applyDerivedFeatures(ControlBusFrame& frame, float dt, float rmsUngated);
+
+    /**
+     * @brief Apply STM smoothing in place on a frame.
+     *
+     * LWLS calls this via UpdateFromHop() after copying raw STM fields.
+     * The ES adapter path calls it directly before Stage B derived features.
+     */
+    void applyStmSmoothing(ControlBusFrame& frame);
+
+private:
+    ControlBusFrame m_frame{};
+
+    // Liveliness smoothing state
+    float m_liveliness_s = 0.0f;
+    AudioTime m_last_time{};
+    bool m_time_valid = false;
+
+    // One-pole smoothing state
+    float m_rms_s = 0.0f;
+    float m_flux_s = 0.0f;
+    float m_bands_s[CONTROLBUS_NUM_BANDS] = {0};
+    float m_chroma_s[CONTROLBUS_NUM_CHROMA] = {0};
+    // LGP_SMOOTH: Separate state for heavy (extra-smoothed) bands
+    float m_heavy_bands_s[CONTROLBUS_NUM_BANDS] = {0};
+    float m_heavy_chroma_s[CONTROLBUS_NUM_CHROMA] = {0};
+    float m_stm_temporal_s[ControlBusFrame::STM_MEL_BANDS] = {0};
+    float m_stm_spectral_s[ControlBusFrame::STM_SPECTRAL_BINS] = {0};
+    float m_stm_temporal_energy_s = 0.0f;
+    float m_stm_spectral_energy_s = 0.0f;
+
+    // Lookahead spike smoothing buffers (Sensory Bridge pattern)
+    LookaheadBuffer m_lookahead_bands;
+    LookaheadBuffer m_lookahead_chroma;
+
+    // Intermediate buffer for spike-smoothed values (before attack/release)
+    float m_bands_despiked[CONTROLBUS_NUM_BANDS] = {0};
+    float m_chroma_despiked[CONTROLBUS_NUM_CHROMA] = {0};
+
+    // Tunables (Phase-2 defaults, tuned for 50 Hz reference)
+    // The ESV11 path calls setMoodSmoothing() which retunes these dynamically.
+    // The default path uses setSmoothing() from AudioPipelineTuning.
+    float m_alpha_fast = 0.35f;  // fast response (50 Hz reference)
+    float m_alpha_slow = 0.12f;  // slower response (50 Hz reference)
+
+    // LGP_SMOOTH: Asymmetric attack/release for bands (50 Hz reference)
+    float m_band_attack = 0.15f;       // Fast rise for transients
+    float m_band_release = 0.03f;      // Slow fall for LGP viewing
+    float m_heavy_band_attack = 0.08f; // Extra slow rise
+    float m_heavy_band_release = 0.015f; // Ultra slow fall
+
+    // Zone AGC state (Sensory Bridge pattern: 4 zones)
+    bool m_zone_agc_enabled = true;  // Enabled by default for balanced frequency response
+    ZoneAGC m_zones[CONTROLBUS_NUM_ZONES];
+
+    // Chroma Zone AGC state (4 zones, 3 chroma bins per zone)
+    // Zone 0: C, C#, D (0-2)   - low notes
+    // Zone 1: D#, E, F (3-5)   - mid-low
+    // Zone 2: F#, G, G# (6-8)  - mid-high
+    // Zone 3: A, A#, B (9-11)  - high notes
+    bool m_chroma_zone_agc_enabled = true;  // Enabled by default
+    ZoneAGC m_chroma_zones[CONTROLBUS_NUM_ZONES];
+
+    // Spike detection telemetry
+    SpikeDetectionStats m_spikeStats;
+
+    // Chord detection state (Priority 6)
+    bool m_chord_detection_enabled = true;  // Enabled by default
+
+    // Musical saliency tuning parameters
+    SaliencyTuning m_saliencyTuning{};
+
+    // Mood smoothing control (Sensory Bridge MOOD knob)
+    uint8_t m_mood = 128;  // Default: balanced (0.5 normalized)
+
+    // Silence detection state machine (Sensory Bridge silent_scale pattern)
+    float m_silent_scale_smoothed = 1.0f;   ///< Smoothed output value
+    uint32_t m_silence_start_ms = 0;        ///< When silence began (for hysteresis)
+    bool m_silence_triggered = false;       ///< True when hysteresis exceeded
+    float m_silence_threshold = 0.01f;      ///< RMS below this = silence
+    float m_silence_hysteresis_ms = 0.0f;   ///< Time before fade begins (0 = disabled)
+
+    // ========================================================================
+    // Stack Reduction: Temporary buffers moved from stack to class members
+    // ========================================================================
+    
+    /// Temporary buffer for clamped band values (moved from stack to reduce stack usage)
+    float m_clamped_bands[CONTROLBUS_NUM_BANDS] = {0};
+    
+    /// Temporary buffer for clamped chroma values (moved from stack to reduce stack usage)
+    float m_clamped_chroma[CONTROLBUS_NUM_CHROMA] = {0};
+
+    // ========================================================================
+    // Stage 2: Motion-Semantic Jitter/Syncopation/PitchContour State
+    // ========================================================================
+
+    /// Ring buffer for inter-onset intervals (timing jitter computation)
+    static constexpr uint8_t JITTER_WINDOW = 16;
+    float m_ioi_buffer[JITTER_WINDOW] = {0};
+    uint32_t m_last_onset_ms = 0;
+    uint8_t m_ioi_head = 0;
+    uint8_t m_ioi_count = 0;
+
+    /// Syncopation: EMA of onset deviation from beat grid
+    float m_syncopation_ema = 0.0f;
+    static constexpr float SYNCOPATION_EMA_ALPHA = 0.15f;
+
+    /// Pitch contour: previous centroid for direction computation
+    float m_prev_centroid = 0.0f;
+    float m_pitch_contour_smooth = 0.0f;  ///< Smoothed output
+
+#if FEATURE_AUDIO_HF_SEMANTICS
+    float m_hf_energy_s = 0.0f;
+    float m_air_energy_s = 0.0f;
+    float m_cymbal_sustain_s = 0.0f;
+    float m_prev_hf_energy = 0.0f;
+    float m_prev_spectral_brightness = 0.0f;
+    uint16_t m_hat_event_age_ms = 65535;
+#endif
+
+    /// Compute timing jitter from onset event (call when onset detected)
+    void updateTimingJitter(uint32_t now_ms, bool onsetDetected) {
+        if (!onsetDetected || now_ms <= m_last_onset_ms) return;
+        float ioi = (float)(now_ms - m_last_onset_ms);
+        m_last_onset_ms = now_ms;
+        if (ioi < 80.0f) return;  // Min IOI gate: reject double-triggers < 80ms
+        m_ioi_buffer[m_ioi_head] = ioi;
+        m_ioi_head = (m_ioi_head + 1) % JITTER_WINDOW;
+        if (m_ioi_count < JITTER_WINDOW) m_ioi_count++;
+
+        if (m_ioi_count < 4) { m_frame.timing_jitter = 0.0f; return; }
+
+        // Compute mean and SD of IOIs
+        float sum = 0, sum2 = 0;
+        for (uint8_t i = 0; i < m_ioi_count; i++) {
+            sum += m_ioi_buffer[i];
+            sum2 += m_ioi_buffer[i] * m_ioi_buffer[i];
+        }
+        float mean = sum / m_ioi_count;
+        if (mean < 1.0f) { m_frame.timing_jitter = 0.0f; return; }
+        float variance = (sum2 / m_ioi_count) - (mean * mean);
+        float sd = (variance > 0) ? sqrtf(variance) : 0.0f;
+        float cv = sd / mean;  // Coefficient of variation
+        m_frame.timing_jitter = (cv > 1.0f) ? 1.0f : cv;
+    }
+
+    /// Compute syncopation from onset phase relative to beat grid
+    void updateSyncopation(float beatPhase, bool onsetDetected) {
+        if (!onsetDetected) return;
+        // Distance from nearest strong beat position (0.0 or 1.0)
+        float dist = beatPhase;
+        if (dist > 0.5f) dist = 1.0f - dist;
+        // Normalize: 0.0 = on beat, 0.5 = maximally off-beat → scale to [0,1]
+        float deviation = dist * 2.0f;
+        m_syncopation_ema += SYNCOPATION_EMA_ALPHA * (deviation - m_syncopation_ema);
+        m_frame.syncopation_level = m_syncopation_ema;
+    }
+
+    /// Compute pitch contour direction from spectral centroid
+    void updatePitchContour(float centroid, float dt) {
+        if (m_prev_centroid <= 0.0f) { m_prev_centroid = centroid; return; }
+        float delta = centroid - m_prev_centroid;
+        m_prev_centroid = centroid;
+        // Normalize: threshold at ±0.1 for meaningful change
+        float raw_dir = 0.0f;
+        if (fabsf(delta) > 0.01f) {
+            raw_dir = (delta > 0) ? fminf(delta / 0.1f, 1.0f) : fmaxf(delta / 0.1f, -1.0f);
+        }
+        // Smooth
+        float alpha = 1.0f - expf(-5.0f * dt);  // lambda=5 → ~200ms tau
+        m_pitch_contour_smooth += (raw_dir - m_pitch_contour_smooth) * alpha;
+        m_frame.pitch_contour_dir = m_pitch_contour_smooth;
+    }
+
+    // Private methods for spike detection
+    void detectAndRemoveSpikes(LookaheadBuffer& buffer,
+                               const float* input,
+                               float* output,
+                               size_t num_bands,
+                               bool isBands);
+
+    // Private method for chord detection (Stage B)
+    void detectChord(const float* chroma, ChordState& outChord);
+
+    // Private method for saliency computation (Stage B, Musical Intelligence System Phase 1)
+    void computeSaliency(ControlBusFrame& frame);
+};
+
+} // namespace lightwaveos::audio
+
+
+================================================================================
+FILE: firmware-v3/src/plugins/api/EffectContext.h
+DESCRIPTION: Per-frame DI container passed to every effect's render() — leds[], palette, brightness/speed/intensity, AudioContext (with bass/mid/treble/onset/saliency/motion accessors), centre-origin helpers.
+================================================================================
+
+/**
+ * @file EffectContext.h
+ * @brief Dependency injection container for effect rendering
+ *
+ * EffectContext replaces the 15+ global variables from v1 with a single
+ * structured container. Effects receive this context in render() and
+ * should use ONLY this for accessing LEDs, palettes, and parameters.
+ *
+ * Key differences from v1:
+ * - No global leds[] - use ctx.leds
+ * - No global currentPalette - use ctx.palette
+ * - No global gHue - use ctx.gHue
+ * - No hardcoded 320 - use ctx.ledCount
+ * - No hardcoded 80 - use ctx.centerPoint
+ *
+ * CENTER ORIGIN: Use getDistanceFromCenter(i) for position-based effects.
+ * This returns 0.0 at center (LED 79/80) and 1.0 at edges (LED 0/159).
+ */
+
+#pragma once
+
+#include <cstdint>
+#include <cmath>
+
+#include "OnsetContext.h"
+
+// Feature flags
+#include "../../config/features.h"
+#include "../../audio/TranslationEngine.h"
+
+// Forward declare FastLED types for native builds
+#ifdef NATIVE_BUILD
+#include "../../../test/test_native/mocks/fastled_mock.h"
+#else
+#include <FastLED.h>
+#endif
+
+// Audio contracts (Phase 2)
+#if FEATURE_AUDIO_SYNC
+#include "../../audio/contracts/ControlBus.h"
+#include "../../audio/contracts/MusicalGrid.h"
+#include "../../audio/contracts/StyleDetector.h"
+#if FEATURE_AUDIO_BACKEND_PIPELINECORE
+#include "../../audio/pipeline/FrequencyMap.h"
+#endif
+#include "../../audio/contracts/MotionSemantics.h"
+#include "../../audio/contracts/MotionShaper.h"
+#endif
+
+// Behavior selection (Phase 3)
+#include "BehaviorSelection.h"
+
+namespace lightwaveos {
+namespace plugins {
+
+// ============================================================================
+// Audio Context (Phase 2)
+// ============================================================================
+
+enum class MusicalRange : uint8_t {
+    SUB_BASS,
+    BASS,
+    LOW_MID,
+    MID,
+    PRESENCE,
+    TREBLE,
+    FULL
+};
+
+#if FEATURE_AUDIO_SYNC
+/**
+ * @brief Audio context passed to effects (by-value copies for thread safety)
+ *
+ * This struct contains copies (not references!) of audio data from the
+ * AudioActor. It's populated by RendererActor each frame with extrapolated
+ * timing for smooth 120 FPS beat phase.
+ *
+ * Thread Safety:
+ * - All data is copied by value in renderFrame()
+ * - No references to AudioActor's buffers
+ * - Safe to use throughout effect render()
+ */
+struct AudioContext {
+    audio::ControlBusFrame controlBus;      ///< DSP signals (RMS, flux, bands)
+    audio::MusicalGridSnapshot musicalGrid; ///< Beat/tempo tracking
+    bool available = false;                  ///< True if audio data is fresh (<100ms old)
+    bool trinityActive = false;              ///< True if PRISM Trinity data is active (not microphone)
+    OnsetContext onset{};                    ///< First-class onset surface for effects
+
+    // ========================================================================
+    // Convenience Accessors
+    // ========================================================================
+
+    /// Get RMS energy level (0.0-1.0)
+    float rms() const { return controlBus.rms; }
+    float fastRms() const { return controlBus.fast_rms; }
+
+    /// Get spectral flux (onset detection signal)
+    float flux() const { return controlBus.flux; }
+    float fastFlux() const { return controlBus.fast_flux; }
+
+    /// Get frequency band energy (0-7: bass to treble)
+    float getBand(uint8_t i) const {
+        return (i < audio::CONTROLBUS_NUM_BANDS) ? controlBus.bands[i] : 0.0f;
+    }
+    float getHeavyBand(uint8_t i) const {
+        return (i < audio::CONTROLBUS_NUM_BANDS) ? controlBus.heavy_bands[i] : 0.0f;
+    }
+    /// Get pointer to full band array (for efficient iteration)
+    const float* bands() const { return controlBus.bands; }
+    /// Get pointer to full heavy-smoothed band array
+    const float* heavyBands() const { return controlBus.heavy_bands; }
+
+    /// Get bass energy (bands 0-1 averaged)
+    float bass() const { return (controlBus.bands[0] + controlBus.bands[1]) * 0.5f; }
+    float heavyBass() const { return (controlBus.heavy_bands[0] + controlBus.heavy_bands[1]) * 0.5f; }
+
+    /// Get mid energy (bands 2-4 averaged)
+    float mid() const {
+        return (controlBus.bands[2] + controlBus.bands[3] + controlBus.bands[4]) / 3.0f;
+    }
+    float heavyMid() const {
+        return (controlBus.heavy_bands[2] + controlBus.heavy_bands[3] + controlBus.heavy_bands[4]) / 3.0f;
+    }
+
+    /// Get treble energy (bands 5-7 averaged)
+    float treble() const {
+        return (controlBus.bands[5] + controlBus.bands[6] + controlBus.bands[7]) / 3.0f;
+    }
+    float heavyTreble() const {
+        return (controlBus.heavy_bands[5] + controlBus.heavy_bands[6] + controlBus.heavy_bands[7]) / 3.0f;
+    }
+
+    /// Get beat phase (0.0-1.0, wraps each beat)
+    float beatPhase() const { return onset.phase01; }
+
+    /// Check if currently on a beat (single-frame pulse)
+    bool isOnBeat() const { return onset.beat.fired || musicalGrid.beat_tick; }
+
+    /// Check if on a downbeat (beat 1 of measure)
+    bool isOnDownbeat() const { return onset.downbeat.fired || musicalGrid.downbeat_tick; }
+
+    /// Get current BPM estimate
+    float bpm() const {
+        return (onset.bpm != 120.0f || onset.tempoConfidence > 0.0f) ? onset.bpm : musicalGrid.bpm_smoothed;
+    }
+
+    /// Get tempo tracking confidence (0.0-1.0)
+    float tempoConfidence() const {
+        return (onset.tempoConfidence > 0.0f) ? onset.tempoConfidence : musicalGrid.tempo_confidence;
+    }
+
+    /// Get effect-facing audio confidence (0.0=silence/invalid, 1.0=usable music)
+    float audioConfidence() const { return controlBus.audioConfidence; }
+
+    /// True on the current tempo beat tick, using the available locked/grid source.
+    bool tempoBeatTick() const {
+        return controlBus.tempoBeatTick || controlBus.es_beat_tick || musicalGrid.beat_tick;
+    }
+
+    /// Effect-facing tempo confidence (0.0-1.0), preserving the strongest source.
+    float tempoBeatConfidence() const {
+        float c = tempoConfidence();
+        if (controlBus.tempoConfidence > c) c = controlBus.tempoConfidence;
+        if (controlBus.es_tempo_confidence > c) c = controlBus.es_tempo_confidence;
+        return c;
+    }
+
+    /// Beat position in the current bar (0-based; normally 0..3 for 4/4).
+    uint8_t beatInBar() const {
+        return (controlBus.es_beat_in_bar != 0U) ? controlBus.es_beat_in_bar : musicalGrid.beat_in_bar;
+    }
+
+    /// Get beat strength (0.0-1.0), peaks on beat detection then decays
+    /// Use this to scale visual intensity by beat confidence
+    /// Example: brightness *= 0.5f + 0.5f * ctx.audio.beatStrength();
+    float beatStrength() const {
+        return (onset.beat.level01 > 0.0f || onset.beat.fired) ? onset.beat.level01 : musicalGrid.beat_strength;
+    }
+
+    // --------------------------------------------------------------------
+    // Translation scene accessors (perceptual mapping layer)
+    // --------------------------------------------------------------------
+
+    const audio::SceneParameters& sceneParameters() const { return controlBus.scene; }
+    audio::MotionPrimitive motionType() const { return controlBus.scene.motion_type; }
+    float phraseProgress() const { return controlBus.scene.phrase_progress; }
+    float tension() const { return controlBus.scene.tension; }
+    float beatPulse() const { return controlBus.scene.beat_pulse; }
+    bool timingReliable() const { return controlBus.scene.timing_reliable; }
+
+    /// Get waveform sample count
+    uint8_t waveformSize() const { return audio::CONTROLBUS_WAVEFORM_N; }
+
+    /// Get raw waveform sample at index (int16_t: -32768 to 32767)
+    int16_t getWaveformSample(uint8_t index) const {
+        if (index < audio::CONTROLBUS_WAVEFORM_N) {
+            return controlBus.waveform[index];
+        }
+        return 0;
+    }
+
+    /// Get normalized waveform amplitude at index (0.0-1.0, based on abs(sample)/32768)
+    float getWaveformAmplitude(uint8_t index) const {
+        if (index < audio::CONTROLBUS_WAVEFORM_N) {
+            int16_t sample = controlBus.waveform[index];
+            int16_t absSample = (sample < 0) ? -sample : sample;
+            return static_cast<float>(absSample) / 32768.0f;
+        }
+        return 0.0f;
+    }
+
+    /// Get normalized waveform sample with sign (-1.0 to +1.0)
+    float getWaveformNormalized(uint8_t index) const {
+        if (index < audio::CONTROLBUS_WAVEFORM_N) {
+            return static_cast<float>(controlBus.waveform[index]) / 32768.0f;
+        }
+        return 0.0f;
+    }
+
+    /// Get pointer to contract waveform (128 samples)
+    const int16_t* waveform() const { return controlBus.waveform; }
+
+    /// Get pointer to Sensory Bridge parity waveform side-car (128 samples)
+    const int16_t* sbWaveform() const { return controlBus.sb_waveform; }
+
+    /// Get Sensory Bridge waveform peak scalar (0..1)
+    float sbWaveformPeakScaled() const { return controlBus.sb_waveform_peak_scaled; }
+
+    /// True when side-car waveform is populated and can be preferred
+    bool hasSbWaveform() const { return controlBus.sb_waveform_peak_scaled >= 0.0001f; }
+
+    /// Preferred waveform source for parity effects
+    const int16_t* preferredWaveform() const {
+        return hasSbWaveform() ? controlBus.sb_waveform : controlBus.waveform;
+    }
+
+    // ========================================================================
+    // Chord Detection Accessors (Priority 6: Musical intelligence)
+    // ========================================================================
+
+    /// Get full chord state struct
+    const audio::ChordState& chordState() const { return controlBus.chordState; }
+
+    /// Get detected chord type (NONE, MAJOR, MINOR, DIMINISHED, AUGMENTED)
+    audio::ChordType chordType() const { return controlBus.chordState.type; }
+
+    /// Get root note (0-11: C=0, C#=1, D=2, ..., B=11)
+    uint8_t rootNote() const { return controlBus.chordState.rootNote; }
+
+    /// Get chord detection confidence (0.0-1.0)
+    float chordConfidence() const { return controlBus.chordState.confidence; }
+
+    /// Check if detected chord is major
+    bool isMajor() const { return controlBus.chordState.type == audio::ChordType::MAJOR; }
+
+    /// Check if detected chord is minor
+    bool isMinor() const { return controlBus.chordState.type == audio::ChordType::MINOR; }
+
+    /// Check if detected chord is diminished
+    bool isDiminished() const { return controlBus.chordState.type == audio::ChordType::DIMINISHED; }
+
+    /// Check if detected chord is augmented
+    bool isAugmented() const { return controlBus.chordState.type == audio::ChordType::AUGMENTED; }
+
+    /// Check if any chord is detected (not NONE)
+    bool hasChord() const { return controlBus.chordState.type != audio::ChordType::NONE; }
+
+    // ========================================================================
+    // Hop / Chroma / State Accessors (API completeness)
+    // ========================================================================
+
+    /// Get hop sequence counter (monotonically increasing per audio hop)
+    uint32_t hopSequence() const { return controlBus.hop_seq; }
+
+    /// Get single chroma bin value (0-11: C=0, C#=1, ..., B=11)
+    float getChroma(uint8_t i) const {
+        return (i < audio::CONTROLBUS_NUM_CHROMA) ? controlBus.chroma[i] : 0.0f;
+    }
+    /// Get single heavy-smoothed chroma bin value
+    float getHeavyChroma(uint8_t i) const {
+        return (i < audio::CONTROLBUS_NUM_CHROMA) ? controlBus.heavy_chroma[i] : 0.0f;
+    }
+    /// Get pointer to full chroma array (for efficient iteration)
+    const float* chroma() const { return controlBus.chroma; }
+    /// Get pointer to full heavy-smoothed chroma array
+    const float* heavyChroma() const { return controlBus.heavy_chroma; }
+
+    /// Get audio-driven liveliness scalar (0.0-1.0)
+    float liveliness() const { return controlBus.liveliness; }
+    /// Get silence fade scale (1.0=active, 0.0=silent)
+    float silentScale() const { return controlBus.silentScale; }
+    /// Check if audio is currently silent
+    bool isSilent() const { return controlBus.isSilent; }
+
+    // ========================================================================
+    // First-Class Onset Surface
+    // ========================================================================
+
+    /// Check if any broadband onset event fired this frame.
+    bool hasOnsetEvent() const { return onset.transient.fired || controlBus.onsetEvent > 0.0f; }
+
+    /// Get thresholded onset envelope (continuous, 0.0-1.0).
+    float onsetEnv() const { return (onset.raw.env > 0.0f) ? onset.raw.env : controlBus.onsetEnv; }
+
+    /// Get discrete onset event strength (single-hop pulse, 0.0-1.0).
+    float onsetEvent() const { return (onset.raw.event > 0.0f) ? onset.raw.event : controlBus.onsetEvent; }
+
+    /// Get raw onset flux (advanced/debug use; detector-scale sensitive).
+    float onsetFlux() const { return (onset.raw.flux > 0.0f) ? onset.raw.flux : controlBus.onsetFlux; }
+
+    /// Get low/mid/high onset band flux (advanced/debug use).
+    float kickFlux() const { return (onset.raw.bassFlux > 0.0f) ? onset.raw.bassFlux : controlBus.onsetBassFlux; }
+    float snareFlux() const { return (onset.raw.midFlux > 0.0f) ? onset.raw.midFlux : controlBus.onsetMidFlux; }
+    float hihatFlux() const { return (onset.raw.highFlux > 0.0f) ? onset.raw.highFlux : controlBus.onsetHighFlux; }
+
+    /// Get semantic kick/snare/hi-hat channel levels (0.0-1.0).
+    float kickLevel() const {
+        return (onset.kick.level01 > 0.0f || onset.kick.fired)
+            ? onset.kick.level01
+            : fmaxf(0.0f, fminf(1.0f, kickFlux()));
+    }
+    float snare() const {
+        return (onset.snare.level01 > 0.0f || onset.snare.fired)
+            ? onset.snare.level01
+            : controlBus.snareEnergy;
+    }
+    float hihat() const {
+        return (onset.hihat.level01 > 0.0f || onset.hihat.fired)
+            ? onset.hihat.level01
+            : controlBus.hihatEnergy;
+    }
+
+#if FEATURE_AUDIO_HF_SEMANTICS
+    /// High-frequency content exists; not a hi-hat trigger by itself.
+    float hfEnergy() const { return controlBus.hfEnergy; }
+    /// Positive high-frequency change; not a confirmed hat event by itself.
+    float hfFlux() const { return controlBus.hfFlux; }
+    /// Short hat-like event strength [0,1], derived from the compact Q15 event.
+    float hatEvent() const { return static_cast<float>(controlBus.hatEvent.strength) / 65535.0f; }
+    /// Full compact hat event for effects that need confidence or age.
+    const audio::AudioEventQ15& hatEventInfo() const { return controlBus.hatEvent; }
+    /// Sustained cymbal/noisy HF envelope.
+    float cymbalSustain() const { return controlBus.cymbalSustain; }
+    /// Smooth upper-air shimmer bed.
+    float airEnergy() const { return controlBus.airEnergy; }
+    /// Spectral tilt / upper-balance proxy.
+    float spectralBrightness() const { return controlBus.spectralBrightness; }
+    /// Alias requested by the AFS v2 helper direction; not LED output brightness.
+    float brightness() const { return spectralBrightness(); }
+    /// Signed spectral brightness movement [-1,1].
+    float spectralBrightnessDelta() const { return controlBus.spectralBrightnessDelta; }
+#else
+    float hfEnergy() const { return treble(); }
+    float hfFlux() const { return hihatFlux(); }
+    float hatEvent() const { return isHihatHit() ? hihat() : 0.0f; }
+    float cymbalSustain() const { return heavyTreble(); }
+    float airEnergy() const { return air(); }
+    float spectralBrightness() const { return treble(); }
+    float brightness() const { return spectralBrightness(); }
+    float spectralBrightnessDelta() const { return 0.0f; }
+#endif
+
+    /// Check semantic onset channel pulses.
+    bool isKickHit() const { return onset.kick.fired || controlBus.kickTrigger; }
+    bool isSnareHit() const { return onset.snare.fired || controlBus.snareTrigger; }
+    bool isHihatHit() const { return onset.hihat.fired || controlBus.hihatTrigger; }
+
+    // ========================================================================
+    // 64-bin FFT Accessors (Phase 2: Detailed frequency analysis)
+    // ========================================================================
+
+    /// Get number of FFT bins available
+    static constexpr uint8_t bins64Count() { return audio::ControlBusFrame::BINS_64_COUNT; }
+
+    /// Get single bin value from 64-bin FFT (0.0-1.0)
+    float bin(uint8_t index) const {
+        if (index < audio::ControlBusFrame::BINS_64_COUNT) {
+            return controlBus.bins64[index];
+        }
+        return 0.0f;
+    }
+
+    /// Get pointer to full 64-bin array (for efficient iteration)
+    const float* bins64() const { return controlBus.bins64; }
+
+    /// Get single bin value from adaptive 64-bin FFT (0.0-1.0)
+    float binAdaptive(uint8_t index) const {
+        if (index < audio::ControlBusFrame::BINS_64_COUNT) {
+            return controlBus.bins64Adaptive[index];
+        }
+        return 0.0f;
+    }
+
+    /// Get pointer to adaptive 64-bin array (Sensory Bridge normalisation)
+    const float* bins64Adaptive() const { return controlBus.bins64Adaptive; }
+
+    /// Canonical effect-facing musical bin, backed by the 64-bin surface.
+    float musicalBin(uint8_t index) const { return binAdaptive(index); }
+
+    /// Mean energy over canonical 64-bin musical bins [lo, hi).
+    float musicalRange(uint8_t loInclusive, uint8_t hiExclusive) const {
+        if (loInclusive >= audio::ControlBusFrame::BINS_64_COUNT) return 0.0f;
+        if (hiExclusive > audio::ControlBusFrame::BINS_64_COUNT) {
+            hiExclusive = audio::ControlBusFrame::BINS_64_COUNT;
+        }
+        if (loInclusive >= hiExclusive) return 0.0f;
+        float sum = 0.0f;
+        for (uint8_t i = loInclusive; i < hiExclusive; ++i) {
+            sum += musicalBin(i);
+        }
+        return sum / static_cast<float>(hiExclusive - loInclusive);
+    }
+
+    /// Mean energy over a named canonical 64-bin musical range.
+    float musicalRange(MusicalRange range) const {
+        switch (range) {
+            case MusicalRange::SUB_BASS:  return musicalRange(0, 4);
+            case MusicalRange::BASS:      return musicalRange(4, 12);
+            case MusicalRange::LOW_MID:   return musicalRange(12, 24);
+            case MusicalRange::MID:       return musicalRange(24, 38);
+            case MusicalRange::PRESENCE:  return musicalRange(38, 52);
+            case MusicalRange::TREBLE:    return musicalRange(52, 64);
+            case MusicalRange::FULL:
+            default:                      return musicalRange(0, 64);
+        }
+    }
+
+    // ========================================================================
+    // 256-bin FFT / Frequency-Semantic Accessors (PipelineCore backend)
+    // ========================================================================
+
+#if FEATURE_AUDIO_BACKEND_PIPELINECORE
+    /// Number of full-resolution FFT bins
+    static constexpr uint16_t bins256Count() { return audio::ControlBusFrame::BINS_256_COUNT; }
+
+    /// Full 256-bin spectrum (0..1 normalised magnitudes)
+    const float* bins256() const { return controlBus.bins256; }
+
+    /// Frequency resolution in Hz per bin (sampleRate / fftSize)
+    float binHz() const { return controlBus.binHz; }
+
+    /// Mean energy in a named frequency band (FrequencyMap single source of truth)
+    float namedBandEnergy(::audio::NamedBand band) const {
+        const auto& def = ::audio::kNamedBandDefs[static_cast<size_t>(band)];
+        return energyInRange(def.freqLo, def.freqHi);
+    }
+
+    /// Sub-bass energy (20-120 Hz)
+    float subBass() const { return namedBandEnergy(::audio::NamedBand::SUB_BASS); }
+
+    /// Kick energy (60-150 Hz)
+    float kick() const { return namedBandEnergy(::audio::NamedBand::KICK); }
+
+    /// Low-mid energy (250-500 Hz)
+    float lowMid() const { return namedBandEnergy(::audio::NamedBand::LOW_MID); }
+
+    /// Mid-presence energy (500-2000 Hz)
+    float midPresence() const { return namedBandEnergy(::audio::NamedBand::MID); }
+
+    /// Shimmer energy (1300-4200 Hz)
+    float shimmer() const { return namedBandEnergy(::audio::NamedBand::SHIMMER); }
+
+    /// Air energy (8000-16000 Hz)
+    float air() const { return namedBandEnergy(::audio::NamedBand::AIR); }
+
+    /// Generic frequency range query (returns mean energy in [freqLo, freqHi] Hz)
+    float energyInRange(float freqLo, float freqHi) const {
+        if (controlBus.binHz <= 0.0f) return 0.0f;
+        uint16_t lo = static_cast<uint16_t>(freqLo / controlBus.binHz + 0.5f);
+        uint16_t hi = static_cast<uint16_t>(freqHi / controlBus.binHz + 0.5f);
+        if (lo >= 256) return 0.0f;
+        if (hi > 256) hi = 256;
+        if (lo >= hi) return 0.0f;
+        float s = 0;
+        for (uint16_t i = lo; i < hi; ++i) s += controlBus.bins256[i];
+        return s / static_cast<float>(hi - lo);
+    }
+#else
+    /// Fallback: delegate to legacy band accessors when PipelineCore not active
+    float subBass() const { return bass(); }
+    float kick() const { return bass(); }
+    float lowMid() const { return mid(); }
+    float midPresence() const { return mid(); }
+    float shimmer() const { return treble(); }
+    float air() const { return treble(); }
+#endif
+
+    // ========================================================================
+    // Musical Saliency Accessors (MIS Phase 1: Adaptive audio-visual intelligence)
+    // ========================================================================
+
+    /// Get full saliency frame struct
+    const audio::MusicalSaliencyFrame& saliencyFrame() const { return controlBus.saliency; }
+
+    /// Get overall saliency score (0.0-1.0, weighted combination of all novelty types)
+    float overallSaliency() const { return controlBus.saliency.overallSaliency; }
+
+    /// Check if harmonic saliency is currently dominant (chord/key changes)
+    bool isHarmonicDominant() const {
+        return controlBus.saliency.getDominantType() == audio::SaliencyType::HARMONIC;
+    }
+
+    /// Check if rhythmic saliency is currently dominant (beat/tempo changes)
+    bool isRhythmicDominant() const {
+        return controlBus.saliency.getDominantType() == audio::SaliencyType::RHYTHMIC;
+    }
+
+    /// Check if timbral saliency is currently dominant (spectral/texture changes)
+    bool isTimbralDominant() const {
+        return controlBus.saliency.getDominantType() == audio::SaliencyType::TIMBRAL;
+    }
+
+    /// Check if dynamic saliency is currently dominant (loudness/energy changes)
+    bool isDynamicDominant() const {
+        return controlBus.saliency.getDominantType() == audio::SaliencyType::DYNAMIC;
+    }
+
+    /// Get harmonic saliency (smoothed, 0.0-1.0) - chord/key changes
+    float harmonicSaliency() const { return controlBus.saliency.harmonicNoveltySmooth; }
+
+    /// Get rhythmic saliency (smoothed, 0.0-1.0) - beat pattern changes
+    float rhythmicSaliency() const { return controlBus.saliency.rhythmicNoveltySmooth; }
+
+    /// Get timbral saliency (smoothed, 0.0-1.0) - spectral character changes
+    float timbralSaliency() const { return controlBus.saliency.timbralNoveltySmooth; }
+
+    /// Get dynamic saliency (smoothed, 0.0-1.0) - loudness envelope changes
+    float dynamicSaliency() const { return controlBus.saliency.dynamicNoveltySmooth; }
+
+    // ========================================================================
+    // Music Style Accessors (MIS Phase 2: Adaptive style detection)
+    // ========================================================================
+
+    /// Get detected music style
+    audio::MusicStyle musicStyle() const { return controlBus.currentStyle; }
+
+    /// Get style detection confidence (0.0-1.0)
+    float styleConfidence() const { return controlBus.styleConfidence; }
+
+    /// Check if music is rhythm-driven (EDM, hip-hop)
+    bool isRhythmicMusic() const { return controlBus.currentStyle == audio::MusicStyle::RHYTHMIC_DRIVEN; }
+
+    /// Check if music is harmony-driven (jazz, classical)
+    bool isHarmonicMusic() const { return controlBus.currentStyle == audio::MusicStyle::HARMONIC_DRIVEN; }
+
+    /// Check if music is melody-driven (vocal pop)
+    bool isMelodicMusic() const { return controlBus.currentStyle == audio::MusicStyle::MELODIC_DRIVEN; }
+
+    /// Check if music is texture-driven (ambient, drone)
+    bool isTextureMusic() const { return controlBus.currentStyle == audio::MusicStyle::TEXTURE_DRIVEN; }
+
+    /// Check if music is dynamics-driven (orchestral)
+    bool isDynamicMusic() const { return controlBus.currentStyle == audio::MusicStyle::DYNAMIC_DRIVEN; }
+
+    // ========================================================================
+    // Behavior Context Accessors (MIS Phase 3: Adaptive behavior selection)
+    // ========================================================================
+
+    BehaviorContext behaviorContext{};  ///< Behavior selection context (populated by RendererActor pre-render)
+
+    // ========================================================================
+    // Motion-Semantic Accessors (Layer 2: Laban 4D + modifiers)
+    // ========================================================================
+
+    audio::MotionSemanticFrame motionFrame{};  ///< 6-axis motion-semantic frame (populated by RendererActor)
+    audio::MotionShaping motionShaping{};       ///< Layer 3: temporal envelope shaping
+
+    /// Weight (Light ↔ Strong) [0.0, 1.0]
+    float motionWeight() const { return motionFrame.weight; }
+    /// Time quality (Sustained ↔ Sudden) [0.0, 1.0]
+    float motionTime() const { return motionFrame.time_quality; }
+    /// Space (Direct ↔ Indirect) [0.0, 1.0]
+    float motionSpace() const { return motionFrame.space; }
+    /// Flow (Bound ↔ Free) [0.0, 1.0]
+    float motionFlow() const { return motionFrame.flow; }
+    /// Fluidity (Jerky ↔ Fluid) [0.0, 1.0]
+    float motionFluidity() const { return motionFrame.fluidity; }
+    /// Impulse Strength (Weak ↔ Explosive) [0.0, 1.0]
+    float motionImpulse() const { return motionFrame.impulse_strength; }
+    /// Minimum confidence across inferred dimensions (0-255)
+    uint8_t motionConfidence() const { return motionFrame.confidence_min; }
+
+    // ========================================================================
+    // Layer 3: Temporal Envelope Shaping Accessors
+    // ========================================================================
+
+    /// Envelope-shaped onset intensity [0-1]
+    float shapedIntensity() const { return motionShaping.intensity; }
+    /// Recommended decay time from fluidity [150-600ms]
+    float shapedDecayMs() const { return motionShaping.decayMs; }
+    /// Syncopation-derived accent multiplier [0.7-1.3]
+    float shapedAccent() const { return motionShaping.accentScale; }
+    /// True during active envelope
+    bool shapingActive() const { return motionShaping.active; }
+
+    /// Get the recommended primary visual behavior
+    VisualBehavior recommendedBehavior() const { return behaviorContext.recommendedPrimary; }
+
+    /// Check if effect should pulse on beat (rhythmic music or high rhythmic saliency)
+    bool shouldPulseOnBeat() const {
+        return behaviorContext.recommendedPrimary == VisualBehavior::PULSE_ON_BEAT;
+    }
+
+    /// Check if effect should drift with harmony (harmonic music or chord changes)
+    bool shouldDriftWithHarmony() const {
+        return behaviorContext.recommendedPrimary == VisualBehavior::DRIFT_WITH_HARMONY;
+    }
+
+    /// Check if effect should shimmer with melody (melodic music or treble emphasis)
+    bool shouldShimmerWithMelody() const {
+        return behaviorContext.recommendedPrimary == VisualBehavior::SHIMMER_WITH_MELODY;
+    }
+
+    /// Check if effect should breathe with dynamics (dynamic music or RMS-driven)
+    bool shouldBreatheWithDynamics() const {
+        return behaviorContext.recommendedPrimary == VisualBehavior::BREATHE_WITH_DYNAMICS;
+    }
+
+    /// Check if effect should use texture flow (ambient/textural music)
+    bool shouldTextureFlow() const {
+        return behaviorContext.recommendedPrimary == VisualBehavior::TEXTURE_FLOW;
+    }
+};
+
+#else
+/**
+ * @brief Stub AudioContext when FEATURE_AUDIO_SYNC is disabled
+ *
+ * Provides the same API with sensible defaults so effects compile
+ * without #if guards everywhere.
+ */
+struct AudioContext {
+    bool available = false;
+    bool trinityActive = false;
+    OnsetContext onset{};
+
+    float rms() const { return 0.0f; }
+    float fastRms() const { return 0.0f; }
+    float flux() const { return 0.0f; }
+    float fastFlux() const { return 0.0f; }
+    float getBand(uint8_t) const { return 0.0f; }
+    float getHeavyBand(uint8_t) const { return 0.0f; }
+    const float* bands() const { return nullptr; }
+    const float* heavyBands() const { return nullptr; }
+    float bass() const { return 0.0f; }
+    float heavyBass() const { return 0.0f; }
+    float mid() const { return 0.0f; }
+    float heavyMid() const { return 0.0f; }
+    float treble() const { return 0.0f; }
+    float heavyTreble() const { return 0.0f; }
+    float beatPhase() const { return onset.phase01; }
+    bool isOnBeat() const { return onset.beat.fired; }
+    bool isOnDownbeat() const { return onset.downbeat.fired; }
+    float bpm() const { return onset.bpm; }
+    float tempoConfidence() const { return onset.tempoConfidence; }
+    float audioConfidence() const { return 0.0f; }
+    bool tempoBeatTick() const { return false; }
+    float tempoBeatConfidence() const { return onset.tempoConfidence; }
+    uint8_t beatInBar() const { return 0; }
+    float beatStrength() const { return onset.beat.level01; }
+    const audio::SceneParameters& sceneParameters() const { return audio::kDefaultSceneParameters; }
+    audio::MotionPrimitive motionType() const { return audio::MotionPrimitive::DRIFT; }
+    float phraseProgress() const { return 0.0f; }
+    float tension() const { return 0.0f; }
+    float beatPulse() const { return 0.0f; }
+    bool timingReliable() const { return false; }
+    uint8_t waveformSize() const { return 128; }
+    int16_t getWaveformSample(uint8_t) const { return 0; }
+    float getWaveformAmplitude(uint8_t) const { return 0.0f; }
+    float getWaveformNormalized(uint8_t) const { return 0.0f; }
+    const int16_t* waveform() const { return nullptr; }
+    const int16_t* sbWaveform() const { return nullptr; }
+    float sbWaveformPeakScaled() const { return 0.0f; }
+    bool hasSbWaveform() const { return false; }
+    const int16_t* preferredWaveform() const { return nullptr; }
+
+    // Chord detection stubs (always return "no chord")
+    struct StubChordState {
+        uint8_t rootNote = 0;
+        uint8_t type = 0;  // NONE
+        float confidence = 0.0f;
+        float rootStrength = 0.0f;
+        float thirdStrength = 0.0f;
+        float fifthStrength = 0.0f;
+    };
+    StubChordState chordState() const { return StubChordState{}; }
+    uint8_t chordType() const { return 0; }  // NONE
+    uint8_t rootNote() const { return 0; }
+    float chordConfidence() const { return 0.0f; }
+    bool isMajor() const { return false; }
+    bool isMinor() const { return false; }
+    bool isDiminished() const { return false; }
+    bool isAugmented() const { return false; }
+    bool hasChord() const { return false; }
+
+    // First-class onset stubs (always return 0/false)
+    bool hasOnsetEvent() const { return false; }
+    float onsetEnv() const { return onset.raw.env; }
+    float onsetEvent() const { return onset.raw.event; }
+    float onsetFlux() const { return onset.raw.flux; }
+    float kickFlux() const { return onset.raw.bassFlux; }
+    float snareFlux() const { return onset.raw.midFlux; }
+    float hihatFlux() const { return onset.raw.highFlux; }
+    float kickLevel() const { return onset.kick.level01; }
+    float snare() const { return onset.snare.level01; }
+    float hihat() const { return onset.hihat.level01; }
+    float hfEnergy() const { return 0.0f; }
+    float hfFlux() const { return 0.0f; }
+    float hatEvent() const { return 0.0f; }
+    float cymbalSustain() const { return 0.0f; }
+    float airEnergy() const { return 0.0f; }
+    float spectralBrightness() const { return 0.0f; }
+    float brightness() const { return 0.0f; }
+    float spectralBrightnessDelta() const { return 0.0f; }
+    bool isKickHit() const { return onset.kick.fired; }
+    bool isSnareHit() const { return onset.snare.fired; }
+    bool isHihatHit() const { return onset.hihat.fired; }
+
+    // Hop / Chroma / State stubs
+    uint32_t hopSequence() const { return 0; }
+    float getChroma(uint8_t) const { return 0.0f; }
+    float getHeavyChroma(uint8_t) const { return 0.0f; }
+    const float* chroma() const { return nullptr; }
+    const float* heavyChroma() const { return nullptr; }
+    float liveliness() const { return 0.0f; }
+    float silentScale() const { return 1.0f; }
+    bool isSilent() const { return false; }
+
+    // 64-bin FFT stubs
+    static constexpr uint8_t bins64Count() { return 64; }
+    float bin(uint8_t) const { return 0.0f; }
+    const float* bins64() const { return nullptr; }
+    float binAdaptive(uint8_t) const { return 0.0f; }
+    const float* bins64Adaptive() const { return nullptr; }
+    float musicalBin(uint8_t) const { return 0.0f; }
+    float musicalRange(uint8_t, uint8_t) const { return 0.0f; }
+    float musicalRange(MusicalRange) const { return 0.0f; }
+
+    // Musical saliency stubs (always return "not salient")
+    struct StubSaliencyFrame {
+        float overallSaliency = 0.0f;
+        float harmonicNoveltySmooth = 0.0f;
+        float rhythmicNoveltySmooth = 0.0f;
+        float timbralNoveltySmooth = 0.0f;
+        float dynamicNoveltySmooth = 0.0f;
+        uint8_t dominantType = 3;  // DYNAMIC default
+    };
+    StubSaliencyFrame saliencyFrame() const { return StubSaliencyFrame{}; }
+    float overallSaliency() const { return 0.0f; }
+    bool isHarmonicDominant() const { return false; }
+    bool isRhythmicDominant() const { return false; }
+    bool isTimbralDominant() const { return false; }
+    bool isDynamicDominant() const { return false; }
+    float harmonicSaliency() const { return 0.0f; }
+    float rhythmicSaliency() const { return 0.0f; }
+    float timbralSaliency() const { return 0.0f; }
+    float dynamicSaliency() const { return 0.0f; }
+
+    // Music style stubs
+    uint8_t musicStyle() const { return 0; }  // UNKNOWN
+    float styleConfidence() const { return 0.0f; }
+    bool isRhythmicMusic() const { return false; }
+    bool isHarmonicMusic() const { return false; }
+    bool isMelodicMusic() const { return false; }
+    bool isTextureMusic() const { return false; }
+    bool isDynamicMusic() const { return false; }
+
+    // Motion-semantic stubs (neutral defaults)
+    struct StubMotionFrame {
+        float weight = 0.5f; float time_quality = 0.5f; float space = 0.5f;
+        float flow = 0.5f; float fluidity = 0.5f; float impulse_strength = 0.0f;
+        uint8_t confidence_min = 0;
+    };
+    StubMotionFrame motionFrame{};
+    float motionWeight() const { return 0.5f; }
+    float motionTime() const { return 0.5f; }
+    float motionSpace() const { return 0.5f; }
+    float motionFlow() const { return 0.5f; }
+    float motionFluidity() const { return 0.5f; }
+    float motionImpulse() const { return 0.0f; }
+    uint8_t motionConfidence() const { return 0; }
+
+    // Layer 3: Temporal shaping stubs (inactive when no audio)
+    float shapedIntensity() const { return 0.0f; }
+    float shapedDecayMs() const { return 300.0f; }
+    float shapedAccent() const { return 1.0f; }
+    bool shapingActive() const { return false; }
+
+    // Behavior context stubs (always return default behavior)
+    BehaviorContext behaviorContext{};  ///< Default behavior context
+    VisualBehavior recommendedBehavior() const { return VisualBehavior::BREATHE_WITH_DYNAMICS; }
+    bool shouldPulseOnBeat() const { return false; }
+    bool shouldDriftWithHarmony() const { return false; }
+    bool shouldShimmerWithMelody() const { return false; }
+    bool shouldBreatheWithDynamics() const { return true; }  // Default behavior
+    bool shouldTextureFlow() const { return false; }
+};
+#endif
+
+/**
+ * @brief Palette wrapper for portable color lookups
+ */
+class PaletteRef {
+public:
+    PaletteRef() : m_palette(nullptr) {}
+
+#ifndef NATIVE_BUILD
+    explicit PaletteRef(const CRGBPalette16* palette) : m_palette(palette) {}
+
+    /**
+     * @brief Get color from palette
+     * @param index Position in palette (0-255)
+     * @param brightness Optional brightness scaling (0-255)
+     * @return Color from palette
+     */
+    CRGB getColor(uint8_t index, uint8_t brightness = 255) const {
+        if (!m_palette) return CRGB::Black;
+        return ColorFromPalette(*m_palette, index, brightness, LINEARBLEND);
+    }
+#else
+    explicit PaletteRef(const void* palette) : m_palette(palette) {}
+
+    CRGB getColor(uint8_t index, uint8_t brightness = 255) const {
+        (void)brightness;
+        // Mock implementation for testing
+        return CRGB(index, index, index);
+    }
+#endif
+
+    bool isValid() const { return m_palette != nullptr; }
+    
+    /**
+     * @brief Get raw palette pointer (for adapter compatibility)
+     * @return Raw palette pointer
+     */
+#ifndef NATIVE_BUILD
+    const CRGBPalette16* getRaw() const { return m_palette; }
+#else
+    const void* getRaw() const { return m_palette; }
+#endif
+
+private:
+#ifndef NATIVE_BUILD
+    const CRGBPalette16* m_palette;
+#else
+    const void* m_palette;
+#endif
+};
+
+/**
+ * @brief Effect rendering context with all dependencies
+ *
+ * This is the single source of truth for effect rendering. All effect
+ * implementations receive this context and should NOT access any other
+ * global state.
+ */
+struct EffectContext {
+    //--------------------------------------------------------------------------
+    // LED Buffer (WRITE TARGET)
+    //--------------------------------------------------------------------------
+
+    CRGB* leds;                 ///< LED buffer to write to
+    uint16_t ledCount;          ///< Total LED count (320 for standard config)
+    uint16_t centerPoint;       ///< CENTER ORIGIN point (80 for standard config)
+
+    //--------------------------------------------------------------------------
+    // Palette
+    //--------------------------------------------------------------------------
+
+    PaletteRef palette;         ///< Current palette for color lookups
+
+    //--------------------------------------------------------------------------
+    // Global Animation Parameters
+    //--------------------------------------------------------------------------
+
+    uint8_t brightness;         ///< Master brightness (0-255)
+    uint8_t speed;              ///< Animation speed (1-100)
+    uint8_t gHue;               ///< Auto-incrementing hue (0-255)
+    uint8_t mood;               ///< Sensory Bridge mood (0-255): low=reactive, high=smooth
+
+    //--------------------------------------------------------------------------
+    // Visual Enhancement Parameters (from v1 ColorEngine)
+    //--------------------------------------------------------------------------
+
+    uint8_t intensity;          ///< Effect intensity (0-255)
+    uint8_t saturation;         ///< Color saturation (0-255)
+    uint8_t complexity;         ///< Pattern complexity (0-255)
+    uint8_t variation;          ///< Random variation (0-255)
+    uint8_t fadeAmount;         ///< Trail fade (0-255): 0=no fade, higher=faster
+
+    //--------------------------------------------------------------------------
+    // Timing
+    //--------------------------------------------------------------------------
+
+    uint32_t deltaTimeMs;       ///< Time since last frame (ms)
+    float deltaTimeSeconds;     ///< Time since last frame (seconds, high precision)
+    uint32_t rawDeltaTimeMs;    ///< Unscaled time since last frame (ms)
+    float rawDeltaTimeSeconds;  ///< Unscaled time since last frame (seconds)
+    uint32_t frameNumber;       ///< Frame counter (wraps at 2^32)
+    uint32_t totalTimeMs;       ///< Total effect runtime (ms)
+    uint32_t rawTotalTimeMs;    ///< Unscaled total effect runtime (ms)
+
+    //--------------------------------------------------------------------------
+    // Zone Information (when rendering a zone)
+    //--------------------------------------------------------------------------
+
+    uint8_t zoneId;             ///< Current zone ID (0-2, or 0xFF if global)
+    uint16_t zoneStart;         ///< Zone start index in global buffer
+    uint16_t zoneLength;        ///< Zone length
+
+    //--------------------------------------------------------------------------
+    // Dual-Strip Channel API (opt-in independent rendering)
+    //--------------------------------------------------------------------------
+    // K1 hardware is dual edge-lit LGP: two physical strips of 160 LEDs each,
+    // wired to separate FastLED controllers / GPIOs. Legacy effects render to
+    // ctx.leds[0..319] as a single virtual strip and RendererActor splits the
+    // unified buffer into m_strip1/m_strip2 via mirror memcpy.
+    //
+    // Effects that want truly independent strips (Cross-Strip Wave Interference,
+    // Phase Parallax, Frequency-Spatial Stereo, Onset-Rupture Mirror, etc.)
+    // write directly to stripLeds[0]/stripLeds[1] and set dualChannelMode=true
+    // in render(). RendererActor then SKIPS the unified->strip memcpy so the
+    // asymmetric content reaches the LEDs intact. Centre origin is per-strip
+    // (LED 79 of each strip is its centre); use getDistanceFromStripCenter()
+    // for the per-strip equivalent of getDistanceFromCenter().
+
+    CRGB* stripLeds[2];         ///< Direct per-strip pointers (strip 0 + strip 1)
+    uint16_t stripLength;       ///< LEDs per strip (160 for K1 v2)
+    uint8_t stripCount;         ///< Number of physical strips (2 for K1 v2)
+    uint16_t stripCenter;       ///< Centre LED index per strip (79 for K1 v2)
+    bool dualChannelMode;       ///< Effect set true => wrote stripLeds[] directly; skip mirror memcpy
+
+    //--------------------------------------------------------------------------
+    // Audio Context (Phase 2 - Audio Sync)
+    //--------------------------------------------------------------------------
+
+    AudioContext audio;         ///< Audio-reactive data (by-value copy)
+
+    //--------------------------------------------------------------------------
+    // Helper Methods
+    //--------------------------------------------------------------------------
+
+    /**
+     * @brief Calculate normalized distance from center (CENTER ORIGIN pattern)
+     * @param index LED index (0 to ledCount-1)
+     * @return Distance from center: 0.0 at center, 1.0 at edges
+     *
+     * This is the core method for CENTER ORIGIN compliance. Effects should
+     * use this instead of raw index for position-based calculations.
+     *
+     * Example:
+     * @code
+     * for (uint16_t i = 0; i < ctx.ledCount; i++) {
+     *     float dist = ctx.getDistanceFromCenter(i);
+     *     uint8_t heat = 255 * (1.0f - dist);  // Hotter at center
+     *     ctx.leds[i] = ctx.palette.getColor(heat);
+     * }
+     * @endcode
+     */
+    float getDistanceFromCenter(uint16_t index) const {
+        if (ledCount == 0 || centerPoint == 0) return 0.0f;
+
+        int16_t distanceFromCenter = abs((int16_t)index - (int16_t)centerPoint);
+        float maxDistance = (float)centerPoint;  // Distance to edge
+
+        return (float)distanceFromCenter / maxDistance;
+    }
+
+    /**
+     * @brief Get signed position from center (-1.0 to +1.0)
+     * @param index LED index
+     * @return -1.0 at start, 0.0 at center, +1.0 at end
+     *
+     * Useful for effects that need to know which "side" of center an LED is on.
+     */
+    float getSignedPosition(uint16_t index) const {
+        if (ledCount == 0 || centerPoint == 0) return 0.0f;
+
+        int16_t offset = (int16_t)index - (int16_t)centerPoint;
+        float maxOffset = (float)centerPoint;
+
+        return (float)offset / maxOffset;
+    }
+
+    /**
+     * @brief Map strip index to mirror position (for symmetric effects)
+     * @param index LED index on one side
+     * @return Corresponding index on the other side
+     *
+     * For a 320-LED strip with center at 80:
+     * - mirrorIndex(0) returns 159
+     * - mirrorIndex(79) returns 80
+     * - mirrorIndex(80) returns 79
+     */
+    uint16_t mirrorIndex(uint16_t index) const {
+        if (index >= ledCount) return 0;
+
+        if (index < centerPoint) {
+            // Left side -> right side
+            return centerPoint + (centerPoint - 1 - index);
+        } else {
+            // Right side -> left side
+            return centerPoint - 1 - (index - centerPoint);
+        }
+    }
+
+    /**
+     * @brief Per-strip centre-origin distance (for DUAL_CHANNEL effects)
+     * @param ledIdx LED index within a single strip (0..stripLength-1)
+     * @return Distance from that strip's centre: 0.0 at stripCenter, 1.0 at strip edge
+     *
+     * Use this when writing to ctx.stripLeds[stripIdx][ledIdx] in a dual-channel
+     * effect — the regular getDistanceFromCenter() assumes the unified 320-LED
+     * virtual buffer with centre at LED 79 of that buffer, which is wrong when
+     * each physical strip has its own independent centre at index 79.
+     */
+    float getDistanceFromStripCenter(uint16_t ledIdx) const {
+        if (stripLength == 0 || stripCenter == 0) return 0.0f;
+        int16_t off = abs((int16_t)ledIdx - (int16_t)stripCenter);
+        return (float)off / (float)stripCenter;
+    }
+
+    /**
+     * @brief Get time-based phase for smooth animations
+     * @param frequencyHz Oscillation frequency
+     * @return Phase value (0.0 to 1.0)
+     */
+    float getPhase(float frequencyHz) const {
+        float period = 1000.0f / frequencyHz;
+        return fmodf((float)totalTimeMs, period) / period;
+    }
+
+    /**
+     * @brief Get sine wave value based on time
+     * @param frequencyHz Oscillation frequency
+     * @return Sine value (-1.0 to +1.0)
+     */
+    float getSineWave(float frequencyHz) const {
+        float phase = getPhase(frequencyHz);
+        return sinf(phase * 2.0f * 3.14159265f);
+    }
+
+    /**
+     * @brief Check if this is a zone render (not full strip)
+     * @return true if rendering to a zone
+     */
+    bool isZoneRender() const {
+        return zoneId != 0xFF;
+    }
+
+    /**
+     * @brief Get normalized mood value (Sensory Bridge pattern)
+     * @return 0.0 (reactive) to 1.0 (smooth)
+     *
+     * Effects can use this to adjust their smoothing behavior:
+     * - Low values: More responsive to transients, faster attack/decay
+     * - High values: More sustained, slower smoothing, dreamier feel
+     *
+     * Example (asymmetric smoothing):
+     * @code
+     * float moodNorm = ctx.getMoodNormalized();
+     * float riseAlpha = 0.3f + 0.4f * moodNorm;  // 0.3-0.7
+     * float fallAlpha = 0.5f + 0.3f * moodNorm;  // 0.5-0.8
+     * @endcode
+     */
+    float getMoodNormalized() const {
+        return static_cast<float>(mood) / 255.0f;
+    }
+
+    /**
+     * @brief Get smoothing follower coefficients (Sensory Bridge pattern)
+     * @param riseOut Output: rise/attack coefficient (0.0-1.0)
+     * @param fallOut Output: fall/decay coefficient (0.0-1.0)
+     *
+     * Implements the Sensory Bridge MOOD knob smoothing_follower behavior:
+     * - Low mood: Fast rise (0.3), faster fall (0.5) - reactive
+     * - High mood: Slow rise (0.7), slower fall (0.8) - smooth
+     */
+    void getMoodSmoothing(float& riseOut, float& fallOut) const {
+        float moodNorm = getMoodNormalized();
+        riseOut = 0.3f + 0.4f * moodNorm;   // 0.3 (reactive) to 0.7 (smooth)
+        fallOut = 0.5f + 0.3f * moodNorm;   // 0.5 (reactive) to 0.8 (smooth)
+    }
+
+    /**
+     * @brief Get safe delta time in seconds (clamped for physics stability)
+     * @return Delta time in seconds, clamped to [0.0001, 0.05]
+     *
+     * This prevents physics explosion on frame drops (>50ms) and ensures
+     * a minimum timestep for stability (0.1ms). Essential for true exponential
+     * smoothing formulas: alpha = 1 - exp(-lambda * dt)
+     *
+     * Example:
+     * @code
+     * float dt = ctx.getSafeDeltaSeconds();
+     * float alpha = 1.0f - expf(-5.0f * dt);  // True exponential decay
+     * value += (target - value) * alpha;
+     * @endcode
+     */
+    float getSafeDeltaSeconds() const {
+        float dt = deltaTimeSeconds;
+        if (dt < 0.0001f) dt = 0.0001f;   // Minimum 0.1ms for slow-motion precision
+        if (dt > 0.05f) dt = 0.05f;     // Maximum 50ms (20 FPS floor)
+        return dt;
+    }
+
+    /**
+     * @brief Get safe unscaled delta time in seconds (clamped for stability)
+     * @return Delta time in seconds, clamped to [0.0001, 0.05]
+     *
+     * Uses rawDeltaTimeSeconds so beat timing stays independent of SPEED.
+     */
+    float getSafeRawDeltaSeconds() const {
+        float dt = rawDeltaTimeSeconds;
+        if (dt < 0.0001f) dt = 0.0001f;
+        if (dt > 0.05f) dt = 0.05f;
+        return dt;
+    }
+
+    //--------------------------------------------------------------------------
+    // Constructor
+    //--------------------------------------------------------------------------
+
+    EffectContext()
+        : leds(nullptr)
+        , ledCount(0)
+        , centerPoint(0)
+        , palette()
+        , brightness(255)
+        , speed(15)
+        , gHue(0)
+        , mood(128)  // Default 0.5 normalized: balanced reactive/smooth
+        , intensity(128)
+        , saturation(255)
+        , complexity(128)
+        , variation(64)
+        , fadeAmount(20)
+        , deltaTimeMs(8)
+        , deltaTimeSeconds(0.008f)
+        , rawDeltaTimeMs(8)
+        , rawDeltaTimeSeconds(0.008f)
+        , frameNumber(0)
+        , totalTimeMs(0)
+        , rawTotalTimeMs(0)
+        , zoneId(0xFF)
+        , zoneStart(0)
+        , zoneLength(0)
+        , audio()  // Default-initialized (available=false)
+    {}
+};
+
+} // namespace plugins
+} // namespace lightwaveos
+
+
+================================================================================
+FILE: firmware-v3/src/plugins/api/IEffect.h
+DESCRIPTION: Core IEffect plugin interface — init/render/cleanup lifecycle, EffectMetadata, EffectCategory, EffectRoleFlags (DUAL_CHANNEL etc.), EffectParameter descriptors. PSRAM allocation policy header note.
+================================================================================
+
+/**
+ * @file IEffect.h
+ * @brief Core plugin interface for LightwaveOS v2 effects
+ *
+ * All effects (built-in, legacy wrapped, and third-party plugins) implement
+ * this interface. The system calls render() at 120 FPS with an EffectContext
+ * containing all dependencies - NO global variables.
+ *
+ * Example implementation:
+ * @code
+ * class FireEffect : public IEffect {
+ * public:
+ *     bool init(EffectContext& ctx) override {
+ *         // One-time setup
+ *         return true;
+ *     }
+ *
+ *     void render(EffectContext& ctx) override {
+ *         // Called 120x/second
+ *         for (uint16_t i = 0; i < ctx.ledCount; i++) {
+ *             float dist = ctx.getDistanceFromCenter(i);
+ *             ctx.leds[i] = ctx.palette->getColor(dist * 255);
+ *         }
+ *     }
+ *
+ *     void cleanup() override { }
+ *
+ *     const EffectMetadata& getMetadata() const override {
+ *         static EffectMetadata meta{"Fire", "Flames from center",
+ *                                    EffectCategory::FIRE, 1};
+ *         return meta;
+ *     }
+ * };
+ * @endcode
+ */
+
+#pragma once
+
+// =====================================================================
+// PSRAM ALLOCATION POLICY (MANDATORY)
+// =====================================================================
+// All IEffect implementations with buffers >64 bytes MUST allocate them
+// from PSRAM using heap_caps_malloc(size, MALLOC_CAP_SPIRAM).
+//
+// DO NOT declare large arrays as class members -- they end up in internal
+// DRAM (.bss section) and starve WiFi/lwIP/FreeRTOS of heap space.
+//
+// Pattern: Use a PsramData* pointer, allocate in init(), free in cleanup().
+// See: docs/MEMORY_ALLOCATION.md section 3.5 "Effect Buffer PSRAM Policy"
+// =====================================================================
+
+#include <cstdint>
+#include "../../config/effect_ids.h"
+
+namespace lightwaveos {
+namespace plugins {
+
+// Forward declarations
+class EffectContext;
+struct EffectMetadata;
+
+/**
+ * @brief Effect category for UI organization and filtering
+ */
+enum class EffectCategory : uint8_t {
+    UNCATEGORIZED = 0,
+    FIRE,           // Fire, heat, warmth effects
+    WATER,          // Ocean, waves, rain
+    NATURE,         // Aurora, forest, organic
+    GEOMETRIC,      // Patterns, shapes, mathematical
+    QUANTUM,        // LGP interference, wave physics
+    SHOCKWAVE,      // Pulse, burst, explosion
+    AMBIENT,        // Subtle, background, mood
+    PARTY,          // Fast, dynamic, music-reactive
+    CUSTOM,         // User-created via designer
+    LEGACY_LINEAR   // LINEAR patterns EXEMPT from CENTER_ORIGIN (v1 parity)
+};
+
+/**
+ * @brief Per-effect role hints for downstream composition / persistence passes
+ *
+ * INF-06 (Topology Reconciliation §6 item 9, Phase 1 Move 1.2). A bitmask of
+ * declarative tags that describes what an effect *does* to the framebuffer, so
+ * cross-cutting passes — INF-02 mandatory framebuffer LPF, COM-12 invert-input
+ * negative space, COM-16 colour/geometry orthogonal split, COM-04 background /
+ * foreground composition, PER-09/11/13/14 persistence opt-out hooks — can
+ * decide per-effect whether their pass applies without scanning render
+ * bodies.
+ *
+ * Default `roleFlags = NONE` preserves pre-INF-06 behaviour for the existing
+ * effect catalogue; effects opt in by ORing flags into their EffectMetadata.
+ *
+ * Held in a single byte; two bits reserved for future role hints.
+ */
+enum class EffectRoleFlags : uint8_t {
+    NONE                    = 0,
+    SELF_TRAILING           = 1u << 0,  // bakes its own trail (fadeToBlackBy / decay) — skip INF-02 LPF to avoid double-trail
+    RENDERS_COLOUR_ONLY     = 1u << 1,  // writes hue/sat only — geometry pass may run alongside (COM-16)
+    RENDERS_GEOMETRY_ONLY   = 1u << 2,  // writes value/position only — colour pass may run alongside (COM-16)
+    INVERT_INPUT_OK         = 1u << 3,  // safe to feed inverted input for AntiMode negative space (COM-12)
+    BACKGROUND              = 1u << 4,  // composes as background layer; absence = foreground (COM-04)
+    OPTS_OUT_OF_PERSISTENCE = 1u << 5,  // skip PER-09/11/13/14/X persistence wrappers
+    DUAL_CHANNEL            = 1u << 6   // effect renders strips independently via ctx.stripLeds[]; tells RendererActor to skip the unified->strip mirror memcpy and run tone-map per strip
+};
+
+/**
+ * @brief Effect metadata for registration and UI display
+ */
+struct EffectMetadata {
+    const char* name;           // Display name (max 32 chars)
+    const char* description;    // Brief description (max 128 chars)
+    EffectCategory category;    // Category for filtering
+    uint8_t version;            // Effect version (for updates)
+    const char* author;         // Creator name (optional)
+    EffectRoleFlags roleFlags;  // INF-06 role hints (default NONE = legacy)
+    EffectId id = INVALID_EFFECT_ID;  // Stable namespaced ID (set during registration)
+
+    // Default constructor
+    EffectMetadata(const char* n = "Unnamed",
+                   const char* d = "",
+                   EffectCategory c = EffectCategory::UNCATEGORIZED,
+                   uint8_t v = 1,
+                   const char* a = nullptr,
+                   EffectRoleFlags r = EffectRoleFlags::NONE)
+        : name(n), description(d), category(c), version(v), author(a), roleFlags(r) {}
+};
+
+/**
+ * @brief Parameter value type hint for UI generation
+ */
+enum class EffectParameterType : uint8_t {
+    FLOAT = 0,  // Continuous float slider
+    INT   = 1,  // Integer stepper
+    BOOL  = 2,  // Toggle switch
+    ENUM  = 3   // Discrete choice picker
+};
+
+/**
+ * @brief Effect parameter descriptor
+ *
+ * Extended metadata enables rich UI generation on iOS/Tab5 control surfaces.
+ * The 5-field constructor remains for backward compatibility with existing effects.
+ */
+struct EffectParameter {
+    const char* name;           // Parameter name (used as key)
+    const char* displayName;    // UI label
+    float minValue;             // Minimum allowed value
+    float maxValue;             // Maximum allowed value
+    float defaultValue;         // Initial value
+    EffectParameterType type;   // Value type for UI/validation
+    float step;                 // Suggested step size for UI
+    const char* group;          // Control group (timing/wave/blend/...)
+    const char* unit;           // Display unit (s, Hz, %, x, ...)
+    bool advanced;              // True = dense/internal control
+
+    // Full 10-field constructor
+    EffectParameter(const char* n, const char* d,
+                    float min, float max, float def,
+                    EffectParameterType t,
+                    float s,
+                    const char* g,
+                    const char* u,
+                    bool adv)
+        : name(n), displayName(d), minValue(min), maxValue(max), defaultValue(def),
+          type(t), step(s), group(g), unit(u), advanced(adv) {}
+
+    // Backward-compatible 5-field constructor (existing effects keep working)
+    EffectParameter(const char* n = "", const char* d = "",
+                    float min = 0.0f, float max = 1.0f, float def = 0.5f)
+        : name(n), displayName(d), minValue(min), maxValue(max), defaultValue(def),
+          type(EffectParameterType::FLOAT), step(0.01f), group(""), unit(""), advanced(false) {}
+};
+
+/**
+ * @brief Core effect interface
+ *
+ * All effects must implement this interface. The system provides an
+ * EffectContext with all dependencies - effects should NOT access
+ * global variables or hardware directly.
+ *
+ * Thread safety: render() is always called from Core 1's render task.
+ * init() and cleanup() are called from Core 0 during effect transitions.
+ */
+class IEffect {
+public:
+    virtual ~IEffect() = default;
+
+    //--------------------------------------------------------------------------
+    // Lifecycle Methods
+    //--------------------------------------------------------------------------
+
+    /**
+     * @brief Initialize the effect
+     * @param ctx Effect context with LED buffer and parameters
+     * @return true if initialization succeeded
+     *
+     * Called once when the effect is selected. Use this for one-time setup,
+     * allocating any effect-specific state. Keep allocations minimal.
+     */
+    virtual bool init(EffectContext& ctx) = 0;
+
+    /**
+     * @brief Render one frame of the effect
+     * @param ctx Effect context with LED buffer and current parameters
+     *
+     * Called at 120 FPS (every ~8.3ms). This is the hot path - optimize for
+     * speed. Avoid allocations, complex calculations, or I/O.
+     *
+     * IMPORTANT: All effects MUST use CENTER ORIGIN pattern:
+     * - Use ctx.getDistanceFromCenter(i) for position calculations
+     * - Effects should radiate from center (LED 79/80) outward
+     */
+    virtual void render(EffectContext& ctx) = 0;
+
+    /**
+     * @brief Clean up effect resources
+     *
+     * Called when switching away from this effect. Free any allocated
+     * resources. The effect may be re-initialized later.
+     */
+    virtual void cleanup() = 0;
+
+    //--------------------------------------------------------------------------
+    // Metadata Methods
+    //--------------------------------------------------------------------------
+
+    /**
+     * @brief Get effect metadata for registration
+     * @return Reference to static metadata struct
+     */
+    virtual const EffectMetadata& getMetadata() const = 0;
+
+    //--------------------------------------------------------------------------
+    // Optional Parameter Methods (override for custom parameters)
+    //--------------------------------------------------------------------------
+
+    /**
+     * @brief Get number of custom parameters
+     * @return Number of parameters (0 for effects using only global params)
+     */
+    virtual uint8_t getParameterCount() const { return 0; }
+
+    /**
+     * @brief Get parameter descriptor by index
+     * @param index Parameter index (0 to getParameterCount()-1)
+     * @return Parameter descriptor or nullptr if invalid index
+     */
+    virtual const EffectParameter* getParameter(uint8_t index) const {
+        (void)index;
+        return nullptr;
+    }
+
+    /**
+     * @brief Set a parameter value
+     * @param name Parameter name
+     * @param value New value (will be clamped to min/max)
+     * @return true if parameter was found and set
+     */
+    virtual bool setParameter(const char* name, float value) {
+        (void)name;
+        (void)value;
+        return false;
+    }
+
+    /**
+     * @brief Get a parameter value
+     * @param name Parameter name
+     * @return Current value or 0.0f if not found
+     */
+    virtual float getParameter(const char* name) const {
+        (void)name;
+        return 0.0f;
+    }
+};
+
+} // namespace plugins
+} // namespace lightwaveos
+
+
+================================================================================
+FILE: firmware-v3/src/plugins/api/IEffectRegistry.h
+DESCRIPTION: Registry interface for IEffect instances — registerEffect/unregisterEffect/isEffectRegistered/getRegisteredCount; implemented by both PluginManagerActor and RendererActor.
+================================================================================
+
+/**
+ * @file IEffectRegistry.h
+ * @brief Interface for effect registration
+ *
+ * Provides a unified API for registering IEffect instances,
+ * implemented by both PluginManagerActor and RendererActor.
+ *
+ * @author LightwaveOS Team
+ * @version 2.0.0
+ */
+
+#pragma once
+
+#include "IEffect.h"
+#include "../../config/effect_ids.h"
+
+namespace lightwaveos {
+namespace plugins {
+
+/**
+ * @brief Interface for effect registration
+ *
+ * Allows effects to be registered by EffectId without knowing
+ * the concrete registry implementation.
+ */
+class IEffectRegistry {
+public:
+    virtual ~IEffectRegistry() = default;
+
+    /**
+     * @brief Register an effect by stable EffectId
+     * @param id Stable namespaced effect ID (from effect_ids.h)
+     * @param effect Pointer to IEffect instance (must remain valid)
+     * @return true if registration succeeded
+     */
+    virtual bool registerEffect(EffectId id, IEffect* effect) = 0;
+
+    /**
+     * @brief Unregister an effect by ID
+     * @param id Effect ID to unregister
+     * @return true if effect was registered and is now unregistered
+     */
+    virtual bool unregisterEffect(EffectId id) = 0;
+
+    /**
+     * @brief Check if an effect is registered
+     * @param id Effect ID to check
+     * @return true if effect is registered
+     */
+    virtual bool isEffectRegistered(EffectId id) const = 0;
+
+    /**
+     * @brief Get registered effect count
+     * @return Number of registered effects
+     */
+    virtual uint16_t getRegisteredCount() const = 0;
+};
+
+} // namespace plugins
+} // namespace lightwaveos
+
+
+================================================================================
+FILE: firmware-v3/src/plugins/api/OnsetContext.h
+DESCRIPTION: First-class onset surface — beat/downbeat/transient/kick/snare/hihat OnsetChannels with fired/level01/age, OnsetRawSignals (flux, env, event, bass/mid/high flux), beat phase01/bpm/tempoConfidence.
+================================================================================
+
+#pragma once
+
+#include <cstdint>
+
+namespace lightwaveos::plugins {
+
+struct OnsetRawSignals {
+    float flux = 0.0f;
+    float env = 0.0f;
+    float event = 0.0f;
+    float bassFlux = 0.0f;
+    float midFlux = 0.0f;
+    float highFlux = 0.0f;
+};
+
+struct OnsetChannel {
+    bool fired = false;
+    float strength01 = 0.0f;
+    float level01 = 0.0f;
+    uint32_t ageMs = 0;
+    uint32_t intervalMs = 0;
+    uint32_t sequence = 0;
+    bool reliable = false;
+};
+
+struct OnsetContext {
+    OnsetChannel beat{};
+    OnsetChannel downbeat{};
+    OnsetChannel transient{};
+    OnsetChannel kick{};
+    OnsetChannel snare{};
+    OnsetChannel hihat{};
+
+    OnsetRawSignals raw{};
+
+    float phase01 = 0.0f;
+    float bpm = 120.0f;
+    float tempoConfidence = 0.0f;
+    bool timingReliable = false;
+};
+
+} // namespace lightwaveos::plugins
+
+
+================================================================================
+FILE: firmware-v3/src/audio/contracts/MotionSemantics.h
+DESCRIPTION: Layer 2 6-axis motion-semantic frame (Laban Effort 4D + fluidity + impulse) and the deterministic MotionSemanticEngine that infers it from a ControlBusFrame each render tick.
+================================================================================
+
+/**
+ * @file MotionSemantics.h
+ * @brief Layer 2 motion-semantic inference chain
+ *
+ * Transforms ControlBusFrame DSP signals into a 6-axis motion-semantic frame
+ * based on the Canonical Motion-Semantic Ontology (Laban Effort 4D + 2 modifiers).
+ *
+ * Pipeline: ControlBusFrame -> inference -> author overrides -> smoothing -> MotionSemanticFrame
+ *
+ * Total cost: ~228 bytes RAM, ~0.21ms per frame. No dynamic allocation.
+ *
+ * @see ControlBus.h — source audio data contract
+ * @see SmoothingEngine.h — AsymmetricFollower used for per-dimension smoothing
+ */
+
+#pragma once
+
+#include <stdint.h>
+#include <math.h>
+#include "ControlBus.h"
+#include "../../effects/enhancement/SmoothingEngine.h"
+
+namespace lightwaveos::audio {
+
+// ============================================================================
+// Feature detection: timing_jitter in ControlBusFrame
+// ============================================================================
+// When timing_jitter is added to ControlBusFrame, define this macro in the
+// build or in ControlBus.h to enable direct wiring.
+#ifndef CONTROLBUS_HAS_TIMING_JITTER
+#define MOTIONSEMANTICS_FLUIDITY_DEFAULT 0.5f  // TODO: wire timing_jitter from ControlBusFrame
+#endif
+
+// ============================================================================
+// Confidence constants (0-255 scale)
+// ============================================================================
+
+static constexpr uint8_t MSEM_CONF_HIGH   = 255;  ///< Weight, Time, Impulse
+static constexpr uint8_t MSEM_CONF_MEDIUM = 128;  ///< Fluidity, Space
+static constexpr uint8_t MSEM_CONF_LOW    =  64;  ///< Flow (no validated audio correlate)
+
+// Inferred mask bit positions
+static constexpr uint8_t MSEM_BIT_WEIGHT   = 0;
+static constexpr uint8_t MSEM_BIT_TIME     = 1;
+static constexpr uint8_t MSEM_BIT_SPACE    = 2;
+static constexpr uint8_t MSEM_BIT_FLOW     = 3;
+static constexpr uint8_t MSEM_BIT_FLUIDITY = 4;
+static constexpr uint8_t MSEM_BIT_IMPULSE  = 5;
+
+// ============================================================================
+// MotionSemanticFrame
+// ============================================================================
+
+/**
+ * @brief 6-axis motion-semantic frame produced every render cycle.
+ *
+ * Laban Effort 4D (weight, time_quality, space, flow) plus two execution
+ * modifiers (fluidity, impulse_strength). All axes are continuous [0.0, 1.0].
+ */
+struct MotionSemanticFrame {
+    // Laban Effort 4D — primary dimensions
+    float weight         = 0.5f;  ///< [0.0 = Light, 1.0 = Strong]
+    float time_quality   = 0.5f;  ///< [0.0 = Sustained, 1.0 = Sudden]
+    float space          = 0.5f;  ///< [0.0 = Direct, 1.0 = Indirect]
+    float flow           = 0.5f;  ///< [0.0 = Bound, 1.0 = Free]
+
+    // Execution modifiers
+    float fluidity       = 0.5f;  ///< [0.0 = Jerky, 1.0 = Fluid]
+    float impulse_strength = 0.0f; ///< [0.0 = Weak, 1.0 = Explosive]
+
+    // Metadata
+    uint8_t inferred_mask  = 0x3F; ///< Bitmask: bit set = dimension was inferred (not overridden)
+                                   ///< bit0=weight, bit1=time, bit2=space, bit3=flow, bit4=fluidity, bit5=impulse
+    uint8_t confidence_min = 0;    ///< Lowest confidence among inferred dimensions (0-255)
+};
+
+// ============================================================================
+// MotionAuthorOverrides
+// ============================================================================
+
+/**
+ * @brief Per-dimension author overrides. NAN = use inferred value.
+ *
+ * Creators can lock any dimension to a fixed value, bypassing inference.
+ * When a dimension is overridden, its inferred_mask bit is cleared and
+ * it does not contribute to confidence_min.
+ */
+struct MotionAuthorOverrides {
+    float weight           = NAN;  ///< NAN or [0.0, 1.0]
+    float time_quality     = NAN;  ///< NAN or [0.0, 1.0]
+    float space            = NAN;  ///< NAN or [0.0, 1.0]
+    float flow             = NAN;  ///< NAN or [0.0, 1.0]
+    float fluidity         = NAN;  ///< NAN or [0.0, 1.0]
+    float impulse_strength = NAN;  ///< NAN or [0.0, 1.0]
+
+    /**
+     * @brief Check whether a specific dimension has an author override.
+     * @param bit Bit position (MSEM_BIT_WEIGHT through MSEM_BIT_IMPULSE)
+     * @return true if the corresponding field is not NAN
+     */
+    bool hasOverride(uint8_t bit) const {
+        switch (bit) {
+            case MSEM_BIT_WEIGHT:   return !isnan(weight);
+            case MSEM_BIT_TIME:     return !isnan(time_quality);
+            case MSEM_BIT_SPACE:    return !isnan(space);
+            case MSEM_BIT_FLOW:     return !isnan(flow);
+            case MSEM_BIT_FLUIDITY: return !isnan(fluidity);
+            case MSEM_BIT_IMPULSE:  return !isnan(impulse_strength);
+            default:                return false;
+        }
+    }
+
+    /**
+     * @brief Clear all overrides (set all fields to NAN).
+     */
+    void clear() {
+        weight           = NAN;
+        time_quality     = NAN;
+        space            = NAN;
+        flow             = NAN;
+        fluidity         = NAN;
+        impulse_strength = NAN;
+    }
+};
+
+// ============================================================================
+// MotionSemanticEngine
+// ============================================================================
+
+/**
+ * @brief Deterministic inference engine: ControlBusFrame -> MotionSemanticFrame.
+ *
+ * Each call to update() performs:
+ *  1. Raw inference from ControlBusFrame DSP signals
+ *  2. Author override application (replaces inferred values where specified)
+ *  3. Per-dimension asymmetric smoothing (fast attack, slow release)
+ *  4. Confidence and inferred_mask metadata
+ *
+ * Uses 6x AsymmetricFollower from SmoothingEngine.h for frame-rate independent
+ * temporal smoothing. Total cost: ~0.21ms per frame, 0 heap allocations.
+ */
+class MotionSemanticEngine {
+public:
+    MotionSemanticEngine()
+        // Tau values: (riseTau, fallTau) in seconds
+        // Impulse: fastest — must track transients
+        : m_smooth_weight         (0.0f, 0.03f, 0.20f)
+        , m_smooth_time_quality   (0.0f, 0.10f, 0.30f)
+        , m_smooth_space          (0.0f, 0.10f, 0.25f)
+        , m_smooth_flow           (0.0f, 0.10f, 0.25f)
+        , m_smooth_fluidity       (0.0f, 0.10f, 0.25f)
+        , m_smooth_impulse        (0.0f, 0.01f, 0.15f)
+    {}
+
+    /**
+     * @brief Run the full inference chain for one frame.
+     *
+     * @param bus       Current ControlBusFrame from the audio pipeline
+     * @param dt        Delta time in seconds (hop cadence)
+     * @param overrides Optional author overrides (nullptr = all inferred)
+     */
+    void update(const ControlBusFrame& bus, float dt,
+                const MotionAuthorOverrides* overrides = nullptr)
+    {
+        // ---- 1. Raw inference (pre-smoothing) ----
+
+        // WEIGHT: 40% RMS + 35% onset proxy (fast_flux) + 25% bass energy
+        float raw_weight = clampf(
+            0.40f * bus.rms +
+            0.35f * bus.fast_flux +
+            0.25f * bus.bands[0],
+            0.0f, 1.0f
+        );
+
+        // TIME: normalized tempo (40-200 BPM -> 0.0-1.0)
+        float raw_time = clampf(
+            (bus.tempoBpm - 40.0f) / 160.0f,
+            0.0f, 1.0f
+        );
+
+        // SPACE: inverse tonal confidence (high confidence = direct/focused)
+        float raw_space = 1.0f - bus.chordState.confidence;
+
+        // FLOW: no validated audio correlate — default neutral until validated
+        float raw_flow = 0.5f;
+
+        // FLUIDITY: inverse timing jitter (regular timing = fluid)
+#ifdef CONTROLBUS_HAS_TIMING_JITTER
+        float raw_fluidity = 1.0f - bus.timing_jitter;
+#else
+        float raw_fluidity = MOTIONSEMANTICS_FLUIDITY_DEFAULT;  // TODO: wire timing_jitter
+#endif
+
+        // IMPULSE: scaled spectral flux peaks
+        float raw_impulse = clampf(bus.fast_flux * 2.5f, 0.0f, 1.0f);
+
+        // ---- 2. Apply author overrides ----
+
+        uint8_t mask = 0x3F;  // all 6 bits set = all inferred
+        uint8_t conf_min = 255;
+
+        applyOverride(overrides, raw_weight,   MSEM_BIT_WEIGHT,   MSEM_CONF_HIGH,   mask, conf_min);
+        applyOverride(overrides, raw_time,     MSEM_BIT_TIME,     MSEM_CONF_HIGH,   mask, conf_min);
+        applyOverride(overrides, raw_space,    MSEM_BIT_SPACE,    MSEM_CONF_MEDIUM, mask, conf_min);
+        applyOverride(overrides, raw_flow,     MSEM_BIT_FLOW,     MSEM_CONF_LOW,    mask, conf_min);
+        applyOverride(overrides, raw_fluidity, MSEM_BIT_FLUIDITY, MSEM_CONF_MEDIUM, mask, conf_min);
+        applyOverride(overrides, raw_impulse,  MSEM_BIT_IMPULSE,  MSEM_CONF_HIGH,   mask, conf_min);
+
+        // ---- 3. Temporal smoothing (AsymmetricFollower per dimension) ----
+
+        m_frame.weight           = m_smooth_weight.update(raw_weight, dt);
+        m_frame.time_quality     = m_smooth_time_quality.update(raw_time, dt);
+        m_frame.space            = m_smooth_space.update(raw_space, dt);
+        m_frame.flow             = m_smooth_flow.update(raw_flow, dt);
+        m_frame.fluidity         = m_smooth_fluidity.update(raw_fluidity, dt);
+        m_frame.impulse_strength = m_smooth_impulse.update(raw_impulse, dt);
+
+        // ---- 4. Metadata ----
+
+        m_frame.inferred_mask  = mask;
+        m_frame.confidence_min = (mask == 0) ? 255 : conf_min;
+
+        // Trace: engine output logged by consuming .cpp (ControlBus.cpp covers raw signals)
+    }
+
+    /**
+     * @brief Access the current motion-semantic frame (read-only).
+     * @return Reference to the last computed frame
+     */
+    const MotionSemanticFrame& frame() const { return m_frame; }
+
+private:
+    MotionSemanticFrame m_frame{};
+
+    // Per-dimension asymmetric smoothers (rise/fall tau in seconds)
+    lightwaveos::effects::enhancement::AsymmetricFollower m_smooth_weight;
+    lightwaveos::effects::enhancement::AsymmetricFollower m_smooth_time_quality;
+    lightwaveos::effects::enhancement::AsymmetricFollower m_smooth_space;
+    lightwaveos::effects::enhancement::AsymmetricFollower m_smooth_flow;
+    lightwaveos::effects::enhancement::AsymmetricFollower m_smooth_fluidity;
+    lightwaveos::effects::enhancement::AsymmetricFollower m_smooth_impulse;
+
+    /**
+     * @brief Clamp a float to [lo, hi] without std::clamp.
+     */
+    static float clampf(float v, float lo, float hi) {
+        if (v < lo) return lo;
+        if (v > hi) return hi;
+        return v;
+    }
+
+    /**
+     * @brief Apply a single author override if present, updating mask and confidence.
+     *
+     * If the override for this dimension is not NAN, the raw value is replaced
+     * and the corresponding inferred_mask bit is cleared. Otherwise, the
+     * dimension's confidence contributes to conf_min.
+     */
+    static void applyOverride(const MotionAuthorOverrides* overrides,
+                               float& raw, uint8_t bit, uint8_t conf,
+                               uint8_t& mask, uint8_t& conf_min)
+    {
+        if (overrides && !isnan(getOverrideValue(overrides, bit))) {
+            raw = clampf(getOverrideValue(overrides, bit), 0.0f, 1.0f);
+            mask &= ~(1 << bit);
+        } else {
+            if (conf < conf_min) conf_min = conf;
+        }
+    }
+
+    /**
+     * @brief Retrieve the override float for a given bit position.
+     */
+    static float getOverrideValue(const MotionAuthorOverrides* o, uint8_t bit) {
+        switch (bit) {
+            case MSEM_BIT_WEIGHT:   return o->weight;
+            case MSEM_BIT_TIME:     return o->time_quality;
+            case MSEM_BIT_SPACE:    return o->space;
+            case MSEM_BIT_FLOW:     return o->flow;
+            case MSEM_BIT_FLUIDITY: return o->fluidity;
+            case MSEM_BIT_IMPULSE:  return o->impulse_strength;
+            default:                return NAN;
+        }
+    }
+};
+
+} // namespace lightwaveos::audio
+
+
+================================================================================
+FILE: firmware-v3/src/audio/contracts/OnsetSemantics.h
+DESCRIPTION: Onset-semantic tracker — input contract (OnsetSemanticInputs binds ControlBusFrame + MusicalGridSnapshot), tracker state, channel enum (Beat/Downbeat/Transient/Kick/Snare/Hihat) and updateOnsetContext() entry point.
+================================================================================
+
+#pragma once
+
+#include <cstdint>
+
+#include "ControlBus.h"
+#include "MusicalGrid.h"
+#include "../../plugins/api/OnsetContext.h"
+
+namespace lightwaveos::audio {
+
+enum class OnsetSemanticChannelIndex : uint8_t {
+    Beat = 0,
+    Downbeat = 1,
+    Transient = 2,
+    Kick = 3,
+    Snare = 4,
+    Hihat = 5,
+    Count = 6,
+};
+
+struct OnsetSemanticTrackerEntry {
+    uint32_t lastFireMs = 0;
+    uint32_t previousFireMs = 0;
+    uint32_t sequence = 0;
+    float heldLevel01 = 0.0f;
+};
+
+struct OnsetSemanticTrackerState {
+    OnsetSemanticTrackerEntry channels[static_cast<uint8_t>(OnsetSemanticChannelIndex::Count)] = {};
+};
+
+struct OnsetSemanticInputs {
+    const ControlBusFrame& controlBus;
+    const MusicalGridSnapshot& musicalGrid;
+    bool audioAvailable = false;
+    bool trinityActive = false;
+    uint32_t nowMs = 0;
+    float dtSeconds = 0.0f;
+};
+
+void resetOnsetSemanticTracker(OnsetSemanticTrackerState& state);
+
+void updateOnsetContext(const OnsetSemanticInputs& inputs,
+                        OnsetSemanticTrackerState& state,
+                        plugins::OnsetContext& out);
+
+} // namespace lightwaveos::audio
+
+
+================================================================================
+FILE: firmware-v3/src/audio/contracts/MusicalSaliency.h
+DESCRIPTION: MIS Phase 1 saliency contract — harmonic/rhythmic/timbral/dynamic novelty fields, dominantType classifier, smoothed asymmetric attack/release state, SaliencyTuning parameters.
+================================================================================
+
+/**
+ * @file MusicalSaliency.h
+ * @brief Musical saliency metrics for adaptive audio-visual intelligence
+ *
+ * This module computes "what's perceptually important" in the current audio,
+ * enabling effects to respond to the MOST SALIENT features rather than all
+ * audio signals equally.
+ *
+ * Part of the Musical Intelligence System (MIS) - Phase 1
+ */
+
+#pragma once
+
+#include <cstdint>
+
+namespace lightwaveos {
+namespace audio {
+
+/**
+ * @brief Types of musical saliency
+ *
+ * Each type represents a different dimension of "musical importance"
+ */
+enum class SaliencyType : uint8_t {
+    HARMONIC = 0,   ///< Chord/key changes (slow, emotional)
+    RHYTHMIC = 1,   ///< Beat pattern changes (fast, structural)
+    TIMBRAL = 2,    ///< Spectral character changes (texture)
+    DYNAMIC = 3     ///< Loudness envelope changes (energy)
+};
+
+/**
+ * @brief Musical saliency metrics computed per audio hop
+ *
+ * These metrics indicate what's "musically important" RIGHT NOW.
+ * Effects should respond primarily to the dominant saliency type,
+ * not blindly to all audio signals.
+ *
+ * All values are normalized 0.0-1.0 where:
+ * - 0.0 = no change / not salient
+ * - 1.0 = maximum change / highly salient
+ */
+struct MusicalSaliencyFrame {
+    //-------------------------------------------------------------------------
+    // Novelty Metrics (higher = something changed)
+    //-------------------------------------------------------------------------
+
+    /**
+     * @brief Harmonic novelty - chord/key changes
+     *
+     * High when: chord root changes, major/minor shift, key modulation
+     * Drives: Color/palette changes, mood shifts
+     * Temporal class: SLOW (500ms-5s)
+     */
+    float harmonicNovelty = 0.0f;
+
+    /**
+     * @brief Rhythmic novelty - beat pattern changes
+     *
+     * High when: beat drops, tempo changes, rhythm pattern shifts
+     * Drives: Motion speed, pulse timing
+     * Temporal class: REACTIVE (100-300ms)
+     */
+    float rhythmicNovelty = 0.0f;
+
+    /**
+     * @brief Timbral novelty - spectral character changes
+     *
+     * High when: instrument changes, frequency distribution shifts
+     * Drives: Texture, shimmer, complexity
+     * Temporal class: SUSTAINED (300ms-2s)
+     */
+    float timbralNovelty = 0.0f;
+
+    /**
+     * @brief Dynamic novelty - loudness envelope changes
+     *
+     * High when: crescendo, decrescendo, sudden volume changes
+     * Drives: Intensity, brightness, expansion
+     * Temporal class: REACTIVE (100-300ms)
+     */
+    float dynamicNovelty = 0.0f;
+
+    //-------------------------------------------------------------------------
+    // Derived Saliency (composite metrics)
+    //-------------------------------------------------------------------------
+
+    /**
+     * @brief Overall saliency score (0.0-1.0)
+     *
+     * Weighted combination of all novelty types.
+     * Used for "something interesting is happening" detection.
+     */
+    float overallSaliency = 0.0f;
+
+    /**
+     * @brief Which saliency type is currently dominant
+     *
+     * Effects can use this to decide WHAT to respond to.
+     * Cast to SaliencyType enum for comparison.
+     */
+    uint8_t dominantType = static_cast<uint8_t>(SaliencyType::DYNAMIC);
+
+    //-------------------------------------------------------------------------
+    // History state (for computing derivatives)
+    //-------------------------------------------------------------------------
+
+    /**
+     * @brief Previous chord root (for harmonic novelty)
+     */
+    uint8_t prevChordRoot = 0;
+
+    /**
+     * @brief Previous chord type (for harmonic novelty)
+     */
+    uint8_t prevChordType = 0;
+
+    /**
+     * @brief Previous flux value (for timbral novelty)
+     */
+    float prevFlux = 0.0f;
+
+    /**
+     * @brief Previous RMS value (for dynamic novelty)
+     */
+    float prevRms = 0.0f;
+
+    /**
+     * @brief Beat interval history for variance calculation
+     * Ring buffer of last 4 beat intervals (ms)
+     */
+    float beatIntervalHistory[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    uint8_t beatIntervalIdx = 0;
+    float lastBeatTimeMs = 0.0f;
+
+    //-------------------------------------------------------------------------
+    // Smoothing state
+    //-------------------------------------------------------------------------
+
+    /**
+     * @brief Smoothed harmonic novelty (asymmetric: fast rise, slow fall)
+     */
+    float harmonicNoveltySmooth = 0.0f;
+
+    /**
+     * @brief Smoothed rhythmic novelty
+     */
+    float rhythmicNoveltySmooth = 0.0f;
+
+    /**
+     * @brief Smoothed timbral novelty
+     */
+    float timbralNoveltySmooth = 0.0f;
+
+    /**
+     * @brief Smoothed dynamic novelty
+     */
+    float dynamicNoveltySmooth = 0.0f;
+
+    //-------------------------------------------------------------------------
+    // Methods
+    //-------------------------------------------------------------------------
+
+    /**
+     * @brief Get the dominant saliency type as enum
+     */
+    SaliencyType getDominantType() const {
+        return static_cast<SaliencyType>(dominantType);
+    }
+
+    /**
+     * @brief Check if a specific saliency type is above threshold
+     */
+    bool isSalient(SaliencyType type, float threshold = 0.3f) const {
+        switch (type) {
+            case SaliencyType::HARMONIC: return harmonicNoveltySmooth > threshold;
+            case SaliencyType::RHYTHMIC: return rhythmicNoveltySmooth > threshold;
+            case SaliencyType::TIMBRAL:  return timbralNoveltySmooth > threshold;
+            case SaliencyType::DYNAMIC:  return dynamicNoveltySmooth > threshold;
+            default: return false;
+        }
+    }
+
+    /**
+     * @brief Get novelty value for a specific type
+     */
+    float getNovelty(SaliencyType type) const {
+        switch (type) {
+            case SaliencyType::HARMONIC: return harmonicNoveltySmooth;
+            case SaliencyType::RHYTHMIC: return rhythmicNoveltySmooth;
+            case SaliencyType::TIMBRAL:  return timbralNoveltySmooth;
+            case SaliencyType::DYNAMIC:  return dynamicNoveltySmooth;
+            default: return 0.0f;
+        }
+    }
+};
+
+/**
+ * @brief Tuning parameters for saliency computation
+ */
+struct SaliencyTuning {
+    // Smoothing time constants (seconds)
+    float harmonicRiseTime = 0.15f;   // Fast rise for chord changes
+    float harmonicFallTime = 0.80f;   // Slow fall for sustained mood
+    float rhythmicRiseTime = 0.05f;   // Very fast for beat detection
+    float rhythmicFallTime = 0.30f;   // Medium fall
+    float timbralRiseTime = 0.10f;    // Fast rise for spectral changes
+    float timbralFallTime = 0.50f;    // Medium fall
+    float dynamicRiseTime = 0.08f;    // Fast rise for transients
+    float dynamicFallTime = 0.40f;    // Medium fall
+
+    // Thresholds for novelty detection
+    float harmonicChangeThreshold = 0.5f;  // Chord must change significantly
+    float fluxDerivativeThreshold = 0.05f; // Was 0.1 - lowered for timbral sensitivity
+    float rmsDerivativeThreshold = 0.02f;  // Was 0.05 - lowered for dynamic sensitivity
+    float beatVarianceThreshold = 0.15f;   // Beat interval variance threshold
+
+    // Weights for overall saliency computation
+    float harmonicWeight = 0.25f;
+    float rhythmicWeight = 0.30f;
+    float timbralWeight = 0.20f;
+    float dynamicWeight = 0.25f;
+};
+
+} // namespace audio
+} // namespace lightwaveos
+
+
+================================================================================
+FILE: firmware-v3/src/audio/contracts/MusicalGrid.h
+DESCRIPTION: Render-domain PLL beat grid — MusicalGridSnapshot (bpm_smoothed, beat_phase01, beat_tick, downbeat_tick, beat_in_bar) plus MusicalGrid class ticked at 120 FPS by RendererActor with K1/Trinity/audio observation hooks.
+================================================================================
+
+#pragma once
+#include <stdint.h>
+#include <math.h>
+#include "AudioTime.h"
+#include "SnapshotBuffer.h"
+
+namespace lightwaveos::audio {
+
+/**
+ * @brief Snapshot consumed by effects (BY VALUE).
+ */
+struct MusicalGridSnapshot {
+    AudioTime t;
+
+    float bpm_smoothed = 120.0f;
+    float tempo_confidence = 0.0f; // 0..1
+
+    // Phases (0..1)
+    float beat_phase01 = 0.0f;
+    float bar_phase01  = 0.0f;
+
+    // Ticks (true only on frames where boundary crossed / observation applied)
+    bool beat_tick = false;
+    bool downbeat_tick = false;
+
+    uint64_t beat_index = 0;
+    uint64_t bar_index  = 0;
+
+    uint8_t beats_per_bar = 4; // e.g. 4/4
+    uint8_t beat_unit     = 4;
+    uint8_t beat_in_bar   = 0; // 0..beats_per_bar-1
+
+    float beat_strength = 0.0f;   ///< Strength of last detected beat (0.0-1.0), decays over time
+};
+
+/**
+ * @brief Tunable musical grid parameters (render-domain PLL)
+ */
+struct MusicalGridTuning {
+    float bpmMin = 30.0f;
+    float bpmMax = 300.0f;
+    float bpmTau = 0.50f;
+    float confidenceTau = 1.00f;
+    float phaseCorrectionGain = 0.35f;
+    float barCorrectionGain = 0.20f;
+};
+
+/**
+ * @brief Render-domain PLL-style musical grid.
+ *
+ * Non-negotiable: Tick() is called ONLY by the renderer at ~120 FPS.
+ * Audio thread ONLY calls OnTempoEstimate() / OnBeatObservation().
+ *
+ * Internally publishes snapshots to a SnapshotBuffer so you can ReadLatest(mg) BY VALUE.
+ */
+class MusicalGrid {
+public:
+    MusicalGrid();
+
+    void Reset();
+
+    void SetTimeSignature(uint8_t beats_per_bar, uint8_t beat_unit);
+
+    void setTuning(const MusicalGridTuning& tuning);
+    MusicalGridTuning getTuning() const { return m_tuning; }
+
+    // Audio-domain observations (do NOT call Tick from audio thread)
+    void OnTempoEstimate(const AudioTime& t, float bpm, float confidence01);
+    void OnBeatObservation(const AudioTime& t, float strength01, bool is_downbeat);
+
+    // ========================================================================
+    // K1-Lightwave Integration (Phase 3)
+    // ========================================================================
+
+    /**
+     * @brief Update tempo from K1 beat tracker
+     *
+     * Called from RendererActor::processK1Updates() after draining K1TempoUpdate queue.
+     * Feeds K1's tempo estimate directly into the MusicalGrid PLL.
+     *
+     * @param bpm BPM estimate from K1 Stage 3 (60-180)
+     * @param confidence Confidence [0,1] from K1 tactus resolver
+     * @param is_locked True if K1 tracker is in LOCKED state
+     */
+    void updateFromK1(float bpm, float confidence, bool is_locked);
+
+    /**
+     * @brief Handle beat event from K1 beat tracker
+     *
+     * Called from RendererActor::processK1Updates() after draining K1BeatEvent queue.
+     * Triggers beat observation in the MusicalGrid PLL for phase correction.
+     *
+     * @param beat_in_bar Position in bar (0-3 for 4/4)
+     * @param is_downbeat True if beat_in_bar == 0
+     * @param strength Beat strength [0,1] from K1 novelty
+     */
+    void onK1Beat(int beat_in_bar, bool is_downbeat, float strength);
+
+    // ========================================================================
+    // Trinity External Sync (Offline ML Analysis)
+    // ========================================================================
+
+    /**
+     * @brief Inject external beat from Trinity offline analysis
+     *
+     * Called when firmware is in Trinity sync mode. Bypasses internal PLL
+     * and directly sets BPM, phase, and beat state from pre-computed analysis.
+     *
+     * @param bpm BPM from Trinity analysis
+     * @param phase01 Beat phase [0,1) from Trinity
+     * @param isTick True if this is a beat boundary (tick event)
+     * @param isDownbeat True if this is a downbeat
+     * @param beatInBar Position in bar (0-3 for 4/4)
+     */
+    void injectExternalBeat(float bpm, float phase01, bool isTick, bool isDownbeat, int beatInBar);
+
+    /**
+     * @brief Enable/disable external sync mode
+     * @param enabled If true, Tick() bypasses PLL and uses injected state
+     */
+    void setExternalSyncMode(bool enabled);
+
+    /**
+     * @brief Check if external sync mode is active
+     */
+    bool isExternalSyncMode() const { return m_externalSyncMode; }
+
+    // Render-domain update (120 FPS)
+    void Tick(const AudioTime& render_now);
+
+    // BY-VALUE snapshot read (thread-safe pattern, even if you later share it cross-core)
+    uint32_t ReadLatest(MusicalGridSnapshot& out) const { return m_snap.ReadLatest(out); }
+
+private:
+    SnapshotBuffer<MusicalGridSnapshot> m_snap;
+
+    // Core state
+    bool m_has_tick = false;
+    AudioTime m_last_tick_t{};
+
+    float m_bpm_target = 120.0f;
+    float m_bpm_smoothed = 120.0f;
+    float m_conf = 0.0f;
+
+    double m_beat_float = 0.0;      // continuous beat counter
+    uint64_t m_prev_beat_index = 0; // for beat_tick generation
+
+    uint8_t m_beats_per_bar = 4;
+    uint8_t m_beat_unit = 4;
+
+    // Pending beat observation (time-stamped)
+    bool m_pending_beat = false;
+    AudioTime m_pending_beat_t{};
+    float m_pending_strength = 0.0f;
+    bool m_pending_is_downbeat = false;
+
+    // Beat strength tracking (for effects to modulate intensity)
+    float m_lastBeatStrength = 0.0f;  ///< Last beat strength, decays over time
+
+    MusicalGridTuning m_tuning;
+
+    // External sync state (Trinity offline analysis)
+    bool m_externalSyncMode = false;
+    float m_externalBpm = 120.0f;
+    float m_externalPhase01 = 0.0f;
+    bool m_externalBeatTick = false;
+    bool m_externalDownbeatTick = false;
+    int m_externalBeatInBar = 0;
+
+private:
+    static float clamp01(float x);
+    static float wrapHalf(float phase01); // maps [0,1) to [-0.5,0.5)
+};
+
+} // namespace lightwaveos::audio
+
+
+================================================================================
+FILE: firmware-v3/src/audio/contracts/AudioTime.h
+DESCRIPTION: Monotonic audio clock contract — sample_index (uint64) + sample_rate_hz + monotonic_us; helpers for sample/seconds difference between AudioTimes.
+================================================================================
+
+#pragma once
+#include <stdint.h>
+
+namespace lightwaveos::audio {
+
+/**
+ * @brief Monotonic audio clock where sample_index is the source of truth.
+ *
+ * sample_index: Monotonic count of ADC samples since boot/start (64-bit).
+ * sample_rate_hz: Sample rate that sample_index is expressed in.
+ * monotonic_us: Monotonic microseconds timestamp (best from esp_timer_get_time()).
+ */
+struct AudioTime {
+    uint64_t sample_index = 0;
+    uint32_t sample_rate_hz = 12800;  // Match I2S sample rate (Emotiscope)
+    uint64_t monotonic_us = 0;
+
+    AudioTime() = default;
+    AudioTime(uint64_t idx, uint32_t sr, uint64_t us)
+        : sample_index(idx), sample_rate_hz(sr), monotonic_us(us) {}
+};
+
+/**
+ * @brief Signed sample difference (b - a). Positive if b is later.
+ */
+int64_t AudioTime_SamplesBetween(const AudioTime& a, const AudioTime& b);
+
+/**
+ * @brief Signed seconds difference (b - a) based on sample_index/sample_rate_hz.
+ * Returns 0.0f if sample_rate_hz is 0.
+ */
+float AudioTime_SecondsBetween(const AudioTime& a, const AudioTime& b);
+
+} // namespace lightwaveos::audio
+
+
+================================================================================
+FILE: firmware-v3/src/audio/contracts/SnapshotBuffer.h
+DESCRIPTION: Lock-free double-buffered SnapshotBuffer<T> used to publish ControlBusFrame and MusicalGridSnapshot from audio core to render core; sequence-counter retry pattern with defensive index bounding.
+================================================================================
+
+#pragma once
+#include <atomic>
+#include <stdint.h>
+
+namespace lightwaveos::audio {
+
+/**
+ * @brief Lock-free double buffer (publish on one core, read on another).
+ *
+ * - Writer calls Publish(value). No dynamic allocation.
+ * - Reader calls ReadLatest(out) and receives a BY-VALUE copy.
+ * - Sequence increments on each publish; reader can detect staleness.
+ */
+template <typename T>
+class SnapshotBuffer final {
+public:
+    SnapshotBuffer() = default;
+
+    SnapshotBuffer(const SnapshotBuffer&) = delete;
+    SnapshotBuffer& operator=(const SnapshotBuffer&) = delete;
+    SnapshotBuffer(SnapshotBuffer&&) = delete;
+    SnapshotBuffer& operator=(SnapshotBuffer&&) = delete;
+
+    /**
+     * @brief Publish a new snapshot (writer thread).
+     */
+    void Publish(const T& v) {
+        // Write into the inactive buffer first.
+        const uint32_t cur = m_active.load(std::memory_order_relaxed);
+        
+        // DEFENSIVE CHECK: Validate cur is 0 or 1 (defensive check)
+        // SnapshotBuffer uses double-buffering with m_buf[2] array. The XOR
+        // operation (cur ^ 1U) should always produce 0 or 1, but if cur is
+        // corrupted, this ensures we use a safe index.
+        uint32_t safe_cur = (cur > 1) ? 0 : cur;
+        const uint32_t nxt = safe_cur ^ 1U;
+        
+        // DEFENSIVE CHECK: Ensure nxt is 0 or 1 (should never be >1 after XOR, but protects against corruption)
+        if (nxt > 1) {
+            // Should never happen, but defensive - write to buffer 0 and reset state
+            m_buf[0] = v;
+            m_active.store(0, std::memory_order_release);
+            m_seq.fetch_add(1U, std::memory_order_release);
+            return;
+        }
+
+        m_buf[nxt] = v;
+
+        // Make sure payload write lands before we flip active + seq.
+        std::atomic_thread_fence(std::memory_order_release);
+        m_active.store(nxt, std::memory_order_release);
+        m_seq.fetch_add(1U, std::memory_order_release);
+    }
+
+    /**
+     * @brief Read latest snapshot by value (reader thread). Returns sequence id.
+     *
+     * If writer publishes during the copy, we retry once.
+     */
+    uint32_t ReadLatest(T& out) const {
+        uint32_t s0 = m_seq.load(std::memory_order_acquire);
+        uint32_t idx = m_active.load(std::memory_order_acquire);
+        
+        // DEFENSIVE CHECK: Validate idx is 0 or 1 (defensive check)
+        // SnapshotBuffer uses double-buffering with m_buf[2] array. If m_active
+        // is corrupted (e.g., by memory corruption), accessing m_buf[idx] would
+        // cause out-of-bounds access and crash. This validation ensures we always
+        // use a valid index.
+        if (idx > 1) {
+            idx = 0;  // Reset to safe default if corrupted
+        }
+
+        out = m_buf[idx];
+
+        std::atomic_thread_fence(std::memory_order_acquire);
+        uint32_t s1 = m_seq.load(std::memory_order_acquire);
+
+        if (s1 != s0) {
+            // One retry for consistency.
+            m_retryCount.fetch_add(1U, std::memory_order_relaxed);
+            idx = m_active.load(std::memory_order_acquire);
+            // Validate idx again after reload
+            if (idx > 1) {
+                idx = 0;
+            }
+            out = m_buf[idx];
+            s1 = m_seq.load(std::memory_order_acquire);
+        }
+        return s1;
+    }
+
+    /**
+     * @brief Current sequence counter (monotonic, wraps at 2^32).
+     */
+    uint32_t Sequence() const { return m_seq.load(std::memory_order_acquire); }
+
+    /**
+     * @brief Cumulative read retry count for cross-core copy diagnostics.
+     */
+    uint32_t RetryCount() const { return m_retryCount.load(std::memory_order_relaxed); }
+
+private:
+    // Align to T to satisfy platforms with stricter alignment than 4 bytes.
+    alignas(T) T m_buf[2]{};
+    mutable std::atomic<uint32_t> m_active{0};
+    mutable std::atomic<uint32_t> m_seq{0};
+    mutable std::atomic<uint32_t> m_retryCount{0};
+};
+
+} // namespace lightwaveos::audio
+
+
+================================================================================
+FILE: firmware-v3/src/audio/contracts/StyleDetector.h
+DESCRIPTION: MIS Phase 2 MusicStyle enum (UNKNOWN, RHYTHMIC_DRIVEN, HARMONIC_DRIVEN, MELODIC_DRIVEN, TEXTURE_DRIVEN, DYNAMIC_DRIVEN) and getMusicStyleName(); consumed by AudioContext.musicStyle().
+================================================================================
+
+#pragma once
+#include <stdint.h>
+
+namespace lightwaveos::audio {
+
+/**
+ * @brief Detected music style classification.
+ *
+ * MIS Phase 2: Adaptive style detection uses saliency patterns
+ * to classify music into dominant characteristic styles. This
+ * enables effects to adapt their behavior based on the type
+ * of music being played.
+ *
+ * Style categories:
+ * - UNKNOWN: Insufficient data or mixed characteristics
+ * - RHYTHMIC_DRIVEN: EDM, hip-hop, dance (strong beat patterns)
+ * - HARMONIC_DRIVEN: Jazz, classical, chord progressions
+ * - MELODIC_DRIVEN: Vocal pop, lead instrument focus
+ * - TEXTURE_DRIVEN: Ambient, drone, atmospheric
+ * - DYNAMIC_DRIVEN: Orchestral, cinematic, dynamic range
+ */
+enum class MusicStyle : uint8_t {
+    UNKNOWN = 0,           ///< Insufficient data or mixed characteristics
+    RHYTHMIC_DRIVEN = 1,   ///< EDM, hip-hop, dance music
+    HARMONIC_DRIVEN = 2,   ///< Jazz, classical, chord-heavy
+    MELODIC_DRIVEN = 3,    ///< Vocal pop, lead melody focus
+    TEXTURE_DRIVEN = 4,    ///< Ambient, drone, atmospheric
+    DYNAMIC_DRIVEN = 5     ///< Orchestral, cinematic
+};
+
+/**
+ * @brief Get human-readable name for music style.
+ * @param style The music style enum value
+ * @return C-string name of the style
+ */
+inline const char* getMusicStyleName(MusicStyle style) {
+    switch (style) {
+        case MusicStyle::UNKNOWN:         return "Unknown";
+        case MusicStyle::RHYTHMIC_DRIVEN: return "Rhythmic";
+        case MusicStyle::HARMONIC_DRIVEN: return "Harmonic";
+        case MusicStyle::MELODIC_DRIVEN:  return "Melodic";
+        case MusicStyle::TEXTURE_DRIVEN:  return "Texture";
+        case MusicStyle::DYNAMIC_DRIVEN:  return "Dynamic";
+        default:                          return "Invalid";
+    }
+}
+
+} // namespace lightwaveos::audio
+
+
+================================================================================
+FILE: firmware-v3/src/audio/contracts/MotionShaper.h
+DESCRIPTION: Layer 3 onset-driven temporal envelope shaper — MotionShaping output (intensity/decayMs/accentScale), envelope-type selector keyed off impulse/weight/syncopation/fluidity, drives effect accenting.
+================================================================================
+
+/**
+ * @file MotionShaper.h
+ * @brief Layer 3: Temporal envelope shaping driven by motion-semantic state
+ *
+ * Sits between MotionSemanticEngine (Layer 2) and render primitives.
+ * Detects onsets, selects envelope type from semantic state, evaluates
+ * each frame. Effects consume shaped values as multipliers on existing behavior.
+ *
+ * Cost: ~100 bytes RAM, <0.05ms/frame. No heap allocation.
+ */
+
+#pragma once
+
+#include "ControlBus.h"
+#include "MotionSemantics.h"
+#include "../../effects/enhancement/TemporalOperator.h"
+
+namespace lightwaveos::audio {
+
+/**
+ * @brief Shaped output values for effect consumption.
+ */
+struct MotionShaping {
+    float intensity    = 0.0f;   ///< Envelope-shaped onset response [0-1]
+    float decayMs      = 300.0f; ///< Recommended decay time from fluidity [150-600ms]
+    float accentScale  = 1.0f;   ///< Syncopation-derived accent multiplier [0.7-1.3]
+    uint8_t envType    = 0;      ///< 0=none, 1=impact, 2=standard, 3=dramatic
+    bool active        = false;  ///< True during active envelope
+};
+
+/**
+ * @brief Onset-driven temporal envelope selector and evaluator.
+ *
+ * Mapping (from semantic state at onset time):
+ *   - High Impulse (>0.6) + High Weight (>0.5) -> Impact envelope (attack+recoil+decay)
+ *   - High syncopation (>0.5) -> Dramatic envelope (anticipation+attack+follow-through)
+ *   - High Fluidity (>0.7) + Low Impulse (<0.4) -> Standard smooth envelope
+ *   - Default -> Standard moderate envelope
+ */
+class MotionShaper {
+public:
+    void update(const ControlBusFrame& bus, const MotionSemanticFrame& motion, uint32_t now_ms) {
+        // Only process on new audio hops (avoid re-triggering at 120 FPS)
+        bool newHop = (bus.hop_seq != m_lastHopSeq);
+        m_lastHopSeq = bus.hop_seq;
+
+        if (newHop) {
+            bool onset = (bus.fast_flux > 0.1f);
+            bool risingEdge = onset && !m_prevOnset;
+            m_prevOnset = onset;
+
+            if (risingEdge) {
+                // Min re-trigger guard (80ms)
+                if (now_ms - m_lastTriggerMs >= 80) {
+                    selectAndTrigger(motion, bus.syncopation_level, now_ms);
+                }
+            }
+        }
+
+        // Evaluate active envelope
+        if (m_out.active) {
+            float rawEnv = m_envelope.eval(now_ms);
+            m_out.intensity = (rawEnv < 0.0f) ? 0.0f : ((rawEnv > 1.0f) ? 1.0f : rawEnv);
+            if (m_envelope.isDone(now_ms)) {
+                m_out.active = false;
+                m_out.intensity = 0.0f;
+                m_out.envType = 0;
+            }
+        }
+
+        // Continuous shaping from semantic axes
+        // Decay time: fluidity scales 150ms (jerky) to 600ms (fluid)
+        m_out.decayMs = 150.0f + 450.0f * motion.fluidity;
+        // Accent: syncopation boosts [0.7 - 1.3]
+        m_out.accentScale = 0.7f + 0.6f * bus.syncopation_level;
+    }
+
+    const MotionShaping& shaping() const { return m_out; }
+
+private:
+    MotionShaping m_out{};
+    effects::enhancement::TemporalEnvelope m_envelope{};
+    uint32_t m_lastHopSeq = 0;
+    uint32_t m_lastTriggerMs = 0;
+    bool m_prevOnset = false;
+
+    void selectAndTrigger(const MotionSemanticFrame& motion, float syncopation, uint32_t now_ms) {
+        using namespace effects::enhancement;
+
+        float impulse = motion.impulse_strength;
+        float weight = motion.weight;
+        float fluidity = motion.fluidity;
+
+        if (impulse > 0.6f && weight > 0.5f) {
+            // Strong hit -> impact (attack + recoil + decay)
+            m_envelope = makeImpactEnvelope(0.0f, 1.0f);
+            m_out.envType = 1;
+        } else if (syncopation > 0.5f) {
+            // Off-beat accent -> dramatic (anticipation + attack + follow-through)
+            m_envelope = makeDramaticEnvelope(0.0f, 0.9f);
+            m_out.envType = 3;
+        } else if (fluidity > 0.7f && impulse < 0.4f) {
+            // Fluid, gentle -> standard smooth
+            m_envelope = makeStandardEnvelope(0.0f, 0.8f);
+            m_out.envType = 2;
+        } else {
+            // Default moderate
+            m_envelope = makeStandardEnvelope(0.0f, 0.7f);
+            m_out.envType = 2;
+        }
+
+        m_envelope.trigger(now_ms);
+        m_out.active = true;
+        m_lastTriggerMs = now_ms;
+    }
+};
+
+} // namespace lightwaveos::audio
+
+
+================================================================================
+FILE: firmware-v3/src/audio/contracts/AudioEffectMapping.h
+DESCRIPTION: Audio-to-Visual parameter mapping system — 19 AudioSource × 7 VisualTarget × 6 MappingCurve. EffectAudioMapping (8 bindings/effect), AudioMappingRegistry singleton applied by RendererActor pre-render.
+================================================================================
+
+/**
+ * @file AudioEffectMapping.h
+ * @brief Audio-to-Visual Parameter Mapping System
+ *
+ * LightwaveOS v2 - Phase 4 Audio API Enhancement
+ *
+ * Provides runtime-configurable audio-to-visual parameter bindings per effect.
+ * Maps 19 audio sources to 7 visual targets with 6 response curves.
+ *
+ * Features:
+ * - Per-effect mapping configurations (up to 80 effects)
+ * - Up to 8 mappings per effect
+ * - IIR smoothing with configurable alpha
+ * - 6 curve types: LINEAR, SQUARED, SQRT, LOG, EXP, INVERTED
+ * - Additive or replacement mode per mapping
+ * - Performance instrumentation
+ *
+ * @author LightwaveOS Team
+ * @version 2.0.0
+ */
+
+#pragma once
+
+#include "../../config/features.h"
+
+#if FEATURE_AUDIO_SYNC
+
+#include <cstdint>
+#include <cmath>
+#include "../../config/effect_ids.h"
+#include "../../config/limits.h"  // For limits::MAX_EFFECTS
+#include "ControlBus.h"
+#include "MusicalGrid.h"
+
+namespace lightwaveos {
+namespace audio {
+
+// =============================================================================
+// AUDIO SOURCE ENUMERATION
+// =============================================================================
+
+/**
+ * @brief Available audio input sources for mapping
+ *
+ * Sources are grouped by category:
+ * - Energy metrics (RMS, flux)
+ * - Frequency bands (8 Goertzel bands)
+ * - Aggregated bands (bass, mid, treble)
+ * - Musical timing (beat phase, BPM)
+ */
+enum class AudioSource : uint8_t {
+    // Energy metrics
+    RMS = 0,              ///< Smoothed RMS energy [0,1]
+    FAST_RMS = 1,         ///< Fast-attack RMS [0,1]
+    FLUX = 2,             ///< Spectral flux (onset) [0,1]
+    FAST_FLUX = 3,        ///< Fast-attack flux [0,1]
+
+    // Individual frequency bands (60Hz - 7.8kHz)
+    BAND_0 = 4,           ///< 60 Hz - Sub-bass
+    BAND_1 = 5,           ///< 120 Hz - Bass
+    BAND_2 = 6,           ///< 250 Hz - Low-mid
+    BAND_3 = 7,           ///< 500 Hz - Mid
+    BAND_4 = 8,           ///< 1000 Hz - High-mid
+    BAND_5 = 9,           ///< 2000 Hz - Presence
+    BAND_6 = 10,          ///< 4000 Hz - Brilliance
+    BAND_7 = 11,          ///< 7800 Hz - Air
+
+    // Aggregated bands
+    BASS = 12,            ///< (band0 + band1) / 2
+    MID = 13,             ///< (band2 + band3 + band4) / 3
+    TREBLE = 14,          ///< (band5 + band6 + band7) / 3
+    HEAVY_BASS = 15,      ///< Squared bass response
+
+    // Musical timing
+    BEAT_PHASE = 16,      ///< Beat phase [0,1)
+    BPM = 17,             ///< Tempo in BPM [30,300]
+    TEMPO_CONFIDENCE = 18, ///< Beat detection confidence [0,1]
+
+    NONE = 0xFF           ///< No source (disabled)
+};
+
+// =============================================================================
+// VISUAL TARGET ENUMERATION
+// =============================================================================
+
+/**
+ * @brief Available visual output targets for mapping
+ *
+ * These map directly to EffectContext parameters modified before render().
+ */
+enum class VisualTarget : uint8_t {
+    BRIGHTNESS = 0,       ///< Master LED brightness [0-160]
+    SPEED = 1,            ///< Animation speed [1-50]
+    INTENSITY = 2,        ///< Effect intensity [0-255]
+    SATURATION = 3,       ///< Color saturation [0-255]
+    COMPLEXITY = 4,       ///< Pattern complexity [0-255]
+    VARIATION = 5,        ///< Effect variation/mode [0-255]
+    HUE = 6,              ///< Color hue rotation [0-255]
+
+    NONE = 0xFF           ///< No target (disabled)
+};
+
+// =============================================================================
+// MAPPING CURVE TYPES
+// =============================================================================
+
+/**
+ * @brief Response curve types for audio-to-visual mapping
+ */
+enum class MappingCurve : uint8_t {
+    LINEAR = 0,           ///< y = x (direct proportional)
+    SQUARED = 1,          ///< y = x² (gentle start, aggressive end)
+    SQRT = 2,             ///< y = √x (aggressive start, gentle end)
+    LOG = 3,              ///< y = log(x+1)/log(2) (logarithmic)
+    EXP = 4,              ///< y = (e^x - 1)/(e - 1) (exponential)
+    INVERTED = 5          ///< y = 1 - x (inverse)
+};
+
+// =============================================================================
+// SINGLE PARAMETER MAPPING
+// =============================================================================
+
+/**
+ * @brief Configuration for a single audio-to-visual parameter mapping
+ */
+struct AudioParameterMapping {
+    AudioSource source = AudioSource::NONE;
+    VisualTarget target = VisualTarget::NONE;
+    MappingCurve curve = MappingCurve::LINEAR;
+
+    float inputMin = 0.0f;          ///< Source clip minimum
+    float inputMax = 1.0f;          ///< Source clip maximum
+    float outputMin = 0.0f;         ///< Target output minimum
+    float outputMax = 255.0f;       ///< Target output maximum
+    float smoothingAlpha = 0.3f;    ///< Legacy; not used in smoothing (see tauSeconds)
+    float tauSeconds = 0.15f;       ///< Time constant in seconds for dt-corrected IIR smoothing
+    float gain = 1.0f;              ///< Pre-curve multiplier
+
+    bool enabled = false;           ///< Is this mapping active?
+    bool additive = false;          ///< Add to existing value (vs replace)
+
+    // Runtime state (not persisted)
+    float smoothedValue = 0.0f;
+
+    /**
+     * @brief Apply the mapping curve to a normalized input value
+     * @param normalizedInput Value in [0,1] range after input clipping
+     * @return Curved value in [0,1] range
+     */
+    float applyCurve(float normalizedInput) const;
+
+    /**
+     * @brief Process raw audio input through full mapping pipeline
+     * @param rawInput Raw audio value
+     * @return Mapped output value in [outputMin, outputMax]
+     */
+    float apply(float rawInput) const;
+
+    /**
+     * @brief Update smoothed value with new input (call each frame)
+     * @param rawInput New raw audio value
+     * @param dtSeconds Delta time in seconds for frame-rate-independent smoothing
+     */
+    void updateSmoothed(float rawInput, float dtSeconds);
+
+    /**
+     * @brief Get the current smoothed and mapped output
+     * @return Output value ready for application to visual target
+     */
+    float getSmoothedOutput() const;
+};
+
+// =============================================================================
+// PER-EFFECT MAPPING CONFIGURATION
+// =============================================================================
+
+/**
+ * @brief Complete audio mapping configuration for a single effect
+ */
+struct EffectAudioMapping {
+    static constexpr uint8_t MAX_MAPPINGS_PER_EFFECT = 8;
+    static constexpr uint8_t VERSION = 1;
+
+    uint8_t version = VERSION;
+    EffectId effectId = INVALID_EFFECT_ID;
+    bool globalEnabled = false;     ///< Master enable for this effect
+    uint8_t mappingCount = 0;
+    AudioParameterMapping mappings[MAX_MAPPINGS_PER_EFFECT];
+    uint8_t reserved[8] = {0};      ///< Future expansion
+    uint32_t checksum = 0;
+
+    /**
+     * @brief Calculate CRC32 checksum for validation
+     */
+    void calculateChecksum();
+
+    /**
+     * @brief Validate checksum and version
+     */
+    bool isValid() const;
+
+    /**
+     * @brief Find mapping for a specific visual target
+     * @param target Target to find
+     * @return Pointer to mapping, or nullptr if not found
+     */
+    const AudioParameterMapping* findMapping(VisualTarget target) const;
+    AudioParameterMapping* findMapping(VisualTarget target);
+
+    const AudioParameterMapping* findMappingBySourceTarget(AudioSource source, VisualTarget target) const;
+    AudioParameterMapping* findMappingBySourceTarget(AudioSource source, VisualTarget target);
+
+    /**
+     * @brief Add or update the mapping for the (source, target) pair
+     * @param mapping Mapping to add
+     * @return true if successful (or updated existing)
+     */
+    bool addMapping(const AudioParameterMapping& mapping);
+
+    /**
+     * @brief Remove mapping for a specific target
+     * @param target Target to remove
+     * @return true if removed
+     */
+    bool removeMapping(VisualTarget target);
+
+    /**
+     * @brief Clear all mappings
+     */
+    void clearMappings();
+};
+
+// =============================================================================
+// GLOBAL MAPPING REGISTRY
+// =============================================================================
+
+/**
+ * @brief Singleton registry managing all effect audio mappings
+ *
+ * Thread-safe by design: mappings are stored in fixed arrays with
+ * atomic operations for enable/disable. The applyMappings() function
+ * operates on by-value copies of audio data.
+ */
+class AudioMappingRegistry {
+public:
+    // Single source of truth: references limits::MAX_EFFECTS
+    static constexpr uint16_t MAX_EFFECTS = limits::MAX_EFFECTS;
+
+    /**
+     * @brief Get singleton instance
+     */
+    static AudioMappingRegistry& instance();
+
+    /**
+     * @brief Initialise PSRAM-backed mapping storage (optional feature)
+     *
+     * This must be called once during startup (before render tasks begin) to
+     * move the large mapping table out of internal SRAM. If allocation fails,
+     * the registry remains disabled and all calls degrade gracefully.
+     */
+    bool begin();
+
+#if defined(NATIVE_BUILD)
+    /**
+     * @brief Test hook: override allocator used by begin() in native tests.
+     */
+    static void setTestAllocator(void* (*allocFn)(size_t count, size_t size));
+#endif
+
+    // Prevent copying
+    AudioMappingRegistry(const AudioMappingRegistry&) = delete;
+    AudioMappingRegistry& operator=(const AudioMappingRegistry&) = delete;
+
+    // =========================================================================
+    // MAPPING MANAGEMENT
+    // =========================================================================
+
+    /**
+     * @brief Get mapping configuration for an effect (const)
+     * @param effectId Effect index (0-79)
+     * @return Pointer to mapping config, or nullptr if invalid ID
+     */
+    const EffectAudioMapping* getMapping(EffectId effectId) const;
+
+    /**
+     * @brief Get mapping configuration for an effect (mutable)
+     * @param effectId Effect index (0-79)
+     * @return Pointer to mapping config, or nullptr if invalid ID
+     */
+    EffectAudioMapping* getMapping(EffectId effectId);
+
+    /**
+     * @brief Set complete mapping configuration for an effect
+     * @param effectId Effect index (0-79)
+     * @param config Mapping configuration to copy
+     * @return true on success
+     */
+    bool setMapping(EffectId effectId, const EffectAudioMapping& config);
+
+    /**
+     * @brief Enable/disable all mappings for an effect
+     * @param effectId Effect index
+     * @param enabled Enable state
+     */
+    void setEffectMappingEnabled(EffectId effectId, bool enabled);
+
+    /**
+     * @brief Check if effect has any active mappings
+     * @param effectId Effect index
+     * @return true if effect has globalEnabled && mappingCount > 0
+     */
+    bool hasActiveMappings(EffectId effectId) const;
+
+    /**
+     * @brief Get count of effects with active mappings
+     */
+    uint16_t getActiveEffectCount() const;
+
+    /**
+     * @brief Get total mapping count across all effects
+     */
+    uint16_t getTotalMappingCount() const;
+
+    // =========================================================================
+    // RUNTIME APPLICATION (Called from RendererActor)
+    // =========================================================================
+
+    /**
+     * @brief Apply audio mappings to visual parameters
+     *
+     * Called BEFORE effect->render() to modify EffectContext parameters
+     * based on current audio state. Operates on by-value audio copies
+     * for thread safety.
+     *
+     * @param effectId Current effect being rendered
+     * @param bus Current ControlBusFrame (read-only)
+     * @param grid Current MusicalGridSnapshot (read-only)
+     * @param audioAvailable Whether audio data is fresh
+     * @param dtSeconds Delta time in seconds (for dt-corrected smoothing and audio-absent decay)
+     * @param[in,out] brightness Modified if mapping exists
+     * @param[in,out] speed Modified if mapping exists
+     * @param[in,out] intensity Modified if mapping exists
+     * @param[in,out] saturation Modified if mapping exists
+     * @param[in,out] complexity Modified if mapping exists
+     * @param[in,out] variation Modified if mapping exists
+     * @param[in,out] hue Modified if mapping exists
+     */
+    void applyMappings(
+        EffectId effectId,
+        const ControlBusFrame& bus,
+        const MusicalGridSnapshot& grid,
+        bool audioAvailable,
+        float dtSeconds,
+        uint8_t& brightness,
+        uint8_t& speed,
+        uint8_t& intensity,
+        uint8_t& saturation,
+        uint8_t& complexity,
+        uint8_t& variation,
+        uint8_t& hue
+    );
+
+    // =========================================================================
+    // UTILITY
+    // =========================================================================
+
+    /**
+     * @brief Get human-readable name for audio source
+     */
+    static const char* getSourceName(AudioSource source);
+
+    /**
+     * @brief Get human-readable name for visual target
+     */
+    static const char* getTargetName(VisualTarget target);
+
+    /**
+     * @brief Get human-readable name for curve type
+     */
+    static const char* getCurveName(MappingCurve curve);
+
+    /**
+     * @brief Extract audio value from ControlBusFrame/MusicalGrid by source
+     * @param source Audio source enum
+     * @param bus ControlBusFrame reference
+     * @param grid MusicalGridSnapshot reference
+     * @return Audio value (typically 0-1, except BPM which is 30-300)
+     */
+    static float getAudioValue(
+        AudioSource source,
+        const ControlBusFrame& bus,
+        const MusicalGridSnapshot& grid
+    );
+
+    /**
+     * @brief Parse audio source from string name
+     * @param name Source name (e.g., "BASS", "BEAT_PHASE")
+     * @return AudioSource enum, or NONE if not found
+     */
+    static AudioSource parseSource(const char* name);
+
+    /**
+     * @brief Parse visual target from string name
+     * @param name Target name (e.g., "BRIGHTNESS", "INTENSITY")
+     * @return VisualTarget enum, or NONE if not found
+     */
+    static VisualTarget parseTarget(const char* name);
+
+    /**
+     * @brief Parse curve type from string name
+     * @param name Curve name (e.g., "LINEAR", "SQUARED")
+     * @return MappingCurve enum, defaults to LINEAR if not found
+     */
+    static MappingCurve parseCurve(const char* name);
+
+    // =========================================================================
+    // PERFORMANCE MONITORING
+    // =========================================================================
+
+    /**
+     * @brief Get microseconds spent in last applyMappings() call
+     */
+    uint32_t getLastApplyMicros() const { return m_lastApplyMicros; }
+
+    /**
+     * @brief Get total applyMappings() call count
+     */
+    uint32_t getApplyCount() const { return m_applyCount; }
+
+    /**
+     * @brief Get maximum applyMappings() time observed
+     */
+    uint32_t getMaxApplyMicros() const { return m_maxApplyMicros; }
+
+    /**
+     * @brief Reset performance counters
+     */
+    void resetStats();
+
+private:
+    AudioMappingRegistry() = default;
+
+    EffectAudioMapping* m_mappings = nullptr;
+    bool m_ready = false;
+    bool m_allocFailureLogged = false;
+
+    // Performance counters
+    uint32_t m_applyCount = 0;
+    uint32_t m_lastApplyMicros = 0;
+    uint32_t m_maxApplyMicros = 0;
+    uint64_t m_totalApplyMicros = 0;
+
+    /**
+     * @brief Find the registry slot for a given EffectId (linear scan)
+     * @return Index into m_mappings, or -1 if not found
+     */
+    int16_t findSlot(EffectId effectId) const;
+
+    /**
+     * @brief Find or claim a registry slot for a given EffectId
+     *
+     * Returns existing slot if one matches, otherwise claims the first
+     * INVALID_EFFECT_ID slot.
+     * @return Index into m_mappings, or -1 if full
+     */
+    int16_t findOrClaimSlot(EffectId effectId);
+
+    /**
+     * @brief Apply a single mapping to its target
+     */
+    void applySingleMapping(
+        AudioParameterMapping& mapping,
+        float audioValue,
+        float dtSeconds,
+        uint8_t& targetValue,
+        uint8_t minVal,
+        uint8_t maxVal
+    );
+};
+
+} // namespace audio
+} // namespace lightwaveos
+
+#endif // FEATURE_AUDIO_SYNC
+

@@ -58,6 +58,23 @@ endpoints:
     method: POST
     description: "Generate or rotate OTA token"
 
+  # ── Render Output ──────────────────────────────────────────────────────
+  /api/v1/render/dithering:
+    method: GET
+    description: "Get LED output temporal dithering state"
+    response:
+      enabled: bool
+    consumers: [ios, tab5]
+
+  /api/v1/render/dithering:
+    method: POST
+    description: "Enable or disable LED output temporal dithering"
+    body:
+      enabled: { type: bool, required: true }
+    response:
+      enabled: bool
+    consumers: [ios, tab5]
+
   # ── Effects ────────────────────────────────────────────────────────────
   /api/v1/effects:
     method: GET

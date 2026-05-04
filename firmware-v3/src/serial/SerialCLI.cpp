@@ -294,6 +294,37 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
     }
     else
 #endif
+    if (inputLower.startsWith("dither")) {
+        handledMulti = true;
+        RendererActor* ren = actors.getRenderer();
+        String args = inputLower.substring(6);
+        args.trim();
+
+        if (args.length() == 0 || args == "status") {
+            const bool enabled = ren ? ren->isLedDitheringEnabled() : true;
+            Serial.printf("LED dithering: %s\n", enabled ? "ON" : "OFF");
+            Serial.println("  Usage: dither 0|1|off|on");
+        } else {
+            bool value = false;
+            bool valid = true;
+            if (args == "1" || args == "on" || args == "true") {
+                value = true;
+            } else if (args == "0" || args == "off" || args == "false") {
+                value = false;
+            } else {
+                valid = false;
+            }
+
+            if (!valid) {
+                Serial.println("Invalid dithering value. Use: dither 0|1|off|on");
+            } else if (!actors.setLedDithering(value)) {
+                Serial.println("LED dithering update failed: renderer queue saturated");
+            } else {
+                Serial.printf("LED dithering: %s\n", value ? "ON" : "OFF");
+            }
+        }
+    }
+    else
 #if FEATURE_VRMS_METRICS
     if (inputLower == "vrms") {
         handledMulti = true;

@@ -341,6 +341,7 @@ public:
         uint8_t edgeMixerStrength;
         uint8_t edgeMixerSpatial;
         uint8_t edgeMixerTemporal;
+        bool ledDitheringEnabled;
         bool isRunning;
         uint8_t queueUtilization;
         uint16_t queueLength;

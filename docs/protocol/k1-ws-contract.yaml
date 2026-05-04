@@ -86,6 +86,31 @@ commands:
     response: "none (triggers broadcastStatus)"
     consumers: [tab5]
 
+  # ── Render output commands ────────────────────────────────────────────
+  render.dithering.get:
+    direction: "client -> K1"
+    description: "Get LED output temporal dithering state"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "render.dithering.get"
+      data:
+        enabled: bool
+    consumers: [tab5, ios]
+
+  render.dithering.set:
+    direction: "client -> K1"
+    description: "Enable or disable LED output temporal dithering"
+    request:
+      enabled: { type: bool, required: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "render.dithering.set"
+      data:
+        enabled: bool
+    broadcast: "broadcastStatus (all clients)"
+    consumers: [tab5, ios]
+
   # ── Structured effect commands ─────────────────────────────────────────
   effects.setCurrent:
     direction: "client -> K1"
@@ -1899,6 +1924,7 @@ broadcasts:
       variation: uint8
       fps: float
       cpuPercent: float
+      ledDitheringEnabled: bool
       freeHeap: uint32
       uptime: uint32
       edgeMixerMode: uint8

@@ -21,6 +21,8 @@ LedDriver_S3::LedDriver_S3() {
     memset(m_strip1, 0, sizeof(m_strip1));
     memset(m_strip2, 0, sizeof(m_strip2));
 #ifndef NATIVE_BUILD
+    memset(m_txStrip1, 0, sizeof(m_txStrip1));
+    memset(m_txStrip2, 0, sizeof(m_txStrip2));
     m_showMutex = xSemaphoreCreateMutex();
 #endif
 }
@@ -43,9 +45,9 @@ bool LedDriver_S3::init(const LedStripConfig& config) {
         LW_LOGW("Strip pin override ignored (cfg=%u, hw=%u)", config.dataPin, kStripPin);
     }
 
-    m_ctrl1 = &FastLED.addLeds<WS2812, kStripPin, GRB>(m_strip1, config.ledCount);
+    m_ctrl1 = &FastLED.addLeds<WS2812, kStripPin, GRB>(m_txStrip1, config.ledCount);
     applyColorCorrection(config);
-    FastLED.setDither(1);
+    FastLED.setDither(m_ditheringEnabled ? 1 : 0);
     FastLED.setMaxRefreshRate(0, true);
     setBrightness(config.brightness);
     setMaxPower(5, 3000);
@@ -84,11 +86,11 @@ bool LedDriver_S3::initDual(const LedStripConfig& config1, const LedStripConfig&
                 config1.dataPin, config2.dataPin, kStrip1Pin, kStrip2Pin);
     }
 
-    m_ctrl1 = &FastLED.addLeds<WS2812, kStrip1Pin, GRB>(m_strip1, config1.ledCount);
-    m_ctrl2 = &FastLED.addLeds<WS2812, kStrip2Pin, GRB>(m_strip2, config2.ledCount);
+    m_ctrl1 = &FastLED.addLeds<WS2812, kStrip1Pin, GRB>(m_txStrip1, config1.ledCount);
+    m_ctrl2 = &FastLED.addLeds<WS2812, kStrip2Pin, GRB>(m_txStrip2, config2.ledCount);
 
     applyColorCorrection(config1);
-    FastLED.setDither(1);
+    FastLED.setDither(m_ditheringEnabled ? 1 : 0);
     FastLED.setMaxRefreshRate(0, true);
     setBrightness(config1.brightness);
     setMaxPower(5, 3000);
@@ -125,6 +127,23 @@ uint16_t LedDriver_S3::getLedCount(uint8_t stripIndex) const {
     return (stripIndex < 2) ? m_stripCounts[stripIndex] : 0;
 }
 
+#ifndef NATIVE_BUILD
+void LedDriver_S3::syncBuffersToFastLED() {
+    if (m_lastShowStartUs != 0) {
+        uint32_t now = static_cast<uint32_t>(esp_timer_get_time());
+        const uint32_t elapsed = now - m_lastShowStartUs;
+        if (elapsed < kWireTimeUs) {
+            esp_rom_delay_us(kWireTimeUs - elapsed);
+        }
+    }
+
+    memcpy(m_txStrip1, m_strip1, sizeof(CRGB) * m_stripCounts[0]);
+    if (m_dual) {
+        memcpy(m_txStrip2, m_strip2, sizeof(CRGB) * m_stripCounts[1]);
+    }
+}
+#endif
+
 void LedDriver_S3::show() {
 #ifndef NATIVE_BUILD
     // Layer 2: Mutex with timeout — skip frame on contention rather than crash
@@ -145,13 +164,17 @@ void LedDriver_S3::show() {
     // Cross-core calls cause RMT spinlock corruption (see fix/stable-effect-ids).
     configASSERT(xPortGetCoreID() == 1);
 
+    syncBuffersToFastLED();
+
     m_showInProgress.store(true, std::memory_order_relaxed);
 
     TRACE_SCOPE("fastled_rmt_show");
-    // Patched FastLED RMT4 (see patches/vendor/FastLED-3.10.0-rmt4): returns after
-    // starting TX; previous frame completion is serialised on the next show()
-    // via FastLED's internal gTX_sem. Wire time therefore overlaps pacing/render.
+    // Patched FastLED RMT4 returns after starting TX. K1v2 hardware testing on
+    // 2026-05-05 showed visible white flashes unless Core 1 waits for the full
+    // WS2812 wire time before render continues.
+    m_lastShowStartUs = static_cast<uint32_t>(esp_timer_get_time());
     FastLED.show();
+    esp_rom_delay_us(kWireTimeUs);
 
     const uint32_t end = static_cast<uint32_t>(esp_timer_get_time());
     const uint32_t showUs = (end >= now) ? (end - now) : 0U;
@@ -214,6 +237,13 @@ void LedDriver_S3::setPixel(uint16_t index, CRGB color) {
 
 void LedDriver_S3::resetStats() {
     m_stats = LedDriverStats{};
+}
+
+void LedDriver_S3::setDithering(bool enabled) {
+    m_ditheringEnabled = enabled;
+#ifndef NATIVE_BUILD
+    FastLED.setDither(enabled ? 1 : 0);
+#endif
 }
 
 void LedDriver_S3::updateShowStats(uint32_t showUs) {

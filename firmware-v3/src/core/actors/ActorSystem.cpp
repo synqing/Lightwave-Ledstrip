@@ -569,6 +569,13 @@ bool ActorSystem::saveEdgeMixerToNVS()
     return m_renderer->send(msg, pdMS_TO_TICKS(10));
 }
 
+bool ActorSystem::setLedDithering(bool enabled)
+{
+    if (!m_renderer || !m_renderer->isRunning()) return false;
+    Message msg(MessageType::SET_LED_DITHERING, enabled ? 1 : 0);
+    return m_renderer->send(msg, pdMS_TO_TICKS(10));
+}
+
 #if FEATURE_AUDIO_SYNC
 // ============================================================================
 // Trinity Sync Commands (Offline ML Analysis)

@@ -1980,6 +1980,50 @@ void V1ApiRoutes::registerRoutes(
         }
     );
 
+    // ==================== Render Output Routes ====================
+
+    // GET /api/v1/render/dithering - Get current LED dithering state
+    registry.onGet("/api/v1/render/dithering", [checkRateLimit, checkAPIKey, &ctx](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        auto* renderer = ctx.actorSystem.getRenderer();
+        const bool enabled = renderer ? renderer->isLedDitheringEnabled() : true;
+        sendSuccessResponse(request, [enabled](JsonObject& data) {
+            data["enabled"] = enabled;
+        });
+    });
+
+    // POST /api/v1/render/dithering - Set LED dithering state
+    registry.onPost("/api/v1/render/dithering",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey, &ctx](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            JsonDocument doc;
+            if (deserializeJson(doc, data, len)) {
+                sendErrorResponse(request, 400, ErrorCodes::INVALID_JSON, "Invalid JSON");
+                return;
+            }
+            if (!doc.containsKey("enabled")) {
+                sendErrorResponse(request, 400, ErrorCodes::MISSING_FIELD, "enabled is required", "enabled");
+                return;
+            }
+
+            const bool enabled = doc["enabled"].as<bool>();
+            if (!ctx.actorSystem.setLedDithering(enabled)) {
+                LW_LOGW("REST render dithering update rejected - queue saturated");
+                sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                                  ErrorCodes::RATE_LIMITED, "Queue saturated");
+                return;
+            }
+
+            sendSuccessResponse(request, [enabled](JsonObject& respData) {
+                respData["enabled"] = enabled;
+            });
+        }
+    );
+
 #if FEATURE_API_AUTH
     // ==================== Authentication Management Routes ====================
 

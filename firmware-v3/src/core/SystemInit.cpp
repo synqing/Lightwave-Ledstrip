@@ -483,6 +483,8 @@ void printHelpBanner() {
     Serial.println("  brown   - Show brown guardrail status");
     Serial.println("  brown 0/1 - Disable/enable brown guardrail (accepts 'brown0' or 'brown 0')");
     Serial.println("  Csave   - Save color settings to NVS");
+    Serial.println("  dither  - Show LED dithering status");
+    Serial.println("  dither 0/1 - Disable/enable LED dithering");
 #if FEATURE_AUDIO_SYNC
     Serial.println("\nTempoTracker Debug:");
     Serial.println("  tempo   - Show BPM, confidence, phase, lock state");

@@ -689,6 +689,10 @@ void RendererActor::onMessage(const Message& msg)
             enhancement::EdgeMixer::getInstance().saveToNVS();
             break;
 
+        case MessageType::SET_LED_DITHERING:
+            m_ledDriver.setDithering(msg.param1 != 0);
+            break;
+
         case MessageType::START_TRANSITION:
             // ActorSystem packs EffectId as 2 bytes: param1=low, param2=high, param3=transitionType
             handleStartTransition(static_cast<EffectId>(msg.param1) | (static_cast<EffectId>(msg.param2) << 8), msg.param3);
@@ -2053,15 +2057,17 @@ void RendererActor::showLeds()
     // =========================================================================
 #if FEATURE_AUDIO_SYNC
     {
+        const EffectId safeId = m_currentEffectValid ? m_validatedEffectId : validateEffectId(m_currentEffect);
+
         // --- (1) Global silence scale (Sensory Bridge silent_scale pattern) ---
         uint8_t silentScaleVal = 255;
-        if (m_controlBusBuffer != nullptr && m_lastControlBus.silentScale < 0.999f) {
+        const bool bypassGlobalSilence = (safeId == EID_CROSS_STRIP_WAVE_INTERFERENCE);
+        if (!bypassGlobalSilence && m_controlBusBuffer != nullptr && m_lastControlBus.silentScale < 0.999f) {
             silentScaleVal = static_cast<uint8_t>(m_lastControlBus.silentScale * 255.0f);
         }
 
         // --- (2) Hard silence gate for late-pack reactive effects ---
         uint8_t gateScale = 255;
-        const EffectId safeId = m_currentEffectValid ? m_validatedEffectId : validateEffectId(m_currentEffect);
         const bool hardGateEffect = needsSilenceGate(safeId) && ::PatternRegistry::isAudioReactive(safeId);
         if (hardGateEffect) {
             float dt = m_effectContext.rawDeltaTimeSeconds;

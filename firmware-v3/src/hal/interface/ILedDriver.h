@@ -159,6 +159,18 @@ public:
     virtual void resetStats() = 0;
 
     /**
+     * @brief Enable or disable LED output dithering
+     * @param enabled True to enable temporal dithering
+     */
+    virtual void setDithering(bool enabled) { (void)enabled; }
+
+    /**
+     * @brief Check whether LED output dithering is enabled
+     * @return true if dithering is enabled
+     */
+    virtual bool isDitheringEnabled() const { return true; }
+
+    /**
      * @brief Rough indicator that show() is between mutex take and return
      *
      * Default is false for implementations that do not expose this state.

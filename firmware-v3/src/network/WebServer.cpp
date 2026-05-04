@@ -51,6 +51,7 @@
 #include "webserver/ws/WsMotionCommands.h"
 #include "webserver/ws/WsColorCommands.h"
 #include "webserver/ws/WsEdgeMixerCommands.h"
+#include "webserver/ws/WsRenderCommands.h"
 #include "../effects/enhancement/EdgeMixer.h"
 #include "webserver/ws/WsPaletteCommands.h"
 #include "webserver/ws/WsPresetCommands.h"
@@ -1051,6 +1052,7 @@ void WebServer::updateCachedRendererState() {
         m_cachedRendererState.edgeMixerSpatial = static_cast<uint8_t>(mixer.getSpatial());
         m_cachedRendererState.edgeMixerTemporal = static_cast<uint8_t>(mixer.getTemporal());
     }
+    m_cachedRendererState.ledDitheringEnabled = m_renderer->isLedDitheringEnabled();
     m_cachedRendererState.isRunning = m_renderer->isRunning();
     m_cachedRendererState.queueUtilization = m_renderer->getQueueUtilization();
     m_cachedRendererState.queueLength = m_renderer->getQueueLength();
@@ -1314,6 +1316,7 @@ void WebServer::setupWebSocket() {
     webserver::ws::registerWsMotionCommands(ctx);
     webserver::ws::registerWsColorCommands(ctx);
     webserver::ws::registerWsEdgeMixerCommands(ctx);
+    webserver::ws::registerWsRenderCommands(ctx);
     webserver::ws::registerWsPaletteCommands(ctx);
     webserver::ws::registerWsPresetCommands(ctx);
     webserver::ws::registerWsZonePresetCommands(ctx);

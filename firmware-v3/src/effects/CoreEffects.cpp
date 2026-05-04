@@ -28,6 +28,7 @@
 #include "ieffect/RadialTimeScopeEffect.h"
 #include "ieffect/AttackOnlyPitchVelocityFieldEffect.h"
 #include "ieffect/BeatParitySpriteEffect.h"
+#include "ieffect/CrossStripWaveInterferenceEffect.h"
 #include "ieffect/OceanEffect.h"
 #include "ieffect/PlasmaEffect.h"
 #include "ieffect/ConfettiEffect.h"
@@ -1507,8 +1508,13 @@ uint16_t registerAllEffects(RendererActor* renderer) {
     renderer->registerEffect(EID_BEAT_PARITY_SPRITE, &beatParitySpriteInstance);
     total++;
 
+    // Phase 3 Move 3.2 — F4 Cross-Strip Wave Interference.
+    static ieffect::CrossStripWaveInterferenceEffect crossStripWaveInterferenceInstance;
+    renderer->registerEffect(EID_CROSS_STRIP_WAVE_INTERFERENCE, &crossStripWaveInterferenceInstance);
+    total++;
+
     // =============== EFFECT COUNT PARITY VALIDATION ===============
-    constexpr uint16_t EXPECTED_EFFECT_COUNT = FEATURE_AR_1C_EXPERIMENTAL ? 205 : 202;
+    constexpr uint16_t EXPECTED_EFFECT_COUNT = FEATURE_AR_1C_EXPERIMENTAL ? 206 : 203;
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

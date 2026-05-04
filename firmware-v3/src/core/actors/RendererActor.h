@@ -251,6 +251,7 @@ public:
     const RenderStats& getStats() const { return m_stats; }
     bool isLedOutputBusy() const { return m_ledDriver.isShowInProgress(); }
     const hal::LedDriverStats& getLedDriverStats() const { return m_ledDriver.getStats(); }
+    bool isLedDitheringEnabled() const { return m_ledDriver.isDitheringEnabled(); }
 
     /**
      * @brief Get a copy of the current LED buffer

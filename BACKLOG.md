@@ -180,11 +180,11 @@ Original execution branch `feature/synergy-topology-phase-0-1` was folded into l
 
 ### [DONE] ~~Phase 2 Move 2.1 — PSRAMScalarRing substrate~~ -- commit f8b52bce
 
-### Phase 3 — Dual-Strip Moat — PARTIAL (2 landed, 1 gated)
+### [DONE] ~~Phase 3 — Dual-Strip Moat~~
 - Move 3.1 F5 Reflective Twin contract enforcement — shipped in resume branch; `ReflectiveTwinPolicy` gates direct dual-strip output so default/legacy effects stay on the mirrored unified path unless metadata declares `EffectRoleFlags::DUAL_CHANNEL`; native harness matrix includes the scoped policy test.
-- Move 3.2 F4 Cross-Strip Wave Interference — GATED; do not start until LGP fringe-visibility measurement passes
+- Move 3.2 F4 Cross-Strip Wave Interference — shipped in resume branch after Captain LGP fringe-visibility sign-off; default `3pi/4` phase offset matched the strongest visible tooth/trough separation, and K1v2 hardware testing resolved white vertical flashes by enforcing full WS2812 wire-time after patched FastLED RMT `show()`.
 - Move 3.3 GEO-13 InterStripPhaseDelay infrastructure — shipped in resume branch; `InterStripPhaseDelay` wraps paired PSRAM frame rings so future `DUAL_CHANNEL` effects can sample delayed strip A/B frames without render-path allocation; native harness matrix includes the scoped substrate test.
-- Remaining Phase 3 work is Move 3.2 only, and it remains blocked on LGP fringe-visibility data.
+- Remaining Phase 3 work: none.
 
 ### Phase 4 — Audio substrates + cinematic boot — PARTIAL (3 landed, 1 owed)
 - Move 4.1 AUD-21 VoiceMusicClassifier — commit 5021d96a
@@ -197,7 +197,7 @@ Original execution branch `feature/synergy-topology-phase-0-1` was folded into l
 - Move 1.5 and Move 1.7 are closed on this resume branch; C-7 remains as photometer-grade follow-up debt, not a Phase 1 blocker.
 - Move 3.1 is closed on this resume branch.
 - Move 3.3 is closed on this resume branch.
-- Do not start Move 3.2 before LGP fringe-visibility data exists.
+- Move 3.2 is closed on this resume branch after Captain hardware sign-off.
 - Do not finalise Phase 5 visual sign-off until C-1/C-2/C-5 calibration debt is resolved; C-3 also gates sign-off corpus composition.
 
 ### Phase 5 — Synergy-Topology effect exemplars (3 of 7+ moves) — DONE-DEGRADED

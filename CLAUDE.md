@@ -116,7 +116,7 @@ READBACK:
 |---|---|
 | Any C++ source | clangd FIRST for symbols, grep for text only |
 | Audio / effects | Centre origin 79/80 outward, no heap in render(), 2.0ms ceiling, no rainbows |
-| Network / WiFi | K1 is AP-only. Never enable STA mode, AP+STA, STA validation envs, or WiFi-mode rewrites without explicit Captain approval. Historical STA/dual-mode material is referenced context only, not active instruction. |
+| Network / WiFi | K1 current shipping mode is AP-only via `WIFI_AP_ONLY`. Goal-state is dual-mode AP OR STA, never concurrent AP+STA. Do not enable pure-STA validation, WiFi-mode rewrites, or `WIFI_AP_ONLY` / `m_forceApOnly` default changes without explicit Captain approval. |
 | Multi-file exploration | Delegate to subagent, 30K token budget per agent |
 | Documentation | QMD FIRST, Read as fallback |
 | External library APIs | Context7 FIRST, not training data |
@@ -248,7 +248,7 @@ Before running `git add` or `git commit`, answer honestly:
 
 If you cannot answer YES with specific evidence, do NOT commit. Instead:
 
-1. **Check constraints** — re-read Hard Constraints below. Does your change touch render()? Verify no heap alloc. Timing? Measure against 2.0ms ceiling. WiFi? Confirm AP-only preserved.
+1. **Check constraints** — re-read Hard Constraints below. Does your change touch render()? Verify no heap alloc. Timing? Measure against 2.0ms ceiling. WiFi? Confirm current shipping AP-only behaviour is preserved unless Captain explicitly approved STA validation work.
 2. **Check tests** — did you run the relevant tests? Do they pass? If none exist, write one first.
 3. **Check scope** — are you committing only the files you intended? No accidental inclusions?
 4. **Check British English** — comments, logs, UI strings all use centre/colour/initialise/behaviour.
@@ -257,7 +257,7 @@ Only after satisfying all four checks: proceed with commit.
 
 ## Hard Constraints
 
-- **K1 WiFi mode is AP-only.** Current shipping firmware uses `WIFI_AP_ONLY` in canonical ESV11 K1 build environments, and Tab5/iOS connect to K1's AP at `192.168.4.1`. Never enable STA mode, AP+STA mode, STA validation environments, WiFi-mode rewrites, or default changes to `WIFI_AP_ONLY` / `m_forceApOnly` without explicit Captain approval. Historical STA/dual-mode analysis may be kept as referenced forensic context, but it is not active instruction for agents.
+- **K1 WiFi mode.** Current shipping firmware uses `WIFI_AP_ONLY` in canonical ESV11 K1 build environments, and Tab5/iOS connect to K1's AP at `192.168.4.1`. Goal-state is dual-mode AP OR STA, never concurrent AP+STA. Never enable pure-STA validation, WiFi-mode rewrites, or default changes to `WIFI_AP_ONLY` / `m_forceApOnly` without explicit Captain approval.
 - **Audio playback safety**: Never generate, select, or play audio through speakers/headphones unless Captain has explicitly approved that exact source. Approval for one audio file does not authorise other files, synthetic fixtures, white/pink noise, hats, cymbals, speech, generated tones, or any agent-chosen sound. For AFS/runtime audio capture, the approved reference corpus is `/Users/spectrasynq/Workspace_Management/Software/hybrid-beat-tracker/tests/benchmark` unless Captain explicitly names a different source. Before any playback, state the exact file/source, output path/device if known, volume assumption, duration, and stop command. If a capture matrix needs noise or synthetic fixtures, ask first and wait.
 - **Centre origin**: All effects originate from LED 79/80 outward (or inward to 79/80). No linear sweeps. Applies to all render modes including zone-specific renders. Exception: zone ID `0xFF` (global render) where the physical centre is still 79/80.
 - **No rainbows**: No rainbow cycling or full hue-wheel sweeps.
@@ -498,9 +498,9 @@ Read **only** when the task requires it — do not load eagerly. Exception: WORK
 |---|---|---|---|
 | Lightwave-Ledstrip | `92d45c0b-83c7-4971-aa9a-2c9ee13b06d4` | 127 | Architecture, constraints, design decisions, cross-subsystem questions for firmware-v3, lightwave-ios-v2, tab5-encoder, protocol contracts, audio pipeline, WiFi, governance |
 
-Full SpectraSynq notebook registry (7 notebooks, IDs, source counts, bundle paths): [`notebooklm_bundles/NOTEBOOK_REGISTRY.md`](notebooklm_bundles/NOTEBOOK_REGISTRY.md).
+Full SpectraSynq notebook registry (7 notebooks, IDs, source counts, bundle paths): [`docs/tooling/notebooklm-bundles/NOTEBOOK_REGISTRY.md`](docs/tooling/notebooklm-bundles/NOTEBOOK_REGISTRY.md).
 
-Custom system prompt (configured 2026-05-04, polished 2026-05-04 with WS contract-first gate) mandates a 5-section response format: ANSWER / CONSTRAINTS / KEY FILES / CROSS-REFS / WARNINGS. The prompt enforces British English, AP-only-WiFi sterilisation, no-heap-in-render warnings, centre-origin guidance on every effect-related answer, and the contract-first gate (`docs/protocol/k1-ws-contract.yaml` updated BEFORE implementation; the "regeneratable artefact" framing is reconciliation-only). If a response loses the structure or breaches sterilisation, re-run `chat_configure` per `notebooklm_bundles/CC_CLI_NOTEBOOKLM_INTEGRATION_PROMPT.md`.
+Custom system prompt (configured 2026-05-04, polished 2026-05-04 with WS contract-first gate) mandates a 5-section response format: ANSWER / CONSTRAINTS / KEY FILES / CROSS-REFS / WARNINGS. The prompt enforces British English, current-shipping AP-only WiFi plus dual-mode-goal precision, no-heap-in-render warnings, centre-origin guidance on every effect-related answer, and the contract-first gate (`docs/protocol/k1-ws-contract.yaml` updated BEFORE implementation; the "regeneratable artefact" framing is reconciliation-only). If a response loses the structure or breaches WiFi-mode precision, re-run `chat_configure` per `docs/tooling/notebooklm-bundles/CC_CLI_NOTEBOOKLM_INTEGRATION_PROMPT.md`.
 
 ### Cross-notebook queries
 
@@ -513,7 +513,7 @@ mcp__notebooklm-mcp__cross_notebook_query(
 )
 ```
 
-Available notebooks (see `notebooklm_bundles/NOTEBOOK_REGISTRY.md` for IDs, sources, last-sync dates):
+Available notebooks (see `docs/tooling/notebooklm-bundles/NOTEBOOK_REGISTRY.md` for IDs, sources, last-sync dates):
 
 - **Lightwave-Ledstrip** — firmware/iOS/Tab5 codebase + protocol + governance (127 sources)
 - **K1 Testbed** — testbed/dev hardware + capture rigs (37 sources)

@@ -302,18 +302,25 @@ The parameter inventory discipline from the UI exercise scales directly: before 
 
 **State all constraints before generating solutions. Let constraints eliminate options early, before emotional investment accumulates.** Product constraints include:
 
-- **Technical constraints:** "We have 6 months" kills certain architectures. "ESP32-S3 has 2MB PSRAM" kills certain features. "K1 is AP-only" kills STA mode.
+- **Technical constraints:** "We have 6 months" kills certain architectures. "ESP32-S3 has 2MB PSRAM" kills certain features. "Concurrent AP+STA has a known ESP-IDF 802.11 bug" kills concurrent-mode designs (but does NOT kill mode-switched dual-mode — that is the K1 goal-state).
 - **Market constraints:** "Our users are performing musicians" kills interaction patterns that require sustained visual attention. "Musicians perform in dark venues" kills UI designs that assume bright ambient light.
 - **Business constraints:** "We need revenue within 12 months" kills free-tier-only strategies. "We are a 2-person team" kills enterprise sales motions.
 - **Physical constraints:** "The LGP is 329mm of acrylic" constrains what visual effects are physically perceptible. "Encoders are stacked top/bottom" constrains parameter-to-encoder mapping.
 
 The discipline is: list all constraints FIRST. Then generate only options that survive all constraints. An option that violates a hard constraint is dead on arrival -- do not waste time evaluating its merits.
 
-### Real-World Example
+### Real-World Example (REVISED 2026-05-04 after forensic excavation)
 
-**K1 WiFi STA mode -- 6+ failed attempts over multiple weeks.** The K1 team attempted to enable STA mode (connecting K1 to external WiFi routers) six times. Each attempt failed with AUTH_EXPIRE or AUTH_FAIL at the ESP-IDF 802.11 driver level. The constraint was real: the ESP32 WiFi stack shares encryption key pools between AP and STA, and AP operation corrupts STA auth state. The correct decision was to accept the constraint early and design an AP-only architecture. Instead, six mitigation attempts (compatibility profiles, BSSID scrubs, AP-stop-before-join, PMF optional) were tried and failed. Each attempt cost engineering time that could have been spent on features. The constraint was right. Fighting it was wrong.
+**The original "K1 STA failed 6+ times" case study was based on a misclassified failure mode.** Forensic excavation in May 2026 (`_FORENSIC_WIFI_REPORT.md`) established that:
 
-This is the product equivalent of Principle 11: "K1 is AP-only" is not a limitation to work around. It is a filter that eliminates an entire class of architectural options and frees the team to optimise within the viable space.
+- STA mode actually WORKED in two distinct earlier eras (Era 1 Light Crystals 2025-06-24 → 2025-07-05; Era 3 v2 STA-primary 2025-12-16 → 2026-01-03) — the doctrine "STA never worked" was empirically false.
+- The genuine failure was Era 5's Portable Mode AP+STA *concurrent* experiment (2026-02-05 → 2026-02-16, "failed within hours") — this is the known ESP-IDF 802.11 driver bug where concurrent-mode operation corrupts auth state.
+- The post-failure capitulation OVER-CORRECTED from "concurrent AP+STA broken" to "ALL STA forbidden". The "6+" number arose in a retrospective rationalisation memory written 2 months later, whose explicit enumeration is 4 + "(and more)".
+- A pure-`WIFI_MODE_STA`-only build was likely never tested.
+
+**The corrected lesson is more valuable than the original.** The discipline is: when a failure feels emotionally validated by a specific incident, **distinguish the failure mode from the broader category**. The Era 5 failure was specifically AP+STA *concurrent*, not STA-alone. Conflating them produced a 76-day doctrine era that blocked the dual-mode goal-state, which has now been reaffirmed. Captain's actual goal-state is dual-mode (AP OR STA, never together) — both modes work individually; only their concurrent operation hits the ESP-IDF bug.
+
+This is the product equivalent of Principle 11 with a sharper edge: **the constraint must be precisely scoped**. "Concurrent AP+STA is broken" is a true constraint that kills concurrent-mode designs. "STA is broken" is a false over-correction that killed an entire viable architectural direction for 76 days.
 
 ### Anti-Pattern It Prevents
 
@@ -322,7 +329,7 @@ This is the product equivalent of Principle 11: "K1 is AP-only" is not a limitat
 ### K1 Application
 
 K1's hard constraints are product-defining, not product-limiting:
-- **AP-only networking** means: design for local-first, zero-internet-required operation. This is actually a feature for musicians performing at venues with unreliable WiFi.
+- **AP-capable networking (current dev: AP-only by build flag; goal: dual-mode AP OR STA)** means: design for local-first, zero-internet-required operation. AP capability is essential for musicians performing at venues with unreliable WiFi; dual-mode is the goal so K1 can also join existing networks where available.
 - **Centre-origin rendering** means: every effect has a unique visual signature impossible with linear strips. This is the product's visual identity.
 - **2.0ms render ceiling** means: effects must be computationally elegant. This prevents feature bloat in the effect system.
 - **320 LEDs on acrylic LGP** means: the medium IS the message. Effects that look good on a screen may look wrong on diffused acrylic, and vice versa.

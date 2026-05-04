@@ -189,7 +189,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **docs:** `api-v1.md` effects pagination documented `start`/`count` params; actual implementation uses `page`/`limit`/`offset`
 - **docs:** `api-v1.md` transition `toEffect` documented as uint8 (0-46); corrected to uint16
 - **docs:** `api-v1.md` parameters section missing `hue`, `mood`, `fadeAmount` fields; added with correct ranges
-- **docs:** `api-v1.md` device status example showed STA mode (`apMode: false`, `192.168.1.100`); corrected to AP-only reality
+- **docs:** `api-v1.md` device status example showed STA mode (`apMode: false`, `192.168.1.100`); corrected to current shipping AP-only state. Note: dual-mode (AP OR STA, never together) is the documented goal-state; concurrent AP+STA is the genuine ESP-IDF 802.11 bug. See `docs/tooling/notebooklm-bundles/lightwave_ledstrip/_FORENSIC_WIFI_REPORT.md`.
 - **docs:** `api-v1.md` presets section falsely claimed handlers are stubs returning NOT_IMPLEMENTED; disclaimer removed
 - **docs:** `api-v1.md` speed range documented as 1-50; corrected to 1-100
 - **docs:** `k1-ws-contract.yaml` speed ranges updated from 1-50 to 1-100 for `setSpeed` and `parameters.set`

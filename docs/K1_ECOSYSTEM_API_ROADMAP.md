@@ -421,9 +421,9 @@ Unsubscribed events are not sent, reducing WiFi bandwidth for limited clients (z
 
 ## 9. Open Questions
 
-1. **Cloud sync for shows?** User-created shows could be backed up to a cloud service, but K1 has no internet access (AP-only). Sync would require the companion app as a relay. Privacy implications for audio-derived show data need consideration.
+1. **Cloud sync for shows?** User-created shows could be backed up to a cloud service, but K1 currently has no internet access in shipping (AP-only via `WIFI_AP_ONLY` build flag; dual-mode is the goal-state, see `docs/tooling/notebooklm-bundles/lightwave_ledstrip/_FORENSIC_WIFI_REPORT.md`). Sync would require the companion app as a relay until STA-mode is re-enabled, after which K1 could fetch directly. Privacy implications for audio-derived show data need consideration regardless.
 
-2. **WiFi bandwidth limits for multi-K1 sync?** K1's AP supports ~4 concurrent clients reliably. A 10-unit installation would need mesh WiFi or a dedicated router with all K1s as clients (requires STA mode — currently architecturally prohibited). Leader-as-AP with followers-as-STA is one option but conflicts with the AP-only constraint.
+2. **WiFi bandwidth limits for multi-K1 sync?** K1's AP supports ~4 concurrent clients reliably. A 10-unit installation would need mesh WiFi or a dedicated router with all K1s as clients (requires the K1 dual-mode goal-state to be delivered first — current shipping is AP-only by build flag). Leader-as-AP-with-followers-as-STA would require concurrent AP+STA on the leader, which is the genuine ESP-IDF 802.11 driver bug surface — multi-K1 sync architecture must use mode-switched dual-mode (each K1 in EITHER AP or STA, never both), not concurrent.
 
 3. **Beat sync latency budget?** Recommend 50ms maximum for perceptible synchronisation. WiFi round-trip on a local AP is typically 2-5ms, so the budget is achievable for 2-4 units. Larger installations need investigation.
 

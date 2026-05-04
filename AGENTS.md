@@ -36,7 +36,7 @@ pio device monitor -b 115200
 - **120 FPS / 2.0 ms ceiling**: Keep per-frame effect code under 2.0 ms.
 - **dt-correct smoothing**: Temporal smoothing must use delta-time, not frame-count assumptions.
 - **Sub-8 ms audio-to-visual latency**: Preserve the end-to-end pipeline latency constraint.
-- **K1 is AP-only**: Never enable STA mode, AP+STA mode, STA validation envs, or WiFi-mode rewrites without explicit Captain approval.
+- **K1 WiFi mode**: Current shipping firmware is AP-only via `WIFI_AP_ONLY`. Goal-state is dual-mode AP OR STA, never concurrent AP+STA. Do not enable pure-STA validation, WiFi-mode rewrites, or `WIFI_AP_ONLY` / `m_forceApOnly` default changes without explicit Captain approval.
 - **British English** in comments and docs (centre, colour, initialise, behaviour).
 
 ## Workflow Discipline (Agents)

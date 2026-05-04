@@ -42,7 +42,7 @@
 ## CRITICAL CONTEXT — READ BEFORE ANY IMPLEMENTATION
 
 ### Hard constraints (applies to ALL work)
-- **K1 is AP-ONLY.** Never enable STA mode on ESP32 firmware.
+- **K1 WiFi mode.** Current dev: AP-only via `WIFI_AP_ONLY` build flag. Goal: dual-mode (AP OR STA, never together — concurrent AP+STA has a known ESP-IDF 802.11 driver bug). Do NOT add concurrent AP+STA logic; pure-STA work via `_sta_validation` env requires Captain coordination. See `docs/tooling/notebooklm-bundles/lightwave_ledstrip/_FORENSIC_WIFI_REPORT.md`.
 - **Centre origin.** All LED effects originate from LED 79/80 outward. All K1 web visualisations inject light at centre, propagating symmetrically.
 - **No heap alloc in render().** No `new`/`malloc`/`String` in render paths. Static buffers only.
 - **120 FPS target.** Per-frame effect code under 2ms.
@@ -557,7 +557,7 @@ landing_agent = agentkeeper.create(agent_id="spectrasynq-landing", provider="ant
 warroom_agent = agentkeeper.create(agent_id="spectrasynq-warroom", provider="anthropic")
 
 # Store critical facts that must persist across providers
-firmware_agent.remember("K1 is AP-ONLY. Never enable STA mode.", critical=True)
+firmware_agent.remember("K1 WiFi: current dev AP-only via WIFI_AP_ONLY build flag; goal dual-mode (AP OR STA, never together). Concurrent AP+STA has known ESP-IDF 802.11 bug. Pure-STA path under re-validation via _sta_validation env (commit 11e040d6, 2026-05-03). See _FORENSIC_WIFI_REPORT.md.", critical=True)
 firmware_agent.remember("BeatTracker.cpp was corrupted by parallel agents on 2026-02-XX. Always use worktree isolation.", critical=True)
 firmware_agent.remember("Centre origin: all effects from LED 79/80 outward.", critical=True)
 firmware_agent.remember("120 FPS target: per-frame render under 2ms.", critical=True)
@@ -815,7 +815,7 @@ Create `/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/.cla
 - Any `new`, `malloc`, or `String` allocation in render() paths
 - Any effect that doesn't use centre-origin (LED 79/80)
 - Any per-frame code exceeding 2ms budget estimate
-- Any STA mode WiFi configuration on K1
+- Any concurrent AP+STA WiFi configuration on K1 (pure-STA work via the `_sta_validation` env is permitted with Captain coordination)
 - Any rainbow cycling or full hue-wheel sweep
 
 ## IMPORTANT CHECKS

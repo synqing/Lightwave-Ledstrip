@@ -260,7 +260,8 @@ These are NOT phases; they are validated engineering intents that update both fi
 
 ### Audio-side bench toggle wiring (Surface 7 follow-up)
 - BenchRegistry framework + 8 toggle registrations + `render.color_correction` consumer wiring SHIPPED
-- Audio-side toggles (`audio.lookahead`, `audio.zone_agc`, `audio.chroma_zone_agc`) registered as visibility stubs; per-hop observer call site needs a small AudioActor change (one line at hop entry)
+- DONE: Audio-side toggles (`audio.lookahead`, `audio.zone_agc`, `audio.chroma_zone_agc`) are wired into the ControlBus `UpdateFromHop` backends through an AudioActor per-hop observer plus scoped native regression coverage.
+- ESV11 caveat: production K1v2 builds construct a `ControlBusFrame` through `EsV11Adapter` and bypass ControlBus Stage A (`UpdateFromHop`), so equivalent ESV11 adapter A/B gates require a separate semantic change and are not part of this small Surface 7 follow-up.
 - `render.async_rmt` and `render.dual_strip_parallel`: also stubs; require LedDriver disentanglement (not in current scope)
 - `effect.fade_to_black`: per-effect opt-in via a thin `fadeToBlackByGated` helper (not yet authored)
 - Trigger to revisit: when Captain asks for runtime A/B of any specific toggle

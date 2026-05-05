@@ -38,6 +38,7 @@
 // No-ops when FEATURE_MABUTRACE is disabled
 #include "AudioBenchmarkTrace.h"
 #include "pipeline/FFT.h"
+#include "utils/BenchRegistry.h"
 
 // Unified logging system (preserves colored output conventions)
 #define LW_LOG_TAG "Audio"
@@ -304,6 +305,16 @@ inline uint32_t esp_log_timestamp() { return 0; }
 
 namespace lightwaveos {
 namespace audio {
+
+namespace {
+inline void applyControlBusBenchToggles(ControlBus& controlBus) {
+    controlBus.setBenchAudioToggles(
+        ::lightwaveos::bench::isToggleEnabled(&::lightwaveos::bench::g_bench_audio_lookahead),
+        ::lightwaveos::bench::isToggleEnabled(&::lightwaveos::bench::g_bench_audio_zone_agc),
+        ::lightwaveos::bench::isToggleEnabled(&::lightwaveos::bench::g_bench_audio_chroma_zone_agc)
+    );
+}
+} // namespace
 
 #if !FEATURE_AUDIO_BACKEND_ESV11
 AudioActor::ZoneAgcSnapshot AudioActor::getZoneAgcSnapshot() const {
@@ -1811,6 +1822,7 @@ void AudioActor::processHop()
 #else
     m_controlBus.setSilenceParameters(tuning.silenceThreshold, tuning.silenceHysteresisMs);
 #endif
+    applyControlBusBenchToggles(m_controlBus);
     m_controlBus.UpdateFromHop(now, raw);
 
     TRACE_END();  // controlbus_build
@@ -3561,6 +3573,7 @@ void AudioActor::processHop()
 #else
     m_controlBus.setSilenceParameters(tuning.silenceThreshold, tuning.silenceHysteresisMs);
 #endif
+    applyControlBusBenchToggles(m_controlBus);
     m_controlBus.UpdateFromHop(now, raw);
 
     TRACE_END();  // controlbus_build

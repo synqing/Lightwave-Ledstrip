@@ -173,9 +173,10 @@ void ControlBus::detectAndRemoveSpikes(LookaheadBuffer& buffer,
                                         const float* input,
                                         float* output,
                                         size_t num_bands,
-                                        bool isBands) {
+                                        bool isBands,
+                                        bool benchEnabled) {
     // Handle disabled state - passthrough with no delay
-    if (!buffer.enabled) {
+    if (!buffer.enabled || !benchEnabled) {
         memcpy(output, input, num_bands * sizeof(float));
         return;
     }
@@ -358,8 +359,10 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
     // Removes single-frame spikes that cause visual flicker
     // Output delayed by 2 frames (~32ms at 60fps)
     // ========================================================================
-    detectAndRemoveSpikes(m_lookahead_bands, m_clamped_bands, m_bands_despiked, CONTROLBUS_NUM_BANDS, true);
-    detectAndRemoveSpikes(m_lookahead_chroma, m_clamped_chroma, m_chroma_despiked, CONTROLBUS_NUM_CHROMA, false);
+    detectAndRemoveSpikes(m_lookahead_bands, m_clamped_bands, m_bands_despiked,
+                          CONTROLBUS_NUM_BANDS, true, m_bench_lookahead_enabled);
+    detectAndRemoveSpikes(m_lookahead_chroma, m_clamped_chroma, m_chroma_despiked,
+                          CONTROLBUS_NUM_CHROMA, false, m_bench_lookahead_enabled);
 
     // ========================================================================
     // Stage 3: Zone AGC (optional)
@@ -367,7 +370,7 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
     // Zone boundaries: 0-1 (sub-bass), 2-3 (low-mid), 4-5 (mid), 6-7 (high)
     // ========================================================================
     float normalized_bands[CONTROLBUS_NUM_BANDS];
-    if (m_zone_agc_enabled) {
+    if (m_zone_agc_enabled && m_bench_zone_agc_enabled) {
         // Update zone max magnitudes
         for (uint8_t z = 0; z < CONTROLBUS_NUM_ZONES; ++z) {
             // Find max in this zone (2 bands per zone for 8-band system)
@@ -434,7 +437,7 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
     // Zone 0: C,C#,D (0-2) | Zone 1: D#,E,F (3-5) | Zone 2: F#,G,G# (6-8) | Zone 3: A,A#,B (9-11)
     // ========================================================================
     float normalized_chroma[CONTROLBUS_NUM_CHROMA];
-    if (m_chroma_zone_agc_enabled) {
+    if (m_chroma_zone_agc_enabled && m_bench_chroma_zone_agc_enabled) {
         // Update chroma zone max magnitudes
         for (uint8_t z = 0; z < CONTROLBUS_NUM_ZONES; ++z) {
             // Find max in this zone (3 chroma bins per zone for 12-bin system)

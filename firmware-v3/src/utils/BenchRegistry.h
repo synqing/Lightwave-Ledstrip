@@ -32,9 +32,9 @@
  *   - render.color_correction (wired in RendererActor.cpp)
  *   - render.async_rmt (visibility stub — Wave 2 LedDriver disentangle)
  *   - render.dual_strip_parallel (visibility stub — Wave 2)
- *   - audio.lookahead (visibility stub — Wave 2 AudioActor observer)
- *   - audio.zone_agc (visibility stub — Wave 2)
- *   - audio.chroma_zone_agc (visibility stub — Wave 2)
+ *   - audio.lookahead (wired for ControlBus UpdateFromHop backends)
+ *   - audio.zone_agc (wired for ControlBus UpdateFromHop backends)
+ *   - audio.chroma_zone_agc (wired for ControlBus UpdateFromHop backends)
  *   - effect.fade_to_black (opt-in via FadeOverride.h helper)
  *   - effect.subpixel (visibility stub — SubpixelRenderer not yet integrated)
  */

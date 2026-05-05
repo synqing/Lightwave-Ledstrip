@@ -411,6 +411,14 @@ public:
     bool getChromaZoneAGCEnabled() const { return m_chroma_zone_agc_enabled; }
     void setChromaZoneAGCRates(float attack, float release);
 
+    // Bench-only A/B gates. These combine with the runtime API switches above
+    // without overwriting their requested state.
+    void setBenchAudioToggles(bool lookahead, bool zoneAgc, bool chromaZoneAgc) {
+        m_bench_lookahead_enabled = lookahead;
+        m_bench_zone_agc_enabled = zoneAgc;
+        m_bench_chroma_zone_agc_enabled = chromaZoneAgc;
+    }
+
     // Access zone state for debugging/visualization
     float getZoneFollower(uint8_t zone) const {
         return (zone < CONTROLBUS_NUM_ZONES) ? m_zones[zone].max_mag_follower : 1.0f;
@@ -520,6 +528,10 @@ private:
     // Zone 3: A, A#, B (9-11)  - high notes
     bool m_chroma_zone_agc_enabled = true;  // Enabled by default
     ZoneAGC m_chroma_zones[CONTROLBUS_NUM_ZONES];
+
+    bool m_bench_lookahead_enabled = true;
+    bool m_bench_zone_agc_enabled = true;
+    bool m_bench_chroma_zone_agc_enabled = true;
 
     // Spike detection telemetry
     SpikeDetectionStats m_spikeStats;
@@ -637,7 +649,8 @@ private:
                                const float* input,
                                float* output,
                                size_t num_bands,
-                               bool isBands);
+                               bool isBands,
+                               bool benchEnabled);
 
     // Private method for chord detection (Stage B)
     void detectChord(const float* chroma, ChordState& outChord);

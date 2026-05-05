@@ -230,7 +230,7 @@ RendererActor::RendererActor()
     m_musicalGrid.SetTimeSignature(m_audioContractTuning.beatsPerBar, m_audioContractTuning.beatUnit);
 #endif
     audio::resetOnsetSemanticTracker(m_onsetTrackerState);
-    m_sharedAudioCtx.onset = plugins::OnsetContext{};
+    m_sharedOnsetCtx = plugins::OnsetContext{};
 #endif
 }
 
@@ -254,16 +254,47 @@ RendererActor::~RendererActor()
 
 #if FEATURE_AUDIO_SYNC
 
-void RendererActor::updateSharedOnsetContext(uint32_t nowMs, float dtSeconds) {
+void RendererActor::updateSharedOnsetContext(const audio::ControlBusFrame& frame,
+                                             const audio::MusicalGridSnapshot& grid,
+                                             bool available,
+                                             bool trinityActive,
+                                             uint32_t nowMs,
+                                             float dtSeconds) {
     const audio::OnsetSemanticInputs inputs{
-        m_sharedAudioCtx.controlBus,
-        m_sharedAudioCtx.musicalGrid,
-        m_sharedAudioCtx.available,
-        m_sharedAudioCtx.trinityActive,
+        frame,
+        grid,
+        available,
+        trinityActive,
         nowMs,
         dtSeconds,
     };
-    audio::updateOnsetContext(inputs, m_onsetTrackerState, m_sharedAudioCtx.onset);
+    audio::updateOnsetContext(inputs, m_onsetTrackerState, m_sharedOnsetCtx);
+}
+
+void RendererActor::populateAudioContextForRender(plugins::AudioContext& out,
+                                                  const audio::ControlBusFrame& frame,
+                                                  const audio::MusicalGridSnapshot& grid,
+                                                  bool available,
+                                                  bool trinityActive,
+                                                  bool includeBehaviorContext) {
+#if FEATURE_TRACE_AUDIO_HANDOFF
+    TRACE_SCOPE("audio_ctx_populate_us");
+#endif
+    out.controlBus = frame;
+    out.musicalGrid = grid;
+    out.available = available;
+    out.trinityActive = trinityActive;
+    out.onset = m_sharedOnsetCtx;
+
+    if (includeBehaviorContext && out.available) {
+        out.behaviorContext = plugins::selectBehavior(
+            out.musicStyle(),
+            out.saliencyFrame(),
+            out.styleConfidence()
+        );
+    } else {
+        out.behaviorContext = plugins::BehaviorContext{};
+    }
 }
 
 #endif
@@ -603,6 +634,10 @@ void RendererActor::onStart()
     // alongside p50/p99 measurements of audio_snapshot_read.
     TRACE_COUNTER("audio_snapshot_size_bytes",
                   static_cast<int>(sizeof(audio::ControlBusFrame)));
+    TRACE_COUNTER("audio_context_size_bytes",
+                  static_cast<int>(sizeof(plugins::AudioContext)));
+    TRACE_COUNTER("effect_context_size_bytes",
+                  static_cast<int>(sizeof(plugins::EffectContext)));
 
     LW_LOGI("Ready - %d effects, brightness=%d, target=%d FPS",
              m_registryCount, m_brightness, LedConfig::TARGET_FPS);
@@ -1452,6 +1487,9 @@ void RendererActor::renderFrame()
     // =========================================================================
 #if FEATURE_AUDIO_SYNC
     bool audioAvailable = false;
+    const audio::ControlBusFrame* audioContextFrame = &m_lastControlBus;
+    bool audioContextAvailable = false;
+    bool audioContextTrinityActive = false;
     const audio::SnapshotBuffer<audio::ControlBusFrame>* activeBuffer = nullptr;
     if (m_audioInputMode == AudioInputMode::StimulusOverride && m_stimulusControlBusBuffer != nullptr) {
         activeBuffer = m_stimulusControlBusBuffer;
@@ -1635,54 +1673,47 @@ void RendererActor::renderFrame()
             }
         }
 
-        {
-#if FEATURE_TRACE_AUDIO_HANDOFF
-            TRACE_SCOPE("audio_ctx_populate_us");
-#endif
-            bool trinityCandidate = (m_trinitySyncActive && m_trinityProxy.isActive() && !m_trinitySyncPaused);
-            bool trinityActive = false;
-            if (m_audioInputMode == AudioInputMode::StimulusOverride) {
-                trinityActive = false;
-            } else {
-                trinityActive = trinityCandidate;
-            }
+        bool trinityCandidate = (m_trinitySyncActive && m_trinityProxy.isActive() && !m_trinitySyncPaused);
+        bool trinityActive = false;
+        if (m_audioInputMode == AudioInputMode::StimulusOverride) {
+            trinityActive = false;
+        } else {
+            trinityActive = trinityCandidate;
+        }
 
-            static uint32_t lastTrinityDbg = 0;
-            uint32_t nowMs = millis();
-            if (m_trinitySyncActive && (nowMs - lastTrinityDbg >= 2000)) {
-                lastTrinityDbg = nowMs;
-                LW_LOGD("Trinity state: syncActive=%d proxyActive=%d paused=%d => trinityActive=%d",
-                        m_trinitySyncActive, m_trinityProxy.isActive(), m_trinitySyncPaused, trinityActive);
-            }
+        static uint32_t lastTrinityDbg = 0;
+        uint32_t nowMs = millis();
+        if (m_trinitySyncActive && (nowMs - lastTrinityDbg >= 2000)) {
+            lastTrinityDbg = nowMs;
+            LW_LOGD("Trinity state: syncActive=%d proxyActive=%d paused=%d => trinityActive=%d",
+                    m_trinitySyncActive, m_trinityProxy.isActive(), m_trinitySyncPaused, trinityActive);
+        }
 
-            if (trinityActive) {
-                m_sharedAudioCtx.controlBus = m_trinityProxy.getFrame();
-                m_sharedAudioCtx.musicalGrid = m_lastMusicalGrid;
-                m_sharedAudioCtx.available = true;
-                m_sharedAudioCtx.trinityActive = true;
-            } else {
-                m_sharedAudioCtx.controlBus = m_lastControlBus;
-                m_sharedAudioCtx.musicalGrid = m_lastMusicalGrid;
-                m_sharedAudioCtx.available = audioAvailable;
-                m_sharedAudioCtx.trinityActive = false;
+        if (trinityActive) {
+            audioContextFrame = &m_trinityProxy.getFrame();
+            audioContextAvailable = true;
+            audioContextTrinityActive = true;
+        } else {
+            audioContextFrame = &m_lastControlBus;
+            audioContextAvailable = audioAvailable;
+            audioContextTrinityActive = false;
 
-                uint8_t idx = m_bandsDebugWriteIndex.load(std::memory_order_relaxed);
-                BandsDebugSnapshot& snap = m_bandsDebugSnapshot[idx];
-                for (uint8_t i = 0; i < 8; ++i) snap.bands[i] = m_lastControlBus.bands[i];
-                snap.bass = (m_lastControlBus.bands[0] + m_lastControlBus.bands[1]) * 0.5f;
-                snap.mid = (m_lastControlBus.bands[2] + m_lastControlBus.bands[3] + m_lastControlBus.bands[4]) / 3.0f;
-                snap.treble = (m_lastControlBus.bands[5] + m_lastControlBus.bands[6] + m_lastControlBus.bands[7]) / 3.0f;
-                snap.rms = m_lastControlBus.rms;
-                if (snap.rms <= 0.0f && (snap.bass + snap.mid + snap.treble) > 0.01f) {
-                    float bandRms = 0.0f;
-                    for (uint8_t i = 0; i < 8; ++i) bandRms += snap.bands[i] * snap.bands[i];
-                    snap.rms = (bandRms > 0.0f) ? sqrtf(bandRms / 8.0f) : (snap.bass + snap.mid + snap.treble) / 3.0f;
-                }
-                snap.flux = m_lastControlBus.flux;
-                snap.hop_seq = m_lastControlBus.hop_seq;
-                snap.valid = true;
-                m_bandsDebugWriteIndex.store(1u - idx, std::memory_order_release);
+            uint8_t idx = m_bandsDebugWriteIndex.load(std::memory_order_relaxed);
+            BandsDebugSnapshot& snap = m_bandsDebugSnapshot[idx];
+            for (uint8_t i = 0; i < 8; ++i) snap.bands[i] = m_lastControlBus.bands[i];
+            snap.bass = (m_lastControlBus.bands[0] + m_lastControlBus.bands[1]) * 0.5f;
+            snap.mid = (m_lastControlBus.bands[2] + m_lastControlBus.bands[3] + m_lastControlBus.bands[4]) / 3.0f;
+            snap.treble = (m_lastControlBus.bands[5] + m_lastControlBus.bands[6] + m_lastControlBus.bands[7]) / 3.0f;
+            snap.rms = m_lastControlBus.rms;
+            if (snap.rms <= 0.0f && (snap.bass + snap.mid + snap.treble) > 0.01f) {
+                float bandRms = 0.0f;
+                for (uint8_t i = 0; i < 8; ++i) bandRms += snap.bands[i] * snap.bands[i];
+                snap.rms = (bandRms > 0.0f) ? sqrtf(bandRms / 8.0f) : (snap.bass + snap.mid + snap.treble) / 3.0f;
             }
+            snap.flux = m_lastControlBus.flux;
+            snap.hop_seq = m_lastControlBus.hop_seq;
+            snap.valid = true;
+            m_bandsDebugWriteIndex.store(1u - idx, std::memory_order_release);
         }
     } else {
         bool trinityActive = (m_trinitySyncActive && m_trinityProxy.isActive() && !m_trinitySyncPaused);
@@ -1690,13 +1721,13 @@ void RendererActor::renderFrame()
             trinityActive = false;
         }
         if (trinityActive) {
-            m_sharedAudioCtx.controlBus = m_trinityProxy.getFrame();
-            m_sharedAudioCtx.musicalGrid = m_lastMusicalGrid;
-            m_sharedAudioCtx.available = true;
-            m_sharedAudioCtx.trinityActive = true;
+            audioContextFrame = &m_trinityProxy.getFrame();
+            audioContextAvailable = true;
+            audioContextTrinityActive = true;
         } else {
-            m_sharedAudioCtx.available = false;
-            m_sharedAudioCtx.trinityActive = false;
+            audioContextFrame = &m_lastControlBus;
+            audioContextAvailable = false;
+            audioContextTrinityActive = false;
         }
     }
 #endif
@@ -1711,7 +1742,12 @@ void RendererActor::renderFrame()
     }
 
 #if FEATURE_AUDIO_SYNC
-    updateSharedOnsetContext(now / 1000u, static_cast<float>(deltaTimeMs) * 0.001f);
+    updateSharedOnsetContext(*audioContextFrame,
+                             m_lastMusicalGrid,
+                             audioContextAvailable,
+                             audioContextTrinityActive,
+                             now / 1000u,
+                             static_cast<float>(deltaTimeMs) * 0.001f);
 #endif
 
     // Phase 1B — Independent dispatch. Top and bottom strips render different
@@ -1720,8 +1756,16 @@ void RendererActor::renderFrame()
     // and skips the unified->strip memcpy + applies tone-map per strip.
     if (m_rendererMode == RendererMode::Independent) {
         TRACE_SCOPE("render_independent");
-        renderStripIndependent(0, m_stripEffectId[0], deltaTimeMs);
-        renderStripIndependent(1, m_stripEffectId[1], deltaTimeMs);
+        renderStripIndependent(0, m_stripEffectId[0], deltaTimeMs
+#if FEATURE_AUDIO_SYNC
+                               , *audioContextFrame, audioContextAvailable, audioContextTrinityActive
+#endif
+        );
+        renderStripIndependent(1, m_stripEffectId[1], deltaTimeMs
+#if FEATURE_AUDIO_SYNC
+                               , *audioContextFrame, audioContextAvailable, audioContextTrinityActive
+#endif
+        );
         m_effectContext.dualChannelMode = true;
         if (millis() - m_hueLastUserSetMs > kHueAutoRotatePauseMs) {
             m_hue += 1;
@@ -1734,6 +1778,12 @@ void RendererActor::renderFrame()
         TRACE_SCOPE("zone_compose");
         // Use ZoneComposer for multi-zone rendering
 #if FEATURE_AUDIO_SYNC
+        populateAudioContextForRender(m_sharedAudioCtx,
+                                      *audioContextFrame,
+                                      m_lastMusicalGrid,
+                                      audioContextAvailable,
+                                      audioContextTrinityActive,
+                                      false);
         m_zoneComposer->render(m_leds, LedConfig::TOTAL_LEDS,
                                &m_currentPalette, m_hue, m_frameCount, deltaTimeMs, &m_sharedAudioCtx);
 #else
@@ -1798,19 +1848,16 @@ void RendererActor::renderFrame()
 
         // =====================================================================
         // Phase 2: Audio Context Integration
-        // Reuse shared audio context prepared before zone composer check
+        // Populate directly from the renderer-owned frame to avoid a redundant
+        // shared-context ControlBusFrame copy in the single-effect path.
         // =====================================================================
 #if FEATURE_AUDIO_SYNC
-        ctx.audio = m_sharedAudioCtx;
-        if (ctx.audio.available) {
-            ctx.audio.behaviorContext = plugins::selectBehavior(
-                ctx.audio.musicStyle(),
-                ctx.audio.saliencyFrame(),
-                ctx.audio.styleConfidence()
-            );
-        } else {
-            ctx.audio.behaviorContext = plugins::BehaviorContext{};
-        }
+        populateAudioContextForRender(ctx.audio,
+                                      *audioContextFrame,
+                                      m_lastMusicalGrid,
+                                      audioContextAvailable,
+                                      audioContextTrinityActive,
+                                      true);
 #else
         ctx.audio.available = false;
 #endif
@@ -1929,7 +1976,13 @@ void RendererActor::renderFrame()
 // =============================================================================
 // Phase 1B — Independent strip dispatch helper
 // =============================================================================
-void RendererActor::renderStripIndependent(uint8_t stripIdx, EffectId eid, uint32_t deltaTimeMs)
+void RendererActor::renderStripIndependent(uint8_t stripIdx, EffectId eid, uint32_t deltaTimeMs
+#if FEATURE_AUDIO_SYNC
+                                           , const audio::ControlBusFrame& audioFrame
+                                           , bool audioAvailable
+                                           , bool trinityActive
+#endif
+)
 {
     if (stripIdx > 1) return;
     CRGB* dest = (stripIdx == 0) ? m_strip1 : m_strip2;
@@ -1985,16 +2038,12 @@ void RendererActor::renderStripIndependent(uint8_t stripIdx, EffectId eid, uint3
     ctx.dualChannelMode = false;  // Outer code sets true once after both strips render
 
 #if FEATURE_AUDIO_SYNC
-    ctx.audio = m_sharedAudioCtx;
-    if (ctx.audio.available) {
-        ctx.audio.behaviorContext = plugins::selectBehavior(
-            ctx.audio.musicStyle(),
-            ctx.audio.saliencyFrame(),
-            ctx.audio.styleConfidence()
-        );
-    } else {
-        ctx.audio.behaviorContext = plugins::BehaviorContext{};
-    }
+    populateAudioContextForRender(ctx.audio,
+                                  audioFrame,
+                                  m_lastMusicalGrid,
+                                  audioAvailable,
+                                  trinityActive,
+                                  true);
 #else
     ctx.audio.available = false;
 #endif

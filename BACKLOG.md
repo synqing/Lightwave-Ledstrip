@@ -251,7 +251,9 @@ These are NOT phases; they are validated engineering intents that update both fi
 - NOT IMPLEMENTED: `motion_engine_tick_us` / `motion_shaper_tick_us` have no live update call site in `RendererActor`; activating them would change effect-facing motion semantics, so they remain parked until a Captain-approved product behaviour change exists.
 - Surface 3 spans (`i2s_dma_read`, `stm_rfft_256`, `onset_detect_span`, `band_ratio_detect`, `controlbus_publish`) gated on `FEATURE_TRACE_AUDIO_DSP`
 - 2026-05-06 K1v2 handoff trace (`0x2102`, MAC `b4:3a:45:a5:87:f8`): `audio_snapshot_read` p99 687 µs; `bus_copy_memcpy` p99 247 µs; `audio_ctx_populate_us` p99 302 µs; retry only 2/98 reads. Retry contention is not the root cause.
-- Next gate: reduce renderer-side by-value `ControlBusFrame` / `AudioContext` copy count or graduate the ControlBusFrame hot/cold split below. Do not tune retry policy unless a later trace shows retry frequency rising.
+- DONE: Renderer-side copy-count reduction now populates single-effect and independent-strip `EffectContext.audio` directly from the renderer-owned frame instead of first copying through `m_sharedAudioCtx`. The zone path keeps one compatibility context because `ZoneComposer` owns its own reusable context.
+- 2026-05-06 K1v2 copy-reduction trace (`0x2102`, MAC `b4:3a:45:a5:87:f8`): `audio_snapshot_read` p99 460 µs; `bus_copy_memcpy` p99 251 µs; `audio_ctx_populate_us` p99 293 µs; `render_frame` p99 2755 µs; retry still 2/99 reads.
+- Next gate: only graduate the ControlBusFrame hot/cold split below if sub-300 µs snapshot reads become a hard requirement. Do not tune retry policy unless a later trace shows retry frequency rising.
 
 ### ControlBusFrame → internal DRAM relocation (Captain Q3 RESOLVED in spec, implementation shipped)
 - Captain-approved 2026-04-27 architectural change: relocate `SnapshotBuffer<ControlBusFrame>` from PSRAM to internal DRAM (5 KB cost approved)
@@ -260,8 +262,9 @@ These are NOT phases; they are validated engineering intents that update both fi
 - DONE: 1C verify-first diagnostic is implemented. ActorSystem init now reports actor/snapshot payload memory region (`DRAM`, `PSRAM`, or `OTHER`) and trace counters `audio_actor_storage_region`, `audio_snapshot_storage_region`, `audio_snapshot_payload_bytes`.
 - DONE: 1B narrow relocation is implemented. K1v2 hardware verification on `/dev/cu.usbmodem2101` / MAC `b4:3a:45:a5:87:f8` changed the boot diagnostic from `actor=PSRAM payload=PSRAM` to `actor=PSRAM payload=DRAM`; whole-actor 1A allocation was not used.
 - DONE: 2026-05-06 post-relocation Tier 1 trace captured in `firmware-v3/docs/research/phase1b_runtime_evidence_2026-05-06/controlbus_dram_relocation_trace/`. `audio_snapshot_read` p99 stayed above the target (`647 µs`), so the gated Tier 2 handoff trace was implemented and captured.
+- DONE: 2026-05-06 renderer copy-count reduction improved the same K1v2 handoff trace from `audio_snapshot_read` p99 687 µs to 460 µs and `render_frame` p99 3072 µs to 2755 µs, without changing the cross-core `SnapshotBuffer` safety copy.
 - Strategy options surfaced by the SSA-PHASE-A audit (2026-04-27): (1A) override `AudioActor::operator new` to force `MALLOC_CAP_INTERNAL` — lowest risk, ~50–100 KB cost; (1B) convert `m_controlBusBuffer` to a heap-allocated pointer — closer to 5 KB envelope but ~10 KB minimum for double-buffer; (1C) verify-first via `esp_ptr_in_dram` boot diagnostic before committing budget
-- Result: DRAM placement alone did not close H2. The next optimisation target is copy count / frame shape, not allocation region.
+- Result: DRAM placement plus renderer copy-count reduction reduced but did not close the original `<200 µs` target. The remaining target is frame shape / hot-cold split, not allocation region or retry policy.
 
 ### Audio-side bench toggle wiring (Surface 7 follow-up)
 - BenchRegistry framework + 8 toggle registrations + `render.color_correction` consumer wiring SHIPPED
@@ -291,6 +294,7 @@ These are NOT phases; they are validated engineering intents that update both fi
 ### ControlBusFrame hot/cold split
 - The ~2 KB ControlBusFrame is copied atomically across cores via SnapshotBuffer
 - If cross-core contention becomes measurable, split into hot (~100 B: RMS, flux, bands) and cold (~1.9 KB: full spectrum, waveform) sub-structs with independent update rates
+- 2026-05-06 evidence after duplicate renderer-copy removal: direct snapshot payload copy is still ~251 µs p99 and `audio_snapshot_read` is ~460 µs p99 on K1v2 `0x2102`. Hot/cold split is the next plausible lever, but it is a contract refactor touching stimulus, legacy inactive Trinity compatibility, debug/streaming, and effect compatibility; do not start it as a small patch.
 
 ### MabuTrace library risk
 - 7 GitHub stars, 1 fork, single maintainer (mabuware/Matthias Buhlmann)

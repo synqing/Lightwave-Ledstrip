@@ -688,13 +688,30 @@ private:
      * buffer with centre at LED 79, then dispatches the effect's render().
      * Falls back to clearing the strip buffer if the effect is unregistered.
      */
-    void renderStripIndependent(uint8_t stripIdx, EffectId eid, uint32_t deltaTimeMs);
+    void renderStripIndependent(uint8_t stripIdx, EffectId eid, uint32_t deltaTimeMs
+#if FEATURE_AUDIO_SYNC
+                                , const audio::ControlBusFrame& audioFrame
+                                , bool audioAvailable
+                                , bool trinityActive
+#endif
+    );
 
     void applyPendingAudioContractTuning();
     void applyPendingEffectParameterUpdates();
 
 #if FEATURE_AUDIO_SYNC
-    void updateSharedOnsetContext(uint32_t nowMs, float dtSeconds);
+    void updateSharedOnsetContext(const audio::ControlBusFrame& frame,
+                                  const audio::MusicalGridSnapshot& grid,
+                                  bool available,
+                                  bool trinityActive,
+                                  uint32_t nowMs,
+                                  float dtSeconds);
+    void populateAudioContextForRender(plugins::AudioContext& out,
+                                       const audio::ControlBusFrame& frame,
+                                       const audio::MusicalGridSnapshot& grid,
+                                       bool available,
+                                       bool trinityActive,
+                                       bool includeBehaviorContext);
 #endif
 
     /**
@@ -842,10 +859,11 @@ private:
     plugins::EffectContext m_effectContext;
 
 #if FEATURE_AUDIO_SYNC
-    // Shared audio context built once per frame and reused by both zone mode and
-    // single-effect mode. Keeping this as a member avoids large stack usage in
-    // renderFrame() that can trigger FreeRTOS stack overflow in the Renderer task.
+    // ZoneComposer compatibility context. Single-effect and independent-strip
+    // paths populate m_effectContext.audio directly to avoid an extra full
+    // ControlBusFrame copy after the renderer-owned snapshot is already stable.
     plugins::AudioContext m_sharedAudioCtx;
+    plugins::OnsetContext m_sharedOnsetCtx{};
     audio::OnsetSemanticTrackerState m_onsetTrackerState{};
     audio::MotionSemanticEngine m_motionEngine;  ///< Layer 2: ControlBusFrame -> 6-axis motion-semantic frame
     audio::MotionShaper m_motionShaper;          ///< Layer 3: onset-driven temporal envelope shaping

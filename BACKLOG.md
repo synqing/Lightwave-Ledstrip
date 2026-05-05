@@ -247,9 +247,11 @@ These are NOT phases; they are validated engineering intents that update both fi
 
 ### Surface 2 / 3 Tier 2 decomposition spans (gated, opt-in)
 - Spec: `TRACE_INSTRUMENTATION_SPEC.md` §2 + §3 Tier 2 tables
-- Surface 2 spans (`bus_copy_memcpy`, `bus_retry_check`, `audio_ctx_populate_us`, `motion_engine_tick_us`, `motion_shaper_tick_us`) gated on `FEATURE_TRACE_AUDIO_HANDOFF`
+- DONE: Surface 2 live-code spans (`bus_copy_memcpy`, `bus_copy_retry`, `bus_retry_check`, `audio_ctx_populate_us`) are gated on `FEATURE_TRACE_AUDIO_HANDOFF` and build via `esp32dev_audio_esv11_k1v2_32khz_trace_handoff`.
+- NOT IMPLEMENTED: `motion_engine_tick_us` / `motion_shaper_tick_us` have no live update call site in `RendererActor`; activating them would change effect-facing motion semantics, so they remain parked until a Captain-approved product behaviour change exists.
 - Surface 3 spans (`i2s_dma_read`, `stm_rfft_256`, `onset_detect_span`, `band_ratio_detect`, `controlbus_publish`) gated on `FEATURE_TRACE_AUDIO_DSP`
-- Captain decision deferred per spec Q3: implement only if `audio_snapshot_read` p99 stays > 300 µs after the DRAM relocation (below) lands
+- 2026-05-06 K1v2 handoff trace (`0x2102`, MAC `b4:3a:45:a5:87:f8`): `audio_snapshot_read` p99 687 µs; `bus_copy_memcpy` p99 247 µs; `audio_ctx_populate_us` p99 302 µs; retry only 2/98 reads. Retry contention is not the root cause.
+- Next gate: reduce renderer-side by-value `ControlBusFrame` / `AudioContext` copy count or graduate the ControlBusFrame hot/cold split below. Do not tune retry policy unless a later trace shows retry frequency rising.
 
 ### ControlBusFrame → internal DRAM relocation (Captain Q3 RESOLVED in spec, implementation shipped)
 - Captain-approved 2026-04-27 architectural change: relocate `SnapshotBuffer<ControlBusFrame>` from PSRAM to internal DRAM (5 KB cost approved)
@@ -257,8 +259,9 @@ These are NOT phases; they are validated engineering intents that update both fi
 - The Tier 1 measurement contract (`audio_snapshot_age_us`, `hop_seq_lag`, `size_bytes`, `snapshot_read_retries_total`) is SHIPPED — before/after baseline diffing via `firmware-v3/tools/analyse_trace.py --baseline tools/baselines/k1v2_0x2102_2026-04-27.json --strict` is mechanical
 - DONE: 1C verify-first diagnostic is implemented. ActorSystem init now reports actor/snapshot payload memory region (`DRAM`, `PSRAM`, or `OTHER`) and trace counters `audio_actor_storage_region`, `audio_snapshot_storage_region`, `audio_snapshot_payload_bytes`.
 - DONE: 1B narrow relocation is implemented. K1v2 hardware verification on `/dev/cu.usbmodem2101` / MAC `b4:3a:45:a5:87:f8` changed the boot diagnostic from `actor=PSRAM payload=PSRAM` to `actor=PSRAM payload=DRAM`; whole-actor 1A allocation was not used.
+- DONE: 2026-05-06 post-relocation Tier 1 trace captured in `firmware-v3/docs/research/phase1b_runtime_evidence_2026-05-06/controlbus_dram_relocation_trace/`. `audio_snapshot_read` p99 stayed above the target (`647 µs`), so the gated Tier 2 handoff trace was implemented and captured.
 - Strategy options surfaced by the SSA-PHASE-A audit (2026-04-27): (1A) override `AudioActor::operator new` to force `MALLOC_CAP_INTERNAL` — lowest risk, ~50–100 KB cost; (1B) convert `m_controlBusBuffer` to a heap-allocated pointer — closer to 5 KB envelope but ~10 KB minimum for double-buffer; (1C) verify-first via `esp_ptr_in_dram` boot diagnostic before committing budget
-- Next gate: capture a fresh Tier 1 trace and compare `audio_snapshot_read` p99 against the shipped baseline target.
+- Result: DRAM placement alone did not close H2. The next optimisation target is copy count / frame shape, not allocation region.
 
 ### Audio-side bench toggle wiring (Surface 7 follow-up)
 - BenchRegistry framework + 8 toggle registrations + `render.color_correction` consumer wiring SHIPPED

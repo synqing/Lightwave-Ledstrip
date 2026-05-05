@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "../../config/Trace.h"
+
 #ifndef NATIVE_BUILD
 #include <esp_heap_caps.h>
 #endif
@@ -76,20 +78,42 @@ public:
             idx = 0;  // Reset to safe default if corrupted
         }
 
+#if FEATURE_TRACE_AUDIO_HANDOFF
+        {
+            TRACE_SCOPE("bus_copy_memcpy");
+            out = m_buf[idx];
+        }
+#else
         out = m_buf[idx];
+#endif
 
         std::atomic_thread_fence(std::memory_order_acquire);
         uint32_t s1 = m_seq.load(std::memory_order_acquire);
 
-        if (s1 != s0) {
+        const bool seqChanged = (s1 != s0);
+#if FEATURE_TRACE_AUDIO_HANDOFF
+        TRACE_COUNTER("bus_retry_check", seqChanged ? 1 : 0);
+#endif
+
+        if (seqChanged) {
             // One retry for consistency.
+#if FEATURE_TRACE_AUDIO_HANDOFF
+            TRACE_INSTANT("bus_retry_check");
+#endif
             m_retryCount.fetch_add(1U, std::memory_order_relaxed);
             idx = m_active.load(std::memory_order_acquire);
             // Validate idx again after reload
             if (idx > 1) {
                 idx = 0;
             }
+#if FEATURE_TRACE_AUDIO_HANDOFF
+            {
+                TRACE_SCOPE("bus_copy_retry");
+                out = m_buf[idx];
+            }
+#else
             out = m_buf[idx];
+#endif
             s1 = m_seq.load(std::memory_order_acquire);
         }
         return s1;

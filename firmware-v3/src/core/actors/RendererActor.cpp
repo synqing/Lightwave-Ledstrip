@@ -1635,49 +1635,54 @@ void RendererActor::renderFrame()
             }
         }
 
-        bool trinityCandidate = (m_trinitySyncActive && m_trinityProxy.isActive() && !m_trinitySyncPaused);
-        bool trinityActive = false;
-        if (m_audioInputMode == AudioInputMode::StimulusOverride) {
-            trinityActive = false;
-        } else {
-            trinityActive = trinityCandidate;
-        }
-
-        static uint32_t lastTrinityDbg = 0;
-        uint32_t nowMs = millis();
-        if (m_trinitySyncActive && (nowMs - lastTrinityDbg >= 2000)) {
-            lastTrinityDbg = nowMs;
-            LW_LOGD("Trinity state: syncActive=%d proxyActive=%d paused=%d => trinityActive=%d",
-                    m_trinitySyncActive, m_trinityProxy.isActive(), m_trinitySyncPaused, trinityActive);
-        }
-
-        if (trinityActive) {
-            m_sharedAudioCtx.controlBus = m_trinityProxy.getFrame();
-            m_sharedAudioCtx.musicalGrid = m_lastMusicalGrid;
-            m_sharedAudioCtx.available = true;
-            m_sharedAudioCtx.trinityActive = true;
-        } else {
-            m_sharedAudioCtx.controlBus = m_lastControlBus;
-            m_sharedAudioCtx.musicalGrid = m_lastMusicalGrid;
-            m_sharedAudioCtx.available = audioAvailable;
-            m_sharedAudioCtx.trinityActive = false;
-
-            uint8_t idx = m_bandsDebugWriteIndex.load(std::memory_order_relaxed);
-            BandsDebugSnapshot& snap = m_bandsDebugSnapshot[idx];
-            for (uint8_t i = 0; i < 8; ++i) snap.bands[i] = m_lastControlBus.bands[i];
-            snap.bass = (m_lastControlBus.bands[0] + m_lastControlBus.bands[1]) * 0.5f;
-            snap.mid = (m_lastControlBus.bands[2] + m_lastControlBus.bands[3] + m_lastControlBus.bands[4]) / 3.0f;
-            snap.treble = (m_lastControlBus.bands[5] + m_lastControlBus.bands[6] + m_lastControlBus.bands[7]) / 3.0f;
-            snap.rms = m_lastControlBus.rms;
-            if (snap.rms <= 0.0f && (snap.bass + snap.mid + snap.treble) > 0.01f) {
-                float bandRms = 0.0f;
-                for (uint8_t i = 0; i < 8; ++i) bandRms += snap.bands[i] * snap.bands[i];
-                snap.rms = (bandRms > 0.0f) ? sqrtf(bandRms / 8.0f) : (snap.bass + snap.mid + snap.treble) / 3.0f;
+        {
+#if FEATURE_TRACE_AUDIO_HANDOFF
+            TRACE_SCOPE("audio_ctx_populate_us");
+#endif
+            bool trinityCandidate = (m_trinitySyncActive && m_trinityProxy.isActive() && !m_trinitySyncPaused);
+            bool trinityActive = false;
+            if (m_audioInputMode == AudioInputMode::StimulusOverride) {
+                trinityActive = false;
+            } else {
+                trinityActive = trinityCandidate;
             }
-            snap.flux = m_lastControlBus.flux;
-            snap.hop_seq = m_lastControlBus.hop_seq;
-            snap.valid = true;
-            m_bandsDebugWriteIndex.store(1u - idx, std::memory_order_release);
+
+            static uint32_t lastTrinityDbg = 0;
+            uint32_t nowMs = millis();
+            if (m_trinitySyncActive && (nowMs - lastTrinityDbg >= 2000)) {
+                lastTrinityDbg = nowMs;
+                LW_LOGD("Trinity state: syncActive=%d proxyActive=%d paused=%d => trinityActive=%d",
+                        m_trinitySyncActive, m_trinityProxy.isActive(), m_trinitySyncPaused, trinityActive);
+            }
+
+            if (trinityActive) {
+                m_sharedAudioCtx.controlBus = m_trinityProxy.getFrame();
+                m_sharedAudioCtx.musicalGrid = m_lastMusicalGrid;
+                m_sharedAudioCtx.available = true;
+                m_sharedAudioCtx.trinityActive = true;
+            } else {
+                m_sharedAudioCtx.controlBus = m_lastControlBus;
+                m_sharedAudioCtx.musicalGrid = m_lastMusicalGrid;
+                m_sharedAudioCtx.available = audioAvailable;
+                m_sharedAudioCtx.trinityActive = false;
+
+                uint8_t idx = m_bandsDebugWriteIndex.load(std::memory_order_relaxed);
+                BandsDebugSnapshot& snap = m_bandsDebugSnapshot[idx];
+                for (uint8_t i = 0; i < 8; ++i) snap.bands[i] = m_lastControlBus.bands[i];
+                snap.bass = (m_lastControlBus.bands[0] + m_lastControlBus.bands[1]) * 0.5f;
+                snap.mid = (m_lastControlBus.bands[2] + m_lastControlBus.bands[3] + m_lastControlBus.bands[4]) / 3.0f;
+                snap.treble = (m_lastControlBus.bands[5] + m_lastControlBus.bands[6] + m_lastControlBus.bands[7]) / 3.0f;
+                snap.rms = m_lastControlBus.rms;
+                if (snap.rms <= 0.0f && (snap.bass + snap.mid + snap.treble) > 0.01f) {
+                    float bandRms = 0.0f;
+                    for (uint8_t i = 0; i < 8; ++i) bandRms += snap.bands[i] * snap.bands[i];
+                    snap.rms = (bandRms > 0.0f) ? sqrtf(bandRms / 8.0f) : (snap.bass + snap.mid + snap.treble) / 3.0f;
+                }
+                snap.flux = m_lastControlBus.flux;
+                snap.hop_seq = m_lastControlBus.hop_seq;
+                snap.valid = true;
+                m_bandsDebugWriteIndex.store(1u - idx, std::memory_order_release);
+            }
         }
     } else {
         bool trinityActive = (m_trinitySyncActive && m_trinityProxy.isActive() && !m_trinitySyncPaused);

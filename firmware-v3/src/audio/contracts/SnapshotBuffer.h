@@ -1,7 +1,12 @@
 #pragma once
 #include <atomic>
+#include <new>
 #include <stddef.h>
 #include <stdint.h>
+
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#endif
 
 namespace lightwaveos::audio {
 
@@ -121,6 +126,63 @@ private:
     mutable std::atomic<uint32_t> m_active{0};
     mutable std::atomic<uint32_t> m_seq{0};
     mutable std::atomic<uint32_t> m_retryCount{0};
+};
+
+/**
+ * @brief Owns a SnapshotBuffer in internal memory on ESP targets.
+ *
+ * The owner allocates once during construction. Hot-path publish/read calls still
+ * operate on SnapshotBuffer directly and perform no allocation.
+ */
+template <typename T>
+class InternalSnapshotBufferOwner final {
+public:
+    using Buffer = SnapshotBuffer<T>;
+
+    InternalSnapshotBufferOwner() {
+#ifdef NATIVE_BUILD
+        m_buffer = new (m_storage) Buffer();
+#else
+        m_storage = heap_caps_malloc(sizeof(Buffer), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        if (m_storage != nullptr) {
+            m_buffer = new (m_storage) Buffer();
+        }
+#endif
+    }
+
+    ~InternalSnapshotBufferOwner() {
+        if (m_buffer != nullptr) {
+            m_buffer->~Buffer();
+            m_buffer = nullptr;
+        }
+#ifndef NATIVE_BUILD
+        if (m_storage != nullptr) {
+            heap_caps_free(m_storage);
+            m_storage = nullptr;
+        }
+#endif
+    }
+
+    InternalSnapshotBufferOwner(const InternalSnapshotBufferOwner&) = delete;
+    InternalSnapshotBufferOwner& operator=(const InternalSnapshotBufferOwner&) = delete;
+    InternalSnapshotBufferOwner(InternalSnapshotBufferOwner&&) = delete;
+    InternalSnapshotBufferOwner& operator=(InternalSnapshotBufferOwner&&) = delete;
+
+    bool IsReady() const { return m_buffer != nullptr; }
+    Buffer* get() { return m_buffer; }
+    const Buffer* get() const { return m_buffer; }
+    Buffer& operator*() { return *m_buffer; }
+    const Buffer& operator*() const { return *m_buffer; }
+    Buffer* operator->() { return m_buffer; }
+    const Buffer* operator->() const { return m_buffer; }
+
+private:
+    Buffer* m_buffer = nullptr;
+#ifdef NATIVE_BUILD
+    alignas(Buffer) unsigned char m_storage[sizeof(Buffer)]{};
+#else
+    void* m_storage = nullptr;
+#endif
 };
 
 } // namespace lightwaveos::audio

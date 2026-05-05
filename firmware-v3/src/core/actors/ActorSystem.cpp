@@ -126,6 +126,14 @@ bool ActorSystem::init()
             return false;
         }
 
+        if (!m_audio->hasControlBusBuffer()) {
+#ifndef NATIVE_BUILD
+            ESP_LOGE(TAG, "Failed to allocate AudioActor ControlBus snapshot buffer");
+#endif
+            m_state = SystemState::UNINITIALIZED;
+            return false;
+        }
+
         m_audio->logControlBusBufferPlacement();
 #ifndef NATIVE_BUILD
         ESP_LOGI(TAG, "AudioActor created (Phase 2 audio sync enabled)");

@@ -369,8 +369,10 @@ public:
      * @return Reference to the ControlBusFrame SnapshotBuffer
      */
     const SnapshotBuffer<ControlBusFrame>& getControlBusBuffer() const {
-        return m_controlBusBuffer;
+        return *m_controlBusBuffer;
     }
+
+    bool hasControlBusBuffer() const { return m_controlBusBuffer.IsReady(); }
 
     /**
      * @brief Get current sample index (monotonic)
@@ -641,8 +643,8 @@ private:
     AudioActorStats m_stats;
     AudioPipelineDiagnostics m_diag;
 
-    // Lock-free buffer for cross-core sharing with RendererActor
-    SnapshotBuffer<ControlBusFrame> m_controlBusBuffer;
+    // Lock-free buffer for cross-core sharing with RendererActor.
+    InternalSnapshotBufferOwner<ControlBusFrame> m_controlBusBuffer;
 
     // Monotonic sample counter (64-bit for no overflow)
     uint64_t m_sampleIndex = 0;
@@ -846,8 +848,8 @@ private:
     mutable portMUX_TYPE m_controlBusApiMux = portMUX_INITIALIZER_UNLOCKED;
 #endif
 
-    // Lock-free buffer for cross-core sharing with RendererActor
-    SnapshotBuffer<ControlBusFrame> m_controlBusBuffer;
+    // Lock-free buffer for cross-core sharing with RendererActor.
+    InternalSnapshotBufferOwner<ControlBusFrame> m_controlBusBuffer;
 
     // Monotonic sample counter (64-bit for no overflow)
     uint64_t m_sampleIndex = 0;
@@ -974,8 +976,8 @@ private:
     mutable portMUX_TYPE m_controlBusApiMux = portMUX_INITIALIZER_UNLOCKED;
 #endif
 
-    // Lock-free buffer for cross-core sharing with RendererActor
-    SnapshotBuffer<ControlBusFrame> m_controlBusBuffer;
+    // Lock-free buffer for cross-core sharing with RendererActor.
+    InternalSnapshotBufferOwner<ControlBusFrame> m_controlBusBuffer;
 
     // Monotonic sample counter (64-bit for no overflow)
     uint64_t m_sampleIndex = 0;

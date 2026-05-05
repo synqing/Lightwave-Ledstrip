@@ -251,13 +251,14 @@ These are NOT phases; they are validated engineering intents that update both fi
 - Surface 3 spans (`i2s_dma_read`, `stm_rfft_256`, `onset_detect_span`, `band_ratio_detect`, `controlbus_publish`) gated on `FEATURE_TRACE_AUDIO_DSP`
 - Captain decision deferred per spec Q3: implement only if `audio_snapshot_read` p99 stays > 300 µs after the DRAM relocation (below) lands
 
-### ControlBusFrame → internal DRAM relocation (Captain Q3 RESOLVED in spec, implementation pending)
+### ControlBusFrame → internal DRAM relocation (Captain Q3 RESOLVED in spec, implementation shipped)
 - Captain-approved 2026-04-27 architectural change: relocate `SnapshotBuffer<ControlBusFrame>` from PSRAM to internal DRAM (5 KB cost approved)
 - Expected outcome: 5–10× speedup on `audio_snapshot_read` (current p99 836 µs → target <200 µs)
 - The Tier 1 measurement contract (`audio_snapshot_age_us`, `hop_seq_lag`, `size_bytes`, `snapshot_read_retries_total`) is SHIPPED — before/after baseline diffing via `firmware-v3/tools/analyse_trace.py --baseline tools/baselines/k1v2_0x2102_2026-04-27.json --strict` is mechanical
-- DONE: 1C verify-first diagnostic is implemented. ActorSystem init now reports actor/snapshot payload memory region (`DRAM`, `PSRAM`, or `OTHER`) and trace counters `audio_actor_storage_region`, `audio_snapshot_storage_region`, `audio_snapshot_payload_bytes`; relocation itself is not yet applied.
+- DONE: 1C verify-first diagnostic is implemented. ActorSystem init now reports actor/snapshot payload memory region (`DRAM`, `PSRAM`, or `OTHER`) and trace counters `audio_actor_storage_region`, `audio_snapshot_storage_region`, `audio_snapshot_payload_bytes`.
+- DONE: 1B narrow relocation is implemented. K1v2 hardware verification on `/dev/cu.usbmodem2101` / MAC `b4:3a:45:a5:87:f8` changed the boot diagnostic from `actor=PSRAM payload=PSRAM` to `actor=PSRAM payload=DRAM`; whole-actor 1A allocation was not used.
 - Strategy options surfaced by the SSA-PHASE-A audit (2026-04-27): (1A) override `AudioActor::operator new` to force `MALLOC_CAP_INTERNAL` — lowest risk, ~50–100 KB cost; (1B) convert `m_controlBusBuffer` to a heap-allocated pointer — closer to 5 KB envelope but ~10 KB minimum for double-buffer; (1C) verify-first via `esp_ptr_in_dram` boot diagnostic before committing budget
-- Next gate: flash K1v2 and read the boot diagnostic. If snapshot storage is already `DRAM`, relocation is unnecessary; if it reports `PSRAM`, implement the narrow 1B relocation rather than the 1A whole-actor internal allocation.
+- Next gate: capture a fresh Tier 1 trace and compare `audio_snapshot_read` p99 against the shipped baseline target.
 
 ### Audio-side bench toggle wiring (Surface 7 follow-up)
 - BenchRegistry framework + 8 toggle registrations + `render.color_correction` consumer wiring SHIPPED

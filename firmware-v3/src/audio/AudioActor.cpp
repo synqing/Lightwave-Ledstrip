@@ -342,13 +342,19 @@ inline int memoryRegionCode(const void* ptr) {
 
 void AudioActor::logControlBusBufferPlacement() const {
 #ifndef NATIVE_BUILD
+    if (!m_controlBusBuffer.IsReady()) {
+        TRACE_COUNTER("audio_snapshot_storage_region", 0);
+        LW_LOGE("ControlBusFrame snapshot storage: unavailable");
+        return;
+    }
+
     const void* actorStorage = static_cast<const void*>(this);
-    const void* payloadStorage = m_controlBusBuffer.StorageAddressForDiagnostics();
+    const void* payloadStorage = m_controlBusBuffer->StorageAddressForDiagnostics();
     const unsigned frameBytes = static_cast<unsigned>(sizeof(ControlBusFrame));
     const unsigned payloadBytes =
-        static_cast<unsigned>(m_controlBusBuffer.PayloadBytesForDiagnostics());
+        static_cast<unsigned>(m_controlBusBuffer->PayloadBytesForDiagnostics());
     const unsigned objectBytes =
-        static_cast<unsigned>(m_controlBusBuffer.ObjectBytesForDiagnostics());
+        static_cast<unsigned>(m_controlBusBuffer->ObjectBytesForDiagnostics());
 
     TRACE_COUNTER("audio_actor_storage_region", memoryRegionCode(actorStorage));
     TRACE_COUNTER("audio_snapshot_storage_region", memoryRegionCode(payloadStorage));
@@ -512,7 +518,7 @@ void AudioActor::printStatus()
 {
 #ifndef NATIVE_BUILD
     ControlBusFrame latest{};
-    m_controlBusBuffer.ReadLatest(latest);
+    m_controlBusBuffer->ReadLatest(latest);
     Serial.println("=== Audio Status (ES v1.1 backend) ===");
     Serial.printf("  RMS: %.3f  Flux: %.3f\n", latest.rms, latest.flux);
     Serial.printf("  BPM: %.1f  Conf: %.3f  BeatTick: %d\n",
@@ -539,7 +545,7 @@ void AudioActor::printSpectrum()
 {
 #ifndef NATIVE_BUILD
     ControlBusFrame latest{};
-    m_controlBusBuffer.ReadLatest(latest);
+    m_controlBusBuffer->ReadLatest(latest);
     Serial.println("=== Spectrum (ES v1.1 backend) ===");
     Serial.print("  Bands:");
     for (int i = 0; i < CONTROLBUS_NUM_BANDS; ++i) {
@@ -553,7 +559,7 @@ void AudioActor::printBeat()
 {
 #ifndef NATIVE_BUILD
     ControlBusFrame latest{};
-    m_controlBusBuffer.ReadLatest(latest);
+    m_controlBusBuffer->ReadLatest(latest);
     Serial.println("=== Beat (ES v1.1 backend) ===");
     Serial.printf("  BPM: %.1f  Conf: %.3f  Phase01@t: %.3f  BeatInBar: %u\n",
                   latest.es_bpm, latest.es_tempo_confidence, latest.es_phase01_at_audio_t,
@@ -1077,7 +1083,7 @@ void AudioActor::onTick()
     const uint64_t snapshotPublishStartUs = esp_timer_get_time();
     TRACE_BEGIN("snapshot_publish");
     const uint64_t publishCopyStartUs = esp_timer_get_time();
-    m_controlBusBuffer.Publish(frame);
+    m_controlBusBuffer->Publish(frame);
     TRACE_COUNTER("controlbus_publish_copy_us",
                   static_cast<int32_t>(esp_timer_get_time() - publishCopyStartUs));
 
@@ -1985,7 +1991,7 @@ void AudioActor::processHop()
 #else
         frameToPublish.scene = kDefaultSceneParameters;
 #endif
-        m_controlBusBuffer.Publish(frameToPublish);
+        m_controlBusBuffer->Publish(frameToPublish);
 
         // Track publish statistics
         m_diag.publishCount++;
@@ -3737,7 +3743,7 @@ void AudioActor::processHop()
 #else
         frameToPublish.scene = kDefaultSceneParameters;
 #endif
-        m_controlBusBuffer.Publish(frameToPublish);
+        m_controlBusBuffer->Publish(frameToPublish);
         
         // Phase 1.2: Track publish statistics
         m_diag.publishCount++;

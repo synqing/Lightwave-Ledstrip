@@ -107,6 +107,7 @@ void SerialCLI::tick() {
     // Handle serial commands with proper line buffering.
     // This fixes the issue where typing "adbg 2" character-by-character
     // would trigger effect selection for '2' instead of the adbg command.
+    bool shouldProcess = false;
     while (Serial.available()) {
         char c = Serial.read();
 
@@ -153,6 +154,7 @@ void SerialCLI::tick() {
                 } else {
                     // Process immediately without buffering
                     m_cmdBuffer = String(c);
+                    shouldProcess = true;
                     break; // Exit while loop to process
                 }
                 continue;
@@ -161,6 +163,7 @@ void SerialCLI::tick() {
 
         if (c == '\n' || c == '\r') {
             // End of line — process buffered command
+            shouldProcess = true;
             break;
         } else if (c == 0x7F || c == 0x08) {
             // Backspace — remove last char
@@ -173,8 +176,8 @@ void SerialCLI::tick() {
         }
     }
 
-    // Process buffered command if we have one
-    if (m_cmdBuffer.length() > 0) {
+    // Process a complete line or a single immediate hotkey only.
+    if (shouldProcess && m_cmdBuffer.length() > 0) {
         String input = m_cmdBuffer;
         char firstChar = input[0]; // Save before trim (for space, etc.)
         m_cmdBuffer = ""; // Clear for next command
@@ -573,7 +576,7 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
         if (input.startsWith("ae")) {
             handledMulti = true;
             auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
-            auto& cfg = engine.getConfig();
+            auto cfg = engine.getConfig();
 
             if (input == "ae") {
                 Serial.printf("Auto-exposure: %s, target=%d\n",
@@ -589,14 +592,17 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
                     String arg = input.substring(startIdx);
                     if (arg == "0") {
                         cfg.autoExposureEnabled = false;
+                        engine.setConfig(cfg);
                         Serial.println("Auto-exposure: OFF");
                     } else if (arg == "1") {
                         cfg.autoExposureEnabled = true;
+                        engine.setConfig(cfg);
                         Serial.println("Auto-exposure: ON");
                     } else {
                         int target = arg.toInt();
                         if (target > 0 && target <= 255) {
                             cfg.autoExposureTarget = target;
+                            engine.setConfig(cfg);
                             Serial.printf("Auto-exposure target: %d\n", target);
                         }
                     }
@@ -810,12 +816,17 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
         if (input.startsWith("gamma")) {
             handledMulti = true;
             auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
-            auto& cfg = engine.getConfig();
+            auto cfg = engine.getConfig();
 
             if (input == "gamma") {
+                const auto status = engine.getGammaLutStatus();
                 Serial.printf("Gamma: %s, value=%.1f\n",
                               cfg.gammaEnabled ? "ON" : "OFF",
                               cfg.gammaValue);
+                Serial.printf("Gamma LUT: gen=%lu samples[0,32,64,128,192,255]=%u,%u,%u,%u,%u,%u\n",
+                              (unsigned long)status.lutGenerationId,
+                              status.lut0, status.lut32, status.lut64,
+                              status.lut128, status.lut192, status.lut255);
             } else if (input.length() > 5) {
                 // Handle both "gamma1.5" and "gamma 1.5" formats
                 int startIdx = 5;
@@ -826,10 +837,12 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
                     float val = input.substring(startIdx).toFloat();
                     if (val == 0) {
                         cfg.gammaEnabled = false;
+                        engine.setConfig(cfg);
                         Serial.println("Gamma: OFF");
                     } else if (val >= 1.0f && val <= 3.0f) {
                         cfg.gammaEnabled = true;
                         cfg.gammaValue = val;
+                        engine.setConfig(cfg);
                         Serial.printf("Gamma set to: %.1f\n", val);
                     } else {
                         Serial.println("Invalid gamma. Use 0 (off) or 1.0-3.0");
@@ -1054,7 +1067,7 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
         if (input.startsWith("brown")) {
             handledMulti = true;
             auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
-            auto& cfg = engine.getConfig();
+            auto cfg = engine.getConfig();
 
             if (input == "brown") {
                 Serial.printf("Brown guardrail: %s\n",
@@ -1071,9 +1084,11 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
                     String arg = input.substring(startIdx);
                     if (arg == "0") {
                         cfg.brownGuardrailEnabled = false;
+                        engine.setConfig(cfg);
                         Serial.println("Brown guardrail: OFF");
                     } else if (arg == "1") {
                         cfg.brownGuardrailEnabled = true;
+                        engine.setConfig(cfg);
                         Serial.println("Brown guardrail: ON");
                     }
                 }
@@ -2400,7 +2415,8 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
             {
                 auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
                 auto mode = engine.getMode();
-                auto& cfg = engine.getConfig();
+                const auto& cfg = engine.getConfig();
+                const auto status = engine.getGammaLutStatus();
                 const char* modeNames[] = {"OFF", "HSV", "RGB", "BOTH"};
                 Serial.println("\n=== Color Correction Status ===");
                 Serial.printf("  Mode: %d (%s)\n", (int)mode, modeNames[(int)mode]);
@@ -2410,6 +2426,10 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
                 Serial.printf("  Gamma: %s, value=%.1f\n",
                               cfg.gammaEnabled ? "ON" : "OFF",
                               cfg.gammaValue);
+                Serial.printf("  Gamma LUT: gen=%lu samples[0,32,64,128,192,255]=%u,%u,%u,%u,%u,%u\n",
+                              (unsigned long)status.lutGenerationId,
+                              status.lut0, status.lut32, status.lut64,
+                              status.lut128, status.lut192, status.lut255);
                 Serial.printf("  Brown guardrail: %s\n",
                               cfg.brownGuardrailEnabled ? "ON" : "OFF");
                 Serial.println();
@@ -2420,8 +2440,9 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
             // Toggle auto-exposure
             {
                 auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
-                auto& cfg = engine.getConfig();
+                auto cfg = engine.getConfig();
                 cfg.autoExposureEnabled = !cfg.autoExposureEnabled;
+                engine.setConfig(cfg);
                 Serial.printf("Auto-exposure: %s\n", cfg.autoExposureEnabled ? "ON" : "OFF");
             }
             break;
@@ -2430,22 +2451,26 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
             // Toggle gamma or cycle common values
             {
                 auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
-                auto& cfg = engine.getConfig();
+                auto cfg = engine.getConfig();
                 if (!cfg.gammaEnabled) {
                     // Enable with default 2.2
                     cfg.gammaEnabled = true;
                     cfg.gammaValue = 2.2f;
+                    engine.setConfig(cfg);
                     Serial.printf("Gamma: ON (%.1f)\n", cfg.gammaValue);
                 } else {
                     // Cycle through common values: 2.2 -> 2.5 -> 2.8 -> off
                     if (cfg.gammaValue < 2.3f) {
                         cfg.gammaValue = 2.5f;
+                        engine.setConfig(cfg);
                         Serial.printf("Gamma: %.1f\n", cfg.gammaValue);
                     } else if (cfg.gammaValue < 2.6f) {
                         cfg.gammaValue = 2.8f;
+                        engine.setConfig(cfg);
                         Serial.printf("Gamma: %.1f\n", cfg.gammaValue);
                     } else {
                         cfg.gammaEnabled = false;
+                        engine.setConfig(cfg);
                         Serial.println("Gamma: OFF");
                     }
                 }

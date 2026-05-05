@@ -11,6 +11,7 @@
 
 #include "ColorCorrectionEngine.h"
 #include <algorithm>
+#include <cmath>
 #include <esp_log.h>
 
 static const char* TAG = "ColorCorrection";
@@ -25,6 +26,7 @@ namespace enhancement {
 uint8_t ColorCorrectionEngine::s_gammaLUT[256] = {0};
 uint8_t ColorCorrectionEngine::s_srgbLinearLUT[256] = {0};
 bool ColorCorrectionEngine::s_lutsInitialized = false;
+uint32_t ColorCorrectionEngine::s_gammaLutGenerationId = 0;
 
 // ============================================================================
 // SINGLETON INSTANCE
@@ -51,12 +53,7 @@ ColorCorrectionEngine::ColorCorrectionEngine() {
 void ColorCorrectionEngine::initLUTs() {
     if (s_lutsInitialized) return;
 
-    // Generate gamma 2.2 correction LUT
-    for (uint16_t i = 0; i < 256; ++i) {
-        float normalized = (float)i / 255.0f;
-        float gammaCorrected = powf(normalized, m_config.gammaValue);
-        s_gammaLUT[i] = (uint8_t)(gammaCorrected * 255.0f + 0.5f);
-    }
+    rebuildGammaLUT();
 
     // Generate sRGB to linear conversion LUT
     for (uint16_t i = 0; i < 256; ++i) {
@@ -74,28 +71,55 @@ void ColorCorrectionEngine::initLUTs() {
     ESP_LOGI(TAG, "LUTs initialized (gamma=%.1f)", m_config.gammaValue);
 }
 
+void ColorCorrectionEngine::rebuildGammaLUT() {
+    for (uint16_t i = 0; i < 256; ++i) {
+        float normalized = (float)i / 255.0f;
+        s_gammaLUT[i] = (uint8_t)(powf(normalized, m_config.gammaValue) * 255.0f + 0.5f);
+    }
+
+    s_gammaLutGenerationId++;
+}
+
 // ============================================================================
 // CONFIGURATION
 // ============================================================================
 
 void ColorCorrectionEngine::setConfig(const ColorCorrectionConfig& config) {
+    const bool gammaChanged =
+        (m_config.gammaEnabled != config.gammaEnabled) ||
+        (m_config.gammaValue != config.gammaValue);
+
     m_config = config;
 
-    // Regenerate gamma LUT if gamma value changed
-    if (config.gammaEnabled) {
-        for (uint16_t i = 0; i < 256; ++i) {
-            float normalized = (float)i / 255.0f;
-            s_gammaLUT[i] = (uint8_t)(powf(normalized, m_config.gammaValue) * 255.0f + 0.5f);
-        }
+    if (gammaChanged) {
+        rebuildGammaLUT();
     }
-}
-
-ColorCorrectionConfig& ColorCorrectionEngine::getConfig() {
-    return m_config;
 }
 
 const ColorCorrectionConfig& ColorCorrectionEngine::getConfig() const {
     return m_config;
+}
+
+GammaLutStatus ColorCorrectionEngine::getGammaLutStatus() const {
+    GammaLutStatus status;
+    status.gammaEnabled = m_config.gammaEnabled;
+    status.gammaValue = m_config.gammaValue;
+    status.lutGenerationId = s_gammaLutGenerationId;
+    status.lut0 = s_gammaLUT[0];
+    status.lut32 = s_gammaLUT[32];
+    status.lut64 = s_gammaLUT[64];
+    status.lut128 = s_gammaLUT[128];
+    status.lut192 = s_gammaLUT[192];
+    status.lut255 = s_gammaLUT[255];
+    return status;
+}
+
+uint8_t ColorCorrectionEngine::getGammaLutSample(uint8_t input) const {
+    return s_gammaLUT[input];
+}
+
+uint32_t ColorCorrectionEngine::getGammaLutGenerationId() const {
+    return s_gammaLutGenerationId;
 }
 
 // ============================================================================
@@ -418,22 +442,24 @@ void ColorCorrectionEngine::saveToNVS() {
 void ColorCorrectionEngine::loadFromNVS() {
     Preferences prefs;
     if (prefs.begin("colorCorr", true)) {
-        m_config.mode = (CorrectionMode)prefs.getUChar("mode", (uint8_t)CorrectionMode::RGB);
-        m_config.hsvMinSaturation = prefs.getUChar("hsvMinSat", 120);
-        m_config.rgbWhiteThreshold = prefs.getUChar("rgbThresh", 150);
-        m_config.rgbTargetMin = prefs.getUChar("rgbTarget", 100);
-        m_config.autoExposureEnabled = prefs.getBool("aeEnabled", false);
-        m_config.autoExposureTarget = prefs.getUChar("aeTarget", 110);
-        m_config.gammaEnabled = prefs.getBool("gammaEn", true);
-        m_config.gammaValue = prefs.getFloat("gammaVal", 2.2f);
-        m_config.brownGuardrailEnabled = prefs.getBool("brownEn", false);
-        m_config.maxGreenPercentOfRed = prefs.getUChar("brownG", 28);
-        m_config.maxBluePercentOfRed = prefs.getUChar("brownB", 8);
+        ColorCorrectionConfig loaded = m_config;
+        loaded.mode = (CorrectionMode)prefs.getUChar("mode", (uint8_t)CorrectionMode::RGB);
+        loaded.hsvMinSaturation = prefs.getUChar("hsvMinSat", 120);
+        loaded.rgbWhiteThreshold = prefs.getUChar("rgbThresh", 150);
+        loaded.rgbTargetMin = prefs.getUChar("rgbTarget", 100);
+        loaded.autoExposureEnabled = prefs.getBool("aeEnabled", false);
+        loaded.autoExposureTarget = prefs.getUChar("aeTarget", 110);
+        loaded.gammaEnabled = prefs.getBool("gammaEn", true);
+        loaded.gammaValue = prefs.getFloat("gammaVal", 2.2f);
+        loaded.brownGuardrailEnabled = prefs.getBool("brownEn", false);
+        loaded.maxGreenPercentOfRed = prefs.getUChar("brownG", 28);
+        loaded.maxBluePercentOfRed = prefs.getUChar("brownB", 8);
         // V-Clamping settings (white accumulation prevention)
-        m_config.vClampEnabled = prefs.getBool("vClampEn", true);
-        m_config.maxBrightness = prefs.getUChar("maxBright", 255);
-        m_config.saturationBoostAmount = prefs.getUChar("satBoost", 25);
+        loaded.vClampEnabled = prefs.getBool("vClampEn", true);
+        loaded.maxBrightness = prefs.getUChar("maxBright", 255);
+        loaded.saturationBoostAmount = prefs.getUChar("satBoost", 25);
         prefs.end();
+        setConfig(loaded);
         ESP_LOGI(TAG, "Settings loaded from NVS (mode=%d, vClamp=%d)",
                  (int)m_config.mode, m_config.vClampEnabled);
     } else {

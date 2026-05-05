@@ -23,6 +23,17 @@ namespace ws {
 using namespace lightwaveos::enhancement;
 using namespace lightwaveos::palettes;
 
+static void appendGammaLutStatus(JsonObject& data, const GammaLutStatus& status) {
+    data["lutGenerationId"] = status.lutGenerationId;
+    JsonObject gammaLut = data["gammaLut"].to<JsonObject>();
+    gammaLut["0"] = status.lut0;
+    gammaLut["32"] = status.lut32;
+    gammaLut["64"] = status.lut64;
+    gammaLut["128"] = status.lut128;
+    gammaLut["192"] = status.lut192;
+    gammaLut["255"] = status.lut255;
+}
+
 static void handleColorGetStatus(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     const char* requestId = doc["requestId"] | "";
     auto& engine = ColorEngine::getInstance();
@@ -247,9 +258,10 @@ static void handleColorSetDiffusionAmount(AsyncWebSocketClient* client, JsonDocu
 static void handleColorCorrectionGetConfig(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     const char* requestId = doc["requestId"] | "";
     auto& engine = ColorCorrectionEngine::getInstance();
-    auto& cfg = engine.getConfig();
+    const auto& cfg = engine.getConfig();
+    const GammaLutStatus gammaStatus = engine.getGammaLutStatus();
     
-    String response = buildWsResponse("colorCorrection.getConfig", requestId, [&cfg](JsonObject& data) {
+    String response = buildWsResponse("colorCorrection.getConfig", requestId, [&cfg, gammaStatus](JsonObject& data) {
         data["mode"] = (uint8_t)cfg.mode;
         data["modeNames"] = "OFF,HSV,RGB,BOTH";
         data["hsvMinSaturation"] = cfg.hsvMinSaturation;
@@ -259,6 +271,7 @@ static void handleColorCorrectionGetConfig(AsyncWebSocketClient* client, JsonDoc
         data["autoExposureTarget"] = cfg.autoExposureTarget;
         data["gammaEnabled"] = cfg.gammaEnabled;
         data["gammaValue"] = cfg.gammaValue;
+        appendGammaLutStatus(data, gammaStatus);
         data["brownGuardrailEnabled"] = cfg.brownGuardrailEnabled;
         data["maxGreenPercentOfRed"] = cfg.maxGreenPercentOfRed;
         data["maxBluePercentOfRed"] = cfg.maxBluePercentOfRed;
@@ -307,7 +320,7 @@ static void handleColorCorrectionSetConfig(AsyncWebSocketClient* client, JsonDoc
     const codec::ColorCorrectionSetConfigRequest& req = decodeResult.request;
     const char* requestId = req.requestId ? req.requestId : "";
     auto& engine = ColorCorrectionEngine::getInstance();
-    auto& cfg = engine.getConfig();
+    ColorCorrectionConfig cfg = engine.getConfig();
     
     // Apply changes conditionally using has* flags (codec already validated ranges)
     if (req.hasMode) {
@@ -343,10 +356,15 @@ static void handleColorCorrectionSetConfig(AsyncWebSocketClient* client, JsonDoc
     if (req.hasMaxBluePercentOfRed) {
         cfg.maxBluePercentOfRed = req.maxBluePercentOfRed;
     }
+    engine.setConfig(cfg);
+    const GammaLutStatus gammaStatus = engine.getGammaLutStatus();
     
-    String response = buildWsResponse("colorCorrection.setConfig", requestId, [&cfg](JsonObject& data) {
+    String response = buildWsResponse("colorCorrection.setConfig", requestId, [&cfg, gammaStatus](JsonObject& data) {
         data["mode"] = (uint8_t)cfg.mode;
         data["updated"] = true;
+        data["gammaEnabled"] = cfg.gammaEnabled;
+        data["gammaValue"] = cfg.gammaValue;
+        appendGammaLutStatus(data, gammaStatus);
     });
     client->text(response);
 }
@@ -380,4 +398,3 @@ void registerWsColorCommands(const WebServerContext& ctx) {
 } // namespace webserver
 } // namespace network
 } // namespace lightwaveos
-

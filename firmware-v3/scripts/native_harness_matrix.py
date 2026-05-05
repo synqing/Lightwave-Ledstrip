@@ -21,6 +21,7 @@ class HarnessStep:
 
 MATRIX: tuple[HarnessStep, ...] = (
     HarnessStep("codec aggregate", (("pio", "test", "-e", "native_codec_test_ws"),)),
+    HarnessStep("colour correction engine", (("pio", "test", "-e", "native_test_color_correction_engine"),)),
     HarnessStep("phase5 native substrate", (("pio", "test", "-e", "native_test_phase5"),)),
     HarnessStep("zone effect isolation", (("pio", "test", "-e", "native_test_zone_effect_isolation"),)),
     HarnessStep("reflective twin policy", (("pio", "test", "-e", "native_test_reflective_twin_policy"),)),

@@ -22,6 +22,7 @@
 #include "../network/RequestValidator.h"  // wireZoneIdToInternal (2026-05-02 migration)
 #include "../effects/PatternRegistry.h"
 #include "../effects/enhancement/EdgeMixer.h"
+#include "../effects/enhancement/ColorCorrectionEngine.h"
 #include "../core/narrative/NarrativeEngine.h"
 #include "../core/shows/BuiltinShows.h"
 #include "../core/shows/Prim8Adapter.h"
@@ -75,6 +76,44 @@ static void serialJsonResponse(const char* type, const char* reqId, const char* 
 static void serialJsonError(const char* reqId, const char* error) {
     Serial.printf("{\"type\":\"error\",\"requestId\":\"%s\",\"success\":false,\"error\":\"%s\"}\n",
                   reqId, error);
+}
+
+static void serialJsonDocResponse(const char* type, const char* reqId, const JsonDocument& data) {
+    Serial.printf("{\"type\":\"%s\",\"requestId\":\"%s\",\"success\":true,\"data\":", type, reqId);
+    serializeJson(data, Serial);
+    Serial.println("}");
+}
+
+static void appendGammaLutStatus(JsonObject data,
+                                 const lightwaveos::enhancement::GammaLutStatus& status) {
+    data["gammaEnabled"] = status.gammaEnabled;
+    data["gammaValue"] = status.gammaValue;
+    data["lutGenerationId"] = status.lutGenerationId;
+    JsonObject gammaLut = data["gammaLut"].to<JsonObject>();
+    gammaLut["0"] = status.lut0;
+    gammaLut["32"] = status.lut32;
+    gammaLut["64"] = status.lut64;
+    gammaLut["128"] = status.lut128;
+    gammaLut["192"] = status.lut192;
+    gammaLut["255"] = status.lut255;
+}
+
+static void appendColorCorrectionConfig(JsonObject data,
+                                        const lightwaveos::enhancement::ColorCorrectionConfig& cfg,
+                                        const lightwaveos::enhancement::GammaLutStatus& gammaStatus) {
+    data["mode"] = static_cast<uint8_t>(cfg.mode);
+    data["hsvMinSaturation"] = cfg.hsvMinSaturation;
+    data["rgbWhiteThreshold"] = cfg.rgbWhiteThreshold;
+    data["rgbTargetMin"] = cfg.rgbTargetMin;
+    data["autoExposureEnabled"] = cfg.autoExposureEnabled;
+    data["autoExposureTarget"] = cfg.autoExposureTarget;
+    appendGammaLutStatus(data, gammaStatus);
+    data["brownGuardrailEnabled"] = cfg.brownGuardrailEnabled;
+    data["maxGreenPercentOfRed"] = cfg.maxGreenPercentOfRed;
+    data["maxBluePercentOfRed"] = cfg.maxBluePercentOfRed;
+    data["vClampEnabled"] = cfg.vClampEnabled;
+    data["maxBrightness"] = cfg.maxBrightness;
+    data["saturationBoostAmount"] = cfg.saturationBoostAmount;
 }
 
 // ---------------------------------------------------------------------------
@@ -563,6 +602,81 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
             (unsigned)rTemporal,
             lightwaveos::enhancement::EdgeMixer::temporalName(static_cast<ET>(rTemporal)));
         serialJsonResponse(type, reqId, buf);
+    }
+    // ------------------------------------------------------------------
+    // render.dithering.get / render.dithering.set
+    // ------------------------------------------------------------------
+    else if (strcmp(type, "render.dithering.get") == 0) {
+        const bool enabled = renderer ? renderer->isLedDitheringEnabled() : true;
+        char buf[32];
+        snprintf(buf, sizeof(buf), "{\"enabled\":%s}", enabled ? "true" : "false");
+        serialJsonResponse(type, reqId, buf);
+    }
+    else if (strcmp(type, "render.dithering.set") == 0) {
+        if (!doc["enabled"].is<bool>()) { serialJsonError(reqId, "missing enabled"); return; }
+        const bool enabled = doc["enabled"].as<bool>();
+        if (!actors.setLedDithering(enabled)) {
+            serialJsonError(reqId, "renderer queue saturated");
+            return;
+        }
+        char buf[32];
+        snprintf(buf, sizeof(buf), "{\"enabled\":%s}", enabled ? "true" : "false");
+        serialJsonResponse(type, reqId, buf);
+    }
+    // ------------------------------------------------------------------
+    // colorCorrection.getConfig / colorCorrection.setConfig
+    // ------------------------------------------------------------------
+    else if (strcmp(type, "colorCorrection.getConfig") == 0) {
+        using lightwaveos::enhancement::ColorCorrectionEngine;
+        auto& engine = ColorCorrectionEngine::getInstance();
+        const auto cfg = engine.getConfig();
+        const auto gammaStatus = engine.getGammaLutStatus();
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        appendColorCorrectionConfig(data, cfg, gammaStatus);
+        serialJsonDocResponse(type, reqId, respDoc);
+    }
+    else if (strcmp(type, "colorCorrection.setConfig") == 0) {
+        using lightwaveos::enhancement::ColorCorrectionConfig;
+        using lightwaveos::enhancement::ColorCorrectionEngine;
+        using lightwaveos::enhancement::CorrectionMode;
+        auto& engine = ColorCorrectionEngine::getInstance();
+        ColorCorrectionConfig cfg = engine.getConfig();
+
+        if (doc.containsKey("mode")) {
+            uint8_t mode = doc["mode"] | 0;
+            if (mode > 3) { serialJsonError(reqId, "mode must be 0-3"); return; }
+            cfg.mode = static_cast<CorrectionMode>(mode);
+        }
+        if (doc.containsKey("hsvMinSaturation")) cfg.hsvMinSaturation = doc["hsvMinSaturation"].as<uint8_t>();
+        if (doc.containsKey("rgbWhiteThreshold")) cfg.rgbWhiteThreshold = doc["rgbWhiteThreshold"].as<uint8_t>();
+        if (doc.containsKey("rgbTargetMin")) cfg.rgbTargetMin = doc["rgbTargetMin"].as<uint8_t>();
+        if (doc.containsKey("autoExposureEnabled")) cfg.autoExposureEnabled = doc["autoExposureEnabled"].as<bool>();
+        if (doc.containsKey("autoExposureTarget")) cfg.autoExposureTarget = doc["autoExposureTarget"].as<uint8_t>();
+        if (doc.containsKey("gammaEnabled")) cfg.gammaEnabled = doc["gammaEnabled"].as<bool>();
+        if (doc.containsKey("gammaValue")) {
+            float gammaValue = doc["gammaValue"].as<float>();
+            if (gammaValue < 1.0f || gammaValue > 3.0f) {
+                serialJsonError(reqId, "gammaValue must be 1.0-3.0");
+                return;
+            }
+            cfg.gammaValue = gammaValue;
+        }
+        if (doc.containsKey("brownGuardrailEnabled")) cfg.brownGuardrailEnabled = doc["brownGuardrailEnabled"].as<bool>();
+        if (doc.containsKey("maxGreenPercentOfRed")) cfg.maxGreenPercentOfRed = doc["maxGreenPercentOfRed"].as<uint8_t>();
+        if (doc.containsKey("maxBluePercentOfRed")) cfg.maxBluePercentOfRed = doc["maxBluePercentOfRed"].as<uint8_t>();
+        if (doc.containsKey("vClampEnabled")) cfg.vClampEnabled = doc["vClampEnabled"].as<bool>();
+        if (doc.containsKey("maxBrightness")) cfg.maxBrightness = doc["maxBrightness"].as<uint8_t>();
+        if (doc.containsKey("saturationBoostAmount")) cfg.saturationBoostAmount = doc["saturationBoostAmount"].as<uint8_t>();
+
+        engine.setConfig(cfg);
+        const auto updated = engine.getConfig();
+        const auto gammaStatus = engine.getGammaLutStatus();
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        data["updated"] = true;
+        appendColorCorrectionConfig(data, updated, gammaStatus);
+        serialJsonDocResponse(type, reqId, respDoc);
     }
     // ------------------------------------------------------------------
     // saveEdgeMixer

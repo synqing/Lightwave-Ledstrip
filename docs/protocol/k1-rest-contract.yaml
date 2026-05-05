@@ -775,6 +775,19 @@ endpoints:
   /api/v1/colorCorrection/config:
     method: GET
     description: "Get colour correction config"
+    response:
+      gammaEnabled: bool
+      gammaValue: float
+      lutGenerationId: uint32
+      gammaLut:
+        type: object
+        fields:
+          "0": uint8
+          "32": uint8
+          "64": uint8
+          "128": uint8
+          "192": uint8
+          "255": uint8
 
   /api/v1/colorCorrection/mode:
     method: POST
@@ -783,6 +796,23 @@ endpoints:
   /api/v1/colorCorrection/config:
     method: POST
     description: "Set colour correction config"
+    params:
+      gammaEnabled: { type: bool, optional: true }
+      gammaValue: { type: float, optional: true, range: "1.0-3.0" }
+    response:
+      updated: bool
+      gammaEnabled: bool
+      gammaValue: float
+      lutGenerationId: uint32
+      gammaLut:
+        type: object
+        fields:
+          "0": uint8
+          "32": uint8
+          "64": uint8
+          "128": uint8
+          "192": uint8
+          "255": uint8
 
   /api/v1/colorCorrection/save:
     method: POST

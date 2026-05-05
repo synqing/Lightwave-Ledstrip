@@ -965,6 +965,16 @@ commands:
         autoExposureTarget: uint8
         gammaEnabled: bool
         gammaValue: float
+        lutGenerationId: uint32
+        gammaLut:
+          type: object
+          fields:
+            "0": uint8
+            "32": uint8
+            "64": uint8
+            "128": uint8
+            "192": uint8
+            "255": uint8
         brownGuardrailEnabled: bool
         maxGreenPercentOfRed: uint8
         maxBluePercentOfRed: uint8
@@ -998,6 +1008,20 @@ commands:
       requestId: { type: string, optional: true }
     response:
       type: "colorCorrection.setConfig"
+      data:
+        updated: bool
+        gammaEnabled: bool
+        gammaValue: float
+        lutGenerationId: uint32
+        gammaLut:
+          type: object
+          fields:
+            "0": uint8
+            "32": uint8
+            "64": uint8
+            "128": uint8
+            "192": uint8
+            "255": uint8
     consumers: [tab5]
 
   colorCorrection.save:

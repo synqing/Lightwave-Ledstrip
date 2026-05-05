@@ -1908,6 +1908,23 @@ Persists current settings (including spatial and temporal) to NVS.
 {"type":"saveEdgeMixer"}
 ```
 
+#### Serial JSON: Render Diagnostics Controls
+
+These commands are volatile USB machine-control surfaces for diagnostics and
+agent tooling. They do not require WiFi STA mode.
+
+```json
+{"type":"render.dithering.get"}
+{"type":"render.dithering.set","enabled":false}
+{"type":"colorCorrection.getConfig"}
+{"type":"colorCorrection.setConfig","gammaEnabled":true,"gammaValue":2.2}
+```
+
+`colorCorrection.getConfig` returns the live correction config plus gamma LUT
+proof points. `colorCorrection.setConfig` accepts partial updates and routes
+through the normal correction config setter so runtime gamma changes rebuild the
+LUT.
+
 #### Broadcast Fields
 
 The periodic WebSocket status broadcast includes:

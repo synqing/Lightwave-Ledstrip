@@ -566,6 +566,11 @@ public:
 #endif
 #endif // !FEATURE_AUDIO_BACKEND_ESV11
 
+    /**
+     * @brief Emit one-shot storage-region diagnostics for the ControlBus snapshot buffer.
+     */
+    void logControlBusBufferPlacement() const;
+
 protected:
     // ========================================================================
     // Actor Overrides

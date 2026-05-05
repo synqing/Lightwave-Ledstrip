@@ -1,5 +1,6 @@
 #pragma once
 #include <atomic>
+#include <stddef.h>
 #include <stdint.h>
 
 namespace lightwaveos::audio {
@@ -98,6 +99,21 @@ public:
      * @brief Cumulative read retry count for cross-core copy diagnostics.
      */
     uint32_t RetryCount() const { return m_retryCount.load(std::memory_order_relaxed); }
+
+    /**
+     * @brief Address of the backing payload array for placement diagnostics.
+     */
+    const void* StorageAddressForDiagnostics() const { return static_cast<const void*>(&m_buf[0]); }
+
+    /**
+     * @brief Bytes occupied by the double-buffered payload storage.
+     */
+    size_t PayloadBytesForDiagnostics() const { return sizeof(m_buf); }
+
+    /**
+     * @brief Bytes occupied by the full SnapshotBuffer object.
+     */
+    size_t ObjectBytesForDiagnostics() const { return sizeof(*this); }
 
 private:
     // Align to T to satisfy platforms with stricter alignment than 4 bytes.

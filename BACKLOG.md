@@ -255,8 +255,9 @@ These are NOT phases; they are validated engineering intents that update both fi
 - Captain-approved 2026-04-27 architectural change: relocate `SnapshotBuffer<ControlBusFrame>` from PSRAM to internal DRAM (5 KB cost approved)
 - Expected outcome: 5–10× speedup on `audio_snapshot_read` (current p99 836 µs → target <200 µs)
 - The Tier 1 measurement contract (`audio_snapshot_age_us`, `hop_seq_lag`, `size_bytes`, `snapshot_read_retries_total`) is SHIPPED — before/after baseline diffing via `firmware-v3/tools/analyse_trace.py --baseline tools/baselines/k1v2_0x2102_2026-04-27.json --strict` is mechanical
+- DONE: 1C verify-first diagnostic is implemented. ActorSystem init now reports actor/snapshot payload memory region (`DRAM`, `PSRAM`, or `OTHER`) and trace counters `audio_actor_storage_region`, `audio_snapshot_storage_region`, `audio_snapshot_payload_bytes`; relocation itself is not yet applied.
 - Strategy options surfaced by the SSA-PHASE-A audit (2026-04-27): (1A) override `AudioActor::operator new` to force `MALLOC_CAP_INTERNAL` — lowest risk, ~50–100 KB cost; (1B) convert `m_controlBusBuffer` to a heap-allocated pointer — closer to 5 KB envelope but ~10 KB minimum for double-buffer; (1C) verify-first via `esp_ptr_in_dram` boot diagnostic before committing budget
-- Owner: Captain decision required (1A vs 1B vs 1C); agent applies once authorised
+- Next gate: flash K1v2 and read the boot diagnostic. If snapshot storage is already `DRAM`, relocation is unnecessary; if it reports `PSRAM`, implement the narrow 1B relocation rather than the 1A whole-actor internal allocation.
 
 ### Audio-side bench toggle wiring (Surface 7 follow-up)
 - BenchRegistry framework + 8 toggle registrations + `render.color_correction` consumer wiring SHIPPED

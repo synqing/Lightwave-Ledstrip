@@ -20,12 +20,14 @@
 #include <cstring>
 #include <cmath>
 #include <algorithm>
+#include <cstdint>
 
 #ifndef NATIVE_BUILD
 #include <Arduino.h>  // For Serial in one-shot debug methods
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <esp_task_wdt.h>  // Task Watchdog subscription/feed for audio tick liveness
+#include <soc/soc_memory_types.h>
 #endif
 
 // AudioMath::retunedAlpha for hop-rate-aware AGC/noise-floor alphas
@@ -314,7 +316,54 @@ inline void applyControlBusBenchToggles(ControlBus& controlBus) {
         ::lightwaveos::bench::isToggleEnabled(&::lightwaveos::bench::g_bench_audio_chroma_zone_agc)
     );
 }
+
+#ifndef NATIVE_BUILD
+inline const char* memoryRegionName(const void* ptr) {
+    if (esp_ptr_in_dram(ptr)) {
+        return "DRAM";
+    }
+    if (esp_ptr_external_ram(ptr)) {
+        return "PSRAM";
+    }
+    return "OTHER";
+}
+
+inline int memoryRegionCode(const void* ptr) {
+    if (esp_ptr_in_dram(ptr)) {
+        return 1;
+    }
+    if (esp_ptr_external_ram(ptr)) {
+        return 2;
+    }
+    return 0;
+}
+#endif
 } // namespace
+
+void AudioActor::logControlBusBufferPlacement() const {
+#ifndef NATIVE_BUILD
+    const void* actorStorage = static_cast<const void*>(this);
+    const void* payloadStorage = m_controlBusBuffer.StorageAddressForDiagnostics();
+    const unsigned frameBytes = static_cast<unsigned>(sizeof(ControlBusFrame));
+    const unsigned payloadBytes =
+        static_cast<unsigned>(m_controlBusBuffer.PayloadBytesForDiagnostics());
+    const unsigned objectBytes =
+        static_cast<unsigned>(m_controlBusBuffer.ObjectBytesForDiagnostics());
+
+    TRACE_COUNTER("audio_actor_storage_region", memoryRegionCode(actorStorage));
+    TRACE_COUNTER("audio_snapshot_storage_region", memoryRegionCode(payloadStorage));
+    TRACE_COUNTER("audio_snapshot_payload_bytes", static_cast<int>(payloadBytes));
+
+    LW_LOGI("ControlBusFrame snapshot storage: actor=%p(%s) payload=%p(%s) frame=%u payload=%u object=%u",
+            actorStorage,
+            memoryRegionName(actorStorage),
+            payloadStorage,
+            memoryRegionName(payloadStorage),
+            frameBytes,
+            payloadBytes,
+            objectBytes);
+#endif
+}
 
 #if !FEATURE_AUDIO_BACKEND_ESV11
 AudioActor::ZoneAgcSnapshot AudioActor::getZoneAgcSnapshot() const {

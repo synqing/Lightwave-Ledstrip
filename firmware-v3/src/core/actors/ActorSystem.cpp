@@ -125,6 +125,8 @@ bool ActorSystem::init()
             m_state = SystemState::UNINITIALIZED;
             return false;
         }
+
+        m_audio->logControlBusBufferPlacement();
 #ifndef NATIVE_BUILD
         ESP_LOGI(TAG, "AudioActor created (Phase 2 audio sync enabled)");
 #endif

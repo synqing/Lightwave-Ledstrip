@@ -265,6 +265,13 @@ These are NOT phases; they are validated engineering intents that update both fi
 - `effect.fade_to_black`: per-effect opt-in via a thin `fadeToBlackByGated` helper (not yet authored)
 - Trigger to revisit: when Captain asks for runtime A/B of any specific toggle
 
+### VP render path audit follow-ups (2026-05-05)
+- DONE: gamma LUT lifecycle/status correctness (`adacee3d`). NVS and runtime colour-correction config writes now route through `ColorCorrectionEngine::setConfig()`, and REST/WS/SerialCLI/SerialJSON expose `gammaEnabled`, `gammaValue`, `lutGenerationId`, and LUT proof samples.
+- DONE: source-grounded VP frame lifecycle audit (`3978c167`). The audit documents one shared output path with a buffer-ownership fork, not two render pipelines.
+- GATED: buffer-ownership correction. Current source applies `ColorCorrectionEngine::processBuffer()` to `m_leds` in `RendererActor::onTick()`, while direct dual-channel effects can author `m_strip1/m_strip2` and bypass the corrected surface before `showLeds()`. Patching this changes visible output for strip-authored effects, so do not implement without explicit Captain approval or a non-subjective validation protocol.
+- GATED: silence-policy metadata. Global `silentScale` is an output brightness policy and can make ambient/non-reactive effects appear audio-reactive. Add per-effect policy metadata only behind tests and explicit product approval; default changes are visible behaviour.
+- SKIPPED: subjective two-unit/manual colour A/B. Do not revive the failed timed A/B workflow or use its observations as evidence. Any future visual-default change needs a new protocol first.
+
 ### Investigate Perfetto-compatible tracing alternatives
 - MabuTrace is GPL-3.0 (dev-only, never ships -- acceptable but not ideal)
 - Alternatives researched:

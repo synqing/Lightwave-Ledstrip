@@ -263,7 +263,7 @@ These are NOT phases; they are validated engineering intents that update both fi
 - DONE: Audio-side toggles (`audio.lookahead`, `audio.zone_agc`, `audio.chroma_zone_agc`) are wired into the ControlBus `UpdateFromHop` backends through an AudioActor per-hop observer plus scoped native regression coverage.
 - ESV11 caveat: production K1v2 builds construct a `ControlBusFrame` through `EsV11Adapter` and bypass ControlBus Stage A (`UpdateFromHop`), so equivalent ESV11 adapter A/B gates require a separate semantic change and are not part of this small Surface 7 follow-up.
 - `render.async_rmt` and `render.dual_strip_parallel`: also stubs; require LedDriver disentanglement (not in current scope)
-- `effect.fade_to_black`: per-effect opt-in via a thin `fadeToBlackByGated` helper (not yet authored)
+- DONE: `effect.fade_to_black` helper substrate (`effects/FadeOverride.h`) is authored and covered by `native_test_fade_override`; no effect call sites migrated yet, so default product visuals are unchanged.
 - Trigger to revisit: when Captain asks for runtime A/B of any specific toggle
 
 ### VP render path audit follow-ups (2026-05-05)

@@ -46,9 +46,10 @@ What exactly does the operator look for, anchored to (clip, timestamp, measurabl
 - **Blocks:** no longer blocks final rubric authoring or sign-off harness planning. Still blocks ship-gate promotion until the hardware run records Captain visual answers for each row.
 - **Depends on:** C-2 matrix landed; private corpus labels/windows selected from Captain-authorised local material. Exact source media mapping remains outside the public repo per C-3.
 - **Evidence:** `firmware-v3/docs/research/c5_phase5_timestamped_observables_2026-05-06.md` binds RTS/PVF/BPS to redacted private labels, timestamp windows, trace counters, expected visual phenomena, and Captain visual questions.
-- **Remaining debt:** clip/window adequacy is DEGRADED-MODE until the matrix is run on K1 hardware and Captain records PASS / FAIL / DEGRADED-PASS rows.
+- **Hardware sweep:** `firmware-v3/docs/research/c5_phase5_hardware_sweep_2026-05-06.md` records the first K1v2 serial execution. 18/18 rows produced trace evidence; all effect-specific render p99 values were under 2 ms; RMT wire time stayed around 6.1-6.3 ms. Captain gave one explicit visual judgement: `RTS-4` was an extremely poor effect/fixture choice.
+- **Remaining debt:** clip/window adequacy and visual quality remain DEGRADED-MODE until row-level Captain PASS / FAIL / DEGRADED-PASS answers are captured. `RTS-4` specifically requires replacement, redesign, or explicit removal from the sign-off matrix.
 - **Priority:** MEDIUM follow-up debt, not an authoring hard stop.
-- **Revisit trigger:** C-5 hardware run, private corpus replacement, changed audio backend/sample-rate profile, or changed Phase 5 effect implementation.
+- **Revisit trigger:** Replacement/rerun of `RTS-4`, full row-level Captain PASS / FAIL capture, private corpus replacement, changed audio backend/sample-rate profile, or changed Phase 5 effect implementation.
 
 ### C-7 — K1 LGP perceptual JND floor (HIGH — MEASURED-DEGRADED 2026-05-05)
 What is the minimum perceptible brightness/contrast change through K1's actual LGP at customer viewing distance and normal viewing conditions?
@@ -208,7 +209,7 @@ Original execution branch `feature/synergy-topology-phase-0-1` was folded into l
 - Move 3.1 is closed on this resume branch.
 - Move 3.3 is closed on this resume branch.
 - Move 3.2 is closed on this resume branch after Captain hardware sign-off.
-- Do not promote Phase 5 visual sign-off to ship-gate until the C-5 timestamped observables are run on hardware and Captain records the row results; C-1/C-2/C-5 are measured/done under DEGRADED-MODE and C-3 still gates final sign-off corpus composition.
+- Do not promote Phase 5 visual sign-off to ship-gate until the failed `RTS-4` row is resolved and Captain records row-level visual results for the C-5 matrix; C-1/C-2/C-5 are measured/done under DEGRADED-MODE and C-3 still gates final sign-off corpus composition.
 
 ### Phase 5 — Synergy-Topology effect exemplars (3 of 7+ moves) — DONE-DEGRADED
 - Move 5.4 RadialTimeScopeEffect (EID 0x2100) — committed in 39406e6b; **DEGRADED-MODE attested 2026-04-28**
@@ -216,7 +217,7 @@ Original execution branch `feature/synergy-topology-phase-0-1` was folded into l
 - Move 5.7 BeatParitySpriteEffect (EID 0x2102) — committed in 39406e6b; **DEGRADED-MODE attested 2026-04-28**
 - **Native test harness:** 130/130 PASS in 1.97 s — commit f49b4d6a; gated by `pio test -e native_test_phase5` in `firmware-v3_build_check.yml` since 632132e4
 - **Hardware traces:** 8 captures committed in `firmware-v3/tools/baselines/` totalling ~21,000 events; `bps_kick_fired` → `bps_sprite_spawn` 1:1 ratio confirmed
-- **B.4 DONE-DEGRADED:** Phase 5 sign-off attested under DEGRADED-MODE per Captain authorisation 2026-04-28. Attestation: `firmware-v3/docs/audit/phase_5_visual_sign_off_2026-04-28.md`. Diagnostic-baseline only — does NOT claim hardware visual sign-off, does NOT promote to ship-quality. Cycle 2 sign-off (calibrated, hardware-validated, ship-gate purpose) now primarily waits on running the C-5 timestamped observable matrix on hardware plus C-3 corpus composition; C-1/C-2/C-5 are measured/done under DEGRADED-MODE.
+- **B.4 DONE-DEGRADED:** Phase 5 sign-off attested under DEGRADED-MODE per Captain authorisation 2026-04-28. Attestation: `firmware-v3/docs/audit/phase_5_visual_sign_off_2026-04-28.md`. Diagnostic-baseline only — does NOT claim hardware visual sign-off, does NOT promote to ship-quality. Cycle 2 sign-off now has a trace-complete C-5 hardware sweep, but remains blocked by the failed `RTS-4` row, missing row-level Captain visual answers, and C-3 corpus composition; C-1/C-2/C-5 are measured/done under DEGRADED-MODE.
 
 ### Pathmode programmes — IntentSpecs feeding device + Pathmode product manifest
 

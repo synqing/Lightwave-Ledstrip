@@ -21,10 +21,10 @@ What mic-domain RMS / peak / silentScale-trip range was the firmware tuned again
 
 ### C-2 — Feature × effect × dwell coverage matrix (HIGH — DONE-DEGRADED 2026-05-06)
 Which AFS v2 features × which Phase 5 effects × what minimum dwell each phenomenon needs to manifest visually.
-- **Blocks:** no longer blocks C-5 authoring or sign-off harness planning. Still blocks final Phase 5 ship-gate claims until C-5 binds the matrix rows to exact private clip timestamps and Captain visual observables.
+- **Blocks:** no longer blocks C-5 authoring or sign-off harness planning. Still blocks final Phase 5 ship-gate claims until the C-5 hardware run validates the timestamped observables visually.
 - **Priority:** HIGH follow-up debt, not an authoring hard stop.
 - **Evidence:** `firmware-v3/docs/research/c2_feature_effect_dwell_matrix_2026-05-06.md` maps Phase 5 effects `0x2100`/`0x2101`/`0x2102` to source-backed audio feature rows, fixture archetypes, and minimum dwell lower bounds.
-- **Remaining debt:** dwell minima are source-derived and DEGRADED-MODE until C-5 timestamped hardware observables validate them.
+- **Remaining debt:** dwell minima are source-derived and DEGRADED-MODE until the C-5 hardware run validates them against the timestamped observable matrix.
 - **Revisit trigger:** C-5 timestamped observable pass, Phase 5 sign-off authorisation moment, or any new audio-reactive effect requiring fixture validation.
 
 ### C-3 — Clip licence status + K1 repo public-status (HIGH)
@@ -37,16 +37,18 @@ Are the hybrid-beat-tracker corpus clips licensed for inclusion or path-referenc
 
 ### C-4 — First sign-off purpose (MEDIUM — DECIDED)
 **Decision (current):** First Phase 5 sign-off is a **diagnostic baseline**, not a ship gate, not a regression detector.
-- **Reason:** no per-effect timestamped observables exist yet (C-5 unresolved). C-1 is now measured-degraded for current K1v2 firmware-domain work, but not absolute acoustic production sign-off.
-- **Priority:** MEDIUM (decided; pending re-audit when C-5 lands).
-- **Revisit trigger:** When C-5 produces ratifiable observables, the next sign-off cycle can be promoted to ship-gate (cycle 2) or regression-detector (cycle 3+).
+- **Reason:** the first attestation was accepted before per-effect timestamped observables existed. C-1 is now measured-degraded for current K1v2 firmware-domain work, C-2 is done-degraded, and C-5 now supplies a ratifiable observable matrix, but no hardware visual run has executed against that matrix yet.
+- **Priority:** MEDIUM (decided; pending hardware re-audit against C-5).
+- **Revisit trigger:** When the C-5 observable matrix is run on hardware, the next sign-off cycle can be promoted to ship-gate (cycle 2) or regression-detector (cycle 3+), subject to C-3 corpus composition.
 
-### C-5 — Per-effect timestamped observables (MEDIUM)
+### C-5 — Per-effect timestamped observables (MEDIUM — DONE-DEGRADED 2026-05-06)
 What exactly does the operator look for, anchored to (clip, timestamp, measurable phenomenon), per Phase 5 effect (RTS / PVF / BPS)?
-- **Blocks:** final rubric contents regardless of rubric shape (Y/N, 1–5, freeform).
-- **Depends on:** C-2 matrix now landed; exact private clip labels and timestamps remain to be authored from Captain-approved material.
-- **Priority:** MEDIUM.
-- **Revisit trigger:** Before any sign-off harness build, or when Captain-approved private clip labels/timestamps are selected.
+- **Blocks:** no longer blocks final rubric authoring or sign-off harness planning. Still blocks ship-gate promotion until the hardware run records Captain visual answers for each row.
+- **Depends on:** C-2 matrix landed; private corpus labels/windows selected from Captain-authorised local material. Exact source media mapping remains outside the public repo per C-3.
+- **Evidence:** `firmware-v3/docs/research/c5_phase5_timestamped_observables_2026-05-06.md` binds RTS/PVF/BPS to redacted private labels, timestamp windows, trace counters, expected visual phenomena, and Captain visual questions.
+- **Remaining debt:** clip/window adequacy is DEGRADED-MODE until the matrix is run on K1 hardware and Captain records PASS / FAIL / DEGRADED-PASS rows.
+- **Priority:** MEDIUM follow-up debt, not an authoring hard stop.
+- **Revisit trigger:** C-5 hardware run, private corpus replacement, changed audio backend/sample-rate profile, or changed Phase 5 effect implementation.
 
 ### C-7 — K1 LGP perceptual JND floor (HIGH — MEASURED-DEGRADED 2026-05-05)
 What is the minimum perceptible brightness/contrast change through K1's actual LGP at customer viewing distance and normal viewing conditions?
@@ -206,7 +208,7 @@ Original execution branch `feature/synergy-topology-phase-0-1` was folded into l
 - Move 3.1 is closed on this resume branch.
 - Move 3.3 is closed on this resume branch.
 - Move 3.2 is closed on this resume branch after Captain hardware sign-off.
-- Do not finalise Phase 5 visual sign-off until C-5 timestamped observables land; C-1/C-2 are measured/done under DEGRADED-MODE and C-3 still gates final sign-off corpus composition.
+- Do not promote Phase 5 visual sign-off to ship-gate until the C-5 timestamped observables are run on hardware and Captain records the row results; C-1/C-2/C-5 are measured/done under DEGRADED-MODE and C-3 still gates final sign-off corpus composition.
 
 ### Phase 5 — Synergy-Topology effect exemplars (3 of 7+ moves) — DONE-DEGRADED
 - Move 5.4 RadialTimeScopeEffect (EID 0x2100) — committed in 39406e6b; **DEGRADED-MODE attested 2026-04-28**
@@ -214,7 +216,7 @@ Original execution branch `feature/synergy-topology-phase-0-1` was folded into l
 - Move 5.7 BeatParitySpriteEffect (EID 0x2102) — committed in 39406e6b; **DEGRADED-MODE attested 2026-04-28**
 - **Native test harness:** 130/130 PASS in 1.97 s — commit f49b4d6a; gated by `pio test -e native_test_phase5` in `firmware-v3_build_check.yml` since 632132e4
 - **Hardware traces:** 8 captures committed in `firmware-v3/tools/baselines/` totalling ~21,000 events; `bps_kick_fired` → `bps_sprite_spawn` 1:1 ratio confirmed
-- **B.4 DONE-DEGRADED:** Phase 5 sign-off attested under DEGRADED-MODE per Captain authorisation 2026-04-28. Attestation: `firmware-v3/docs/audit/phase_5_visual_sign_off_2026-04-28.md`. Diagnostic-baseline only — does NOT claim hardware visual sign-off, does NOT promote to ship-quality. Cycle 2 sign-off (calibrated, hardware-validated, ship-gate purpose) now primarily waits on C-5 timestamped observables plus C-3 corpus composition; C-1/C-2 are measured/done under DEGRADED-MODE.
+- **B.4 DONE-DEGRADED:** Phase 5 sign-off attested under DEGRADED-MODE per Captain authorisation 2026-04-28. Attestation: `firmware-v3/docs/audit/phase_5_visual_sign_off_2026-04-28.md`. Diagnostic-baseline only — does NOT claim hardware visual sign-off, does NOT promote to ship-quality. Cycle 2 sign-off (calibrated, hardware-validated, ship-gate purpose) now primarily waits on running the C-5 timestamped observable matrix on hardware plus C-3 corpus composition; C-1/C-2/C-5 are measured/done under DEGRADED-MODE.
 
 ### Pathmode programmes — IntentSpecs feeding device + Pathmode product manifest
 

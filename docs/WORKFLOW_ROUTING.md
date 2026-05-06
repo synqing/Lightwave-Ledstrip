@@ -35,6 +35,7 @@ Before doing anything:
    mcp__plugin_claude-mem_mcp-search__get_observations(ids=[<filtered_ids>])
    ```
    Search is the L1 index, timeline is L2 context, and `get_observations` is L3 detail. Batch selected IDs and never fetch all hits just because they exist.
+   If the MCP client says `Transport closed` while `/api/health` is OK, treat the MCP client transport as degraded, not claude-mem memory as down. Use direct worker `GET /api/search`, SQLite FTS in `~/.claude-mem/claude-mem.db`, or `$RECALL_CLI` depending on the question.
 4. **For architecture questions, query NotebookLM before loading reference-doc bundles:**
    ```
    mcp__notebooklm-mcp__notebook_query(notebook_id="92d45c0b-83c7-4971-aa9a-2c9ee13b06d4", query="...")
@@ -61,6 +62,8 @@ Before doing anything:
 
 **clangd Status:** Run `mcp__clangd__get_diagnostics` on any source file to verify clangd is operational. If `compile_commands.json` is stale after adding new files: `pio run -e esp32dev_audio_esv11_k1v2_32khz --target compiledb`
 
+**Codex CLI note:** Codex does not load Claude Code's `clangd-lsp` plugin surface. On this machine, Codex must expose the global `clangd` MCP server from `~/.codex/config.toml`, backed by `/Users/spectrasynq/.local/bin/mcp-language-server-lightwave`, Homebrew clangd, `firmware-v3/compile_commands.json`, `--enable-config`, and an Xtensa query-driver glob matching `toolchain-xtensa-esp32s3*/bin/xtensa-esp32s3-elf-*`. `firmware-v3/.clangd` is part of that route and must remain in place for Codex semantic tooling. A new Codex session may show generic MCP tool names such as `definition`, `references`, `diagnostics`, and `hover` instead of the Claude-style names above. Those are still the required semantic route. Use MCP `diagnostics` as the smoke; raw `clangd --check` can report internal `ExtractFunction` tweak failures even when pushed diagnostics are clean. If a needed clangd capability is not exposed in the current Codex session, report the tool failure; do not switch to text search for C++ symbol claims. If the registered Codex `clangd` MCP returns `Transport closed`, run `tools/codex-clangd-mcp-reset.sh`, retry one semantic clangd call, and restart that Codex session if the same handle remains poisoned.
+
 ### Code Intelligence (General / Cross-Language)
 
 | I need to... | Use this | How |
@@ -68,6 +71,7 @@ Before doing anything:
 | Search project documentation | `rg -n "<term>" docs firmware-v3/docs` then Read the relevant section | Current default; QMD is not default-loaded |
 | Deep architecture search | NotebookLM query first, then current-source verification | Use for cross-subsystem rationale and constraints |
 | Get specific doc by path | Read the file directly | Exact retrieval when you know the doc |
+| Use Smart Explore code navigation | claude-mem `smart_search` -> `smart_outline` -> `smart_unfold` only when the transport is live | Optional helper for non-C++ structural navigation. If it returns `Transport closed`, parser, unsupported-language, or empty-outline errors, fall back to `rg`/Read or clangd instead of blocking |
 | Check QMD index health | `which qmd && qmd --version` plus MCP health, only if Captain restores QMD | QMD is removed from repo defaults |
 | Look up library API docs | Official vendor docs, local installed headers, or explicitly enabled Context7 | Context7 is optional/per-task, not mandatory |
 
@@ -94,6 +98,8 @@ Before doing anything:
 | View session timeline | `mcp__plugin_claude-mem_mcp-search__timeline` | Chronological context around a selected result; use when narrative order matters |
 | Get observations from memory | `mcp__plugin_claude-mem_mcp-search__get_observations` | Full structured facts/narratives/files for filtered IDs only; batch IDs in one call |
 | Search MCP-specific memory | `mcp__plugin_claude-mem_mcp-search__search` | Tool usage history and prior work patterns |
+| Search memory when MCP transport is closed | `curl 'http://127.0.0.1:37777/api/search?query=...&project=Lightwave-Ledstrip&limit=3'` | Use only after worker `/api/health` verifies OK; this bypasses the client stdio transport |
+| Search memory by exact phrase/file when MCP transport is closed | SQLite FTS in `~/.claude-mem/claude-mem.db` | Use `observations_fts`, `session_summaries_fts`, or `user_prompts_fts` for precise local lookup |
 | Read episodic memory | `mcp__plugin_episodic-memory_episodic-memory__read` | Fallback detailed episode recall if current claude-mem tools are unavailable or insufficient |
 | Get current task list | `mcp__taskmaster-ai__get_tasks` **[NOT CONFIGURED — requires setup]** | Taskmaster project state |
 
@@ -265,3 +271,4 @@ Am I finishing a branch?
 | 31 Mar 2026 | Added RTK v0.34.2 entry under Infrastructure & Tooling (CLI Output Compression subsection). |
 | 05 May 2026 | Aligned Phase 0 with `$RECALL_CLI` then claude-mem routing, added NotebookLM architecture routing, updated clangd compiledb env to ESV11 K1v2 32 kHz, and demoted inactive Auggie/Ralph guidance. |
 | 05 May 2026 | Removed QMD and Context7 as protected/default routes after live smoke failure/unproven health; retained NotebookLM for architecture and current-source verification for implementation truth. |
+| 05 May 2026 | Added claude-mem Smart Explore failure protocol: `smart_search`/`smart_outline` transport failures no longer imply memory search is down; route agents to worker `/api/search`, SQLite FTS, `$RECALL_CLI`, `rg`, or clangd as appropriate. |

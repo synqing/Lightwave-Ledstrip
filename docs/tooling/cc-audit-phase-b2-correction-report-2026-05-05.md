@@ -106,7 +106,6 @@ Codex after correction lists:
 ```text
 claude-mem
 fetch
-file-system
 filesystem-root
 github
 knowledge-graph

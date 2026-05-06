@@ -1,0 +1,14 @@
+CompileFlags:
+  Remove:
+    - "-mlongcalls"
+    - "-fstrict-volatile-bitfields"
+    - "-fno-tree-switch-conversion"
+  Add:
+    - "-D__XTENSA__=1"
+    - "-D__xtensa__=1"
+    - "-D__XTENSA_EL__=1"
+    - "-D__XTENSA_WINDOWED_ABI__=1"
+Diagnostics:
+  Suppress:
+    - attribute_section_invalid_for_target
+    - fatal_too_many_errors

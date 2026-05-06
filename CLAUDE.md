@@ -83,7 +83,7 @@ If the answer is anything other than an unqualified YES, use the tools below to 
 3. `mcp__plugin_claude-mem_mcp-search__timeline(anchor=<id>, depth_before=3, depth_after=3, project="Lightwave-Ledstrip")` — **claude-mem L2 timeline** — chronological context around a selected search hit.
 4. `mcp__plugin_claude-mem_mcp-search__get_observations(ids=[...])` — **claude-mem L3 details** — full narratives/facts/files for filtered IDs only. Batch multiple IDs in one call; never fetch all search hits.
 4.5. `mcp__notebooklm-mcp__notebook_query(notebook_id="92d45c0b-83c7-4971-aa9a-2c9ee13b06d4", query="...")` — **NotebookLM knowledge oracle** — pre-indexed architectural knowledge across 127 sterilised sources. Returns structured answers in 5 mandatory sections: ANSWER / CONSTRAINTS / KEY FILES / CROSS-REFS / WARNINGS. Use for "what/why" questions about architecture, constraints, design decisions, and subsystem relationships before reading reference docs. Cuts cold-start cost from ~30K tokens (reading 5+ reference docs) to one API call. Prefer `notebook_query_start` + `notebook_query_status` (async) for broad multi-section questions — synchronous calls may exceed the 60 s socket timeout on whole-corpus retrieval. Do NOT use NotebookLM for code symbol navigation (use clangd), current file contents (use Read), git/session history (use Crispy `$RECALL_CLI` or claude-mem), or anything where freshness against today's HEAD matters (the notebook is a periodic snapshot — verify against current source before any code edit).
-5. Current source truth — C++ symbols use clangd FIRST per the C++ gate below. For non-C++ structural code/doc navigation, prefer claude-mem Smart Explore tools when available: `smart_search` → `smart_outline` → `smart_unfold`; full file reads are the last step for large files.
+5. Current source truth — C++ symbols use clangd FIRST per the C++ gate below. For non-C++ structural code/doc navigation, prefer claude-mem Smart Explore tools only when the MCP transport is live: `smart_search` → `smart_outline` → `smart_unfold`; full file reads are the last step for large files.
 6. `mcp__auggie__codebase-retrieval("[query]")` — semantic codebase search (current source, not history) only if configured; see `docs/WORKFLOW_ROUTING.md` for live status.
 7. `mcp__plugin_episodic-memory_episodic-memory__search` — fallback episodic store if current claude-mem is unavailable or returns no useful observations.
 8. Reference files (see table below) — pre-extracted architecture, dependencies, FSMs.
@@ -92,6 +92,8 @@ If the answer is anything other than an unqualified YES, use the tools below to 
 Crispy returns raw transcripts (what was said). claude-mem returns synthesised observations (what was decided). Source files return current implementation truth. MEMORY.md returns curated rules and state. They are NOT redundant — use `$RECALL_CLI` first when you recall wording; use claude-mem `search → timeline → get_observations` when you only recall the topic.
 
 If claude-mem emits a health/backlog/version warning, treat recent memory as possibly stale until you verify `/api/health`, `/api/version`, worker logs, or direct source/DB state. Do not silently fall back from a missing `mcp-search` tool to older `mem-search` or stale cache paths.
+
+Smart Explore failure protocol: `smart_search`, `smart_outline`, and `smart_unfold` are code-navigation helpers, not the canonical memory-search path. If any Smart Explore tool returns `Transport closed`, unsupported-language, parser, or empty-outline errors, label that Smart Explore surface as degraded for the session and keep moving. For memory questions, use `mcp-search` if attached, direct worker `GET /api/search`, or SQLite FTS against `~/.claude-mem/claude-mem.db`. For current source questions, use clangd, `rg`, and direct file reads. Do not repeatedly restart the claude-mem worker just because Smart Explore failed; first distinguish worker health from the client MCP transport.
 
 **You are not expected to know everything from memory.** You ARE expected to know what you don't know and to look it up before acting.
 
@@ -157,6 +159,12 @@ These contain pre-extracted codebase structure, frameworks, dependencies, entryp
 | Type info / docs for a symbol | `mcp__clangd__get_hover` | ~~reading header files~~ |
 
 **Prerequisite:** `compile_commands.json` must exist in `firmware-v3/`. If missing: `pio run -e esp32dev_audio_esv11_k1v2_32khz --target compiledb`
+
+**Codex CLI compatibility:** Codex does not load Claude Code's `clangd-lsp` plugin. For Codex sessions on this machine, `~/.codex/config.toml` must expose a global `clangd` MCP server backed by `/Users/spectrasynq/.local/bin/mcp-language-server-lightwave`, `firmware-v3/compile_commands.json`, Homebrew clangd, `--enable-config`, and an Xtensa query-driver glob matching `toolchain-xtensa-esp32s3*/bin/xtensa-esp32s3-elf-*`. The local `firmware-v3/.clangd` file is required for Codex semantic tooling because it removes Xtensa GCC-only flags and adapts ESP-IDF headers for Homebrew clangd parsing. If generic MCP tool names such as `definition`, `references`, `diagnostics`, and `hover` are exposed instead of the Claude-style names in the table, use those semantic tools. If the specific clangd capability needed for the claim is absent, STOP per the Tool Failure Protocol; do not use text search to make C++ symbol/reference/call-hierarchy claims.
+
+Use MCP `diagnostics` as the Codex semantic smoke. Raw `clangd --check` can report internal `ExtractFunction` tweak failures even when pushed diagnostics are clean.
+
+**Codex `Transport closed` recovery:** If the registered `clangd` MCP is visible but a semantic call returns `Transport closed`, reset only the stale clangd MCP child processes with `tools/codex-clangd-mcp-reset.sh`, then retry one semantic clangd call. If the same live Codex session still reports `Transport closed`, restart that Codex session; do not proceed with whole-codebase C++ symbol/reference claims.
 
 **When grep IS appropriate:** string literals, log messages, comments, config values, or non-C++ files. grep is for TEXT. clangd is for CODE SYMBOLS.
 
@@ -607,7 +615,7 @@ Do NOT silently work around a Crispy warning. Surface it per the Tool Failure Pr
 
 If `$CRISPY_SOCK` is unset and `$RECALL_CLI` is absent (raw `claude` from a terminal, or inside Codex/Warp/another harness), Crispy is OFF. Do NOT call any `crispy:*` skill. Fall back to:
 
-- Memory search: `mcp__plugin_claude-mem_mcp-search__search` → `mcp__plugin_claude-mem_mcp-search__timeline` → `mcp__plugin_claude-mem_mcp-search__get_observations`; use `episodic-memory` only as fallback (skip the recall layer)
+- Memory search: `mcp__plugin_claude-mem_mcp-search__search` → `mcp__plugin_claude-mem_mcp-search__timeline` → `mcp__plugin_claude-mem_mcp-search__get_observations`; if the MCP client transport is closed but worker health is OK, use direct worker `GET /api/search` or SQLite FTS before falling back to `episodic-memory` (skip the recall layer)
 - Planning: Superpowers (`/brainstorming` → `/writing-plans`) or GSD (`/gsd:plan-phase`) — both work without Crispy
 - Adversarial review: `/review` alone (no superthink multi-vendor parallel pass)
 - Forward work: update `BACKLOG.md`; do not create `.claude/handoff*.md` forward task lists

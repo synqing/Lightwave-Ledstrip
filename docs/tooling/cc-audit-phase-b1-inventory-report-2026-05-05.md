@@ -97,7 +97,7 @@ a810d4724ae167b5140116b92149cb86a6f01a7f229c9c3024a193626c353e1e  project-claude
 | `.claude/mcp-config.json` | repo-local | `code-context`, `context-engineer`, `mcp-search` |
 | `.mcp.json` | repo-local | `clangd`, `qmd` |
 | `~/.codex/mcp.json` | Codex-global | `devkg`, `nogic`, `obsidian-vault`, `stitch` |
-| `~/.codex/config.toml` | Codex-global | `blender`, `claude-mem`, `context7`, `easyeda`, `fetch`, `file-system`, `filesystem-root`, `github`, `knowledge-graph`, `memory`, `playwright`, `puppeteer`, `sequential-thinking`, `notebooklm-mcp` |
+| `~/.codex/config.toml` | Codex-global | `blender`, `claude-mem`, `context7`, `easyeda`, `fetch`, `filesystem-root`, `github`, `knowledge-graph`, `memory`, `playwright`, `puppeteer`, `sequential-thinking`, `notebooklm-mcp` |
 
 ### Plugin Names And Versions
 

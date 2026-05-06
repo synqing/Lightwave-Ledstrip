@@ -1179,12 +1179,38 @@ void AudioActor::onTick()
         m_lastHopEndUs = hop_end_us;
         TRACE_COUNTER("audio_silence_scale",
                       static_cast<int32_t>(frame.silentScale * 1000.0f));
+        TRACE_COUNTER("audio_is_silent",
+                      frame.isSilent ? 1 : 0);
         TRACE_COUNTER("audio_rms_x1000",
                       static_cast<int32_t>(frame.rms * 1000.0f));
+        TRACE_COUNTER("audio_waveform_peak_scaled",
+                      static_cast<int32_t>(frame.sb_waveform_peak_scaled * 1000.0f));
+        TRACE_COUNTER("audio_waveform_peak_scaled_last",
+                      static_cast<int32_t>(frame.sb_waveform_peak_scaled_last * 1000.0f));
         TRACE_COUNTER("audio_hop_count",
                       static_cast<int32_t>(m_hopCount));
         // (onset_process_us already emitted at line 728 in onset block.)
     }
+
+#if defined(FEATURE_C1_ENVELOPE_SERIAL) && FEATURE_C1_ENVELOPE_SERIAL
+    {
+        static uint64_t s_lastC1EnvelopeLogUs = 0;
+        const uint64_t c1NowUs = esp_timer_get_time();
+        constexpr uint64_t kC1EnvelopeLogIntervalUs = 100000ULL;
+        if (c1NowUs - s_lastC1EnvelopeLogUs >= kC1EnvelopeLogIntervalUs) {
+            s_lastC1EnvelopeLogUs = c1NowUs;
+            Serial.printf("[C1] t_us=%llu raw=%.6f frame=%.6f conf=%.3f sil=%.3f silent=%u peak=%.3f peakLast=%.3f\n",
+                          static_cast<unsigned long long>(c1NowUs),
+                          static_cast<double>(rawHopRms),
+                          static_cast<double>(frame.rms),
+                          static_cast<double>(frame.audioConfidence),
+                          static_cast<double>(frame.silentScale),
+                          frame.isSilent ? 1u : 0u,
+                          static_cast<double>(frame.sb_waveform_peak_scaled),
+                          static_cast<double>(frame.sb_waveform_peak_scaled_last));
+        }
+    }
+#endif
 
     // GROUND-TRUTH DIAGNOSTIC: 2-second periodic translator field dump.
     // Shows raw vs smoothed confidence + translator state.

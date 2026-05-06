@@ -8,14 +8,16 @@ Prioritised engineering backlog. Items are tagged by category and roughly ordere
 
 Per the RBDO Gate (`CLAUDE.md` top), these upstream facts are unresolved. Until each is resolved or explicitly accepted under DEGRADED-MODE with disclosed risk, every tactical output that depends on them must be labelled DEGRADED-MODE or REFUSED. New tactical outputs MUST NOT add a fourth dependent to any URGENT row without resolving it first.
 
-### C-1 — Microphone-domain operating envelope (URGENT)
+### C-1 — Microphone-domain operating envelope (HIGH — MEASURED-DEGRADED 2026-05-06)
 What mic-domain RMS / peak / silentScale-trip range was the firmware tuned against?
-- **Blocks:** LUFS target for any audio test sweep; AFS v2 silentScale validation; any "tuned-regime sign-off" claim.
-- **Affected outputs:** ≥ 3.
-- **Priority:** URGENT.
-- **Audit status:** 2026-05-06 audit of `firmware-v3/docs/research/audio_feature_surface_v2_baseline_2026-04-27.md` completed in `firmware-v3/docs/research/c1_mic_domain_envelope_audit_2026-05-06.md`; it narrows the raw-hop RMS scale but does NOT close C-1 because calibrated peak envelope and stable silentScale trip/recovery evidence are still missing.
-- **Captain approval:** 2026-05-06 hardware envelope pass is green-lit. This authorises the capture pass; it does not close C-1 until the evidence exists.
-- **Revisit trigger:** Captain-allocated 30–60 min hardware envelope characterisation pass capturing raw hop RMS, `frame.rms`, waveform peak follower state, `audioConfidence`, `silentScale`, and `isSilent` across idle, quiet music, normal music, loud music, and stop-playback recovery.
+- **Blocks:** No longer blocks current K1v2 firmware-domain tuning, AFS v2 silentScale validation, or tuned-regime sign-off work that uses the same ESV11 32 kHz profile and Captain-approved private playback chain. Still blocks SPL/LUFS, cross-room, K1v1/K1v2 parity, and production-acoustic claims.
+- **Affected outputs:** Firmware-domain outputs can cite the measured-degraded envelope; absolute acoustic outputs remain DEGRADED-MODE.
+- **Priority:** HIGH follow-up debt, not an URGENT hard stop for current K1v2 firmware-domain work.
+- **Audit status:** 2026-05-06 audit of `firmware-v3/docs/research/audio_feature_surface_v2_baseline_2026-04-27.md` completed in `firmware-v3/docs/research/c1_mic_domain_envelope_audit_2026-05-06.md`; it narrowed the raw-hop RMS scale but did not close C-1 by itself.
+- **Hardware evidence:** 2026-05-06 K1v2 capture completed in `firmware-v3/docs/research/c1_mic_domain_envelope_capture_2026-05-06.md`. Current measured raw-hop RMS envelope: idle p50/p95/p99 `0.001591/0.003477/0.005916`; quiet p50/p95 `0.005513/0.015687`; normal p50/p95 `0.017600/0.036282`; dense p50/p95 `0.026247/0.044652`; observed max `0.064463`. Stop recovery after a 20.0 s hard stop: `isSilent=true` at `0.266399 s`, `silentScale<0.2` at `1.128722 s`.
+- **Captain approval:** 2026-05-06 hardware envelope pass completed with Captain-provided private tracks. Clip paths and audio material stay out of public repo artefacts per C-3.
+- **Remaining debt:** No SPL/LUFS reference level, no calibrated acoustic room/output level, no K1v1 parity pass, and no production photometry tie-off.
+- **Revisit trigger:** Microphone placement, enclosure acoustics, sample rate, silence-gate constants, playback chain, source corpus, or target hardware revision changes; or any request to claim SPL/LUFS/cross-device production acoustic validity.
 
 ### C-2 — Feature × effect × dwell coverage matrix (HIGH)
 Which AFS v2 features × which Phase 5 effects × what minimum dwell each phenomenon needs to manifest visually.
@@ -33,7 +35,7 @@ Are the hybrid-beat-tracker corpus clips licensed for inclusion or path-referenc
 
 ### C-4 — First sign-off purpose (MEDIUM — DECIDED)
 **Decision (current):** First Phase 5 sign-off is a **diagnostic baseline**, not a ship gate, not a regression detector.
-- **Reason:** no calibrated baseline or timestamped observables exist yet (C-5 unresolved; C-1 unresolved).
+- **Reason:** no per-effect timestamped observables exist yet (C-5 unresolved). C-1 is now measured-degraded for current K1v2 firmware-domain work, but not absolute acoustic production sign-off.
 - **Priority:** MEDIUM (decided; pending re-audit when C-5 lands).
 - **Revisit trigger:** When C-5 produces ratifiable observables, the next sign-off cycle can be promoted to ship-gate (cycle 2) or regression-detector (cycle 3+).
 

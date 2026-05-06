@@ -151,34 +151,19 @@ void BeatParitySpriteEffect::render(plugins::EffectContext& ctx) {
     const uint8_t hueByteNow = effects::chroma::circularChromaHueSmoothed(
         chromaPtr, m_chromaAngle, dt, 0.20f);
 
-    // ─── S8: bed layer ────────────────────────────────────────────────────
-    // Dim rms-driven floor written FIRST so subsequent fadeToBlackBy + sprite
-    // composition compose on top. Uses `=` (not `+=`) because this is the
-    // floor; the floor never accumulates, it only sets the baseline.
+    // ─── S8/S9: event-owned background discipline ────────────────────────
+    // There is intentionally no always-alive RMS/gHue bed. BPS is an
+    // event-launched sprite effect; raw RMS may accent spawned sprites, but
+    // sustained amplitude alone must not paint a full-strip background.
     {
-        const float rmsCl = clamp01(rmsLevel);
-        const uint8_t bedBright = scale8((uint8_t)(rmsCl * 255.0f), 40);  // ≤16% floor
-        if (bedBright > 0) {
-            const CRGB bedCol = ctx.palette.getColor(ctx.gHue, bedBright);
-            for (uint16_t i = 0; i < ctx.ledCount; ++i) {
-                ctx.leds[i] = bedCol;
-            }
-        }
-    }
-
-    // ─── S9: audio-energy-adaptive fadeToBlackBy ─────────────────────────
-    // Loud → short trails (fadeAmount near 18, ~93% retention).
-    // Quiet → longer trails (fadeAmount near 30, ~88% retention).
-    {
-        const float rmsCl = clamp01(rmsLevel);
-        const uint8_t fadeAmount = (uint8_t)(18.0f + 12.0f * (1.0f - rmsCl));
-        fadeToBlackByDt(ctx.leds, ctx.ledCount, fadeAmount, ctx.getSafeDeltaSeconds());
+        static constexpr uint8_t kTrailFadeAmount = 22;
+        fadeToBlackByDt(ctx.leds, ctx.ledCount, kTrailFadeAmount, ctx.getSafeDeltaSeconds());
     }
 
     // ─── Hard silence gate ────────────────────────────────────────────────
     // If the audio chain reports silence/low confidence, skip spawn + sprite
-    // update entirely; existing sprite trails fade naturally via the bed
-    // and fadeToBlackBy above.
+    // update entirely; existing sprite trails fade naturally via the fixed
+    // dt-correct fade above.
     if (audioConfidence < 0.10f || silentScale < 0.20f) {
         TRACE_INSTANT("bps_silence_gate");
         return;
@@ -227,7 +212,8 @@ void BeatParitySpriteEffect::render(plugins::EffectContext& ctx) {
         s = Sprite{};                                                       // reset
         s.ageSec      = 0.0f;
         s.lifetimeSec = kSpriteLifetimeSec * (downbeatAccent ? 1.10f : 1.0f);
-        s.intensity   = clamp01(kMaxSpriteIntensity * clamp01(audioConfidence) * accent);
+        const float rmsAccent = 0.75f + 0.25f * clamp01(rmsLevel);
+        s.intensity   = clamp01(kMaxSpriteIntensity * clamp01(audioConfidence) * accent * rmsAccent);
         s.hueByte     = hueByteNow;                                         // S5: snapshot
         s.active      = true;
 
@@ -322,7 +308,7 @@ void BeatParitySpriteEffect::cleanup() {
 const plugins::EffectMetadata& BeatParitySpriteEffect::getMetadata() const {
     static plugins::EffectMetadata meta{
         "Beat Parity Sprite",
-        "Sprites radiate from LEDs 79/80 outward on kick onsets; soft bed between hits.",
+        "Sprites radiate from LEDs 79/80 outward on kick onsets; silence stays dark between events.",
         plugins::EffectCategory::PARTY,
         1,
         nullptr,

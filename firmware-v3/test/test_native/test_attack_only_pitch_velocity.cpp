@@ -127,6 +127,32 @@ void test_onset_with_chroma_C_lights_up() {
     fx.cleanup();
 }
 
+// ─── 3. Render path also rises only on onset ─────────────────────────────
+
+void test_render_sustained_chroma_without_onset_stays_dark() {
+    AttackOnlyPitchVelocityFieldEffect fx;
+    EffectContext ctx;
+    CRGB buf[kStripTotal];
+    primeContext(ctx, buf);
+
+    TEST_ASSERT_TRUE(fx.init(ctx));
+
+    // Sustained pitch-class energy without an onset gate must not enter the
+    // production follower path or light a raw-RMS background bed. This is the
+    // render-path counterpart to the debugTickFollowers() contract below.
+    auto& bus = ctx.audio.controlBus;
+    bus.chroma[4] = 1.0f;  // avoid native palette black anchor
+    bus.fast_rms = 0.8f;
+    bus.onsetEvent = 0.0f;
+
+    for (int frame = 0; frame < 120; ++frame) {
+        fx.render(ctx);
+    }
+
+    TEST_ASSERT_TRUE(stripIsAllDark(buf, kStripTotal));
+    fx.cleanup();
+}
+
 // ─── 3. Attack follower rises only on onset ──────────────────────────────
 
 void test_attack_follower_rises_on_onset_only() {
@@ -386,6 +412,7 @@ void test_metadata_id_matches_eid() {
 void run_attack_only_pitch_velocity_tests() {
     RUN_TEST(test_silent_input_yields_dark_output);
     RUN_TEST(test_onset_with_chroma_C_lights_up);
+    RUN_TEST(test_render_sustained_chroma_without_onset_stays_dark);
     RUN_TEST(test_attack_follower_rises_on_onset_only);
     RUN_TEST(test_release_follower_decays_with_correct_tau);
     RUN_TEST(test_top_k_selection_picks_three_largest);

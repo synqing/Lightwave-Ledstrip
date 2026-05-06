@@ -27,22 +27,23 @@
  *   - Round-robin overwrite oldest if sprite pool full (S4).
  *   - Hue from circularChromaHueSmoothed, sampled AT spawn (S5/S6).
  *   - SubpixelRenderer at fractional radii — no integer kernel (S7).
- *   - Bed layer (rms-driven) keeps the strip alive in soft passages (S8).
- *   - Audio-energy-adaptive fadeToBlackBy (S9).
+ *   - No always-alive RMS bed; musical events own visible structure (S8).
+ *   - Fixed dt-correct trail fade, independent of raw frame RMS (S9).
  *   - Speed knob via getSafeRawDeltaSeconds() (S10).
  *   - kTempoLockGate 0.4 → 0.30 per m2_adversarial/expected_results.md:127 (S11).
  *   - Extra TRACE_* counters for hardware diagnosis (S12).
  *
  * ── Visual signature ─────────────────────────────────────────────────────
  *
- *   - Dim ambient bed (rms-driven, ≤16% floor) so silence dissolves but the
- *     strip never goes fully dark while music is playing.
+ *   - Black/near-black background so silence dissolves and cheap
+ *     amplitude-meter behaviour cannot own the fixture.
  *   - On every kick onset (or downbeat accent) at sufficient confidence,
  *     a sprite spawns at LEDs 79/80 and radiates outward over ~0.6 s,
  *     fading from full intensity to black as it travels to the edges.
  *   - Up to 8 sprites alive concurrently — bars at high tempo overlap.
  *   - Hue is a continuously-updated circular-chroma mean, sampled AT
- *     spawn for stable per-sprite colour.
+ *     spawn for stable per-sprite colour; raw RMS can only add a bounded
+ *     brightness accent after an event has created state.
  *
  * ── Topology compliance ──────────────────────────────────────────────────
  *

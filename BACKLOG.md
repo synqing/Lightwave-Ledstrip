@@ -13,7 +13,8 @@ What mic-domain RMS / peak / silentScale-trip range was the firmware tuned again
 - **Blocks:** LUFS target for any audio test sweep; AFS v2 silentScale validation; any "tuned-regime sign-off" claim.
 - **Affected outputs:** ≥ 3.
 - **Priority:** URGENT.
-- **Revisit trigger:** Captain-allocated 30–60 min hardware envelope characterisation pass, OR audit of `firmware-v3/docs/research/audio_feature_surface_v2_baseline_2026-04-27.md` confirms it is already documented there.
+- **Audit status:** 2026-05-06 audit of `firmware-v3/docs/research/audio_feature_surface_v2_baseline_2026-04-27.md` completed in `firmware-v3/docs/research/c1_mic_domain_envelope_audit_2026-05-06.md`; it narrows the raw-hop RMS scale but does NOT close C-1 because calibrated peak envelope and stable silentScale trip/recovery evidence are still missing.
+- **Revisit trigger:** Captain-allocated 30–60 min hardware envelope characterisation pass capturing raw hop RMS, `frame.rms`, waveform peak follower state, `audioConfidence`, `silentScale`, and `isSilent` across idle, quiet music, normal music, loud music, and stop-playback recovery.
 
 ### C-2 — Feature × effect × dwell coverage matrix (HIGH)
 Which AFS v2 features × which Phase 5 effects × what minimum dwell each phenomenon needs to manifest visually.

@@ -119,6 +119,15 @@ Captain has authorised reversing the "AP-only-EVER, STA never worked" doctrine a
 
 ## Performance
 
+### K1v2 SRAM/PSRAM reclaim pass (2026-05-06 — READY)
+- **Authority:** `firmware-v3/docs/research/k1v2_sram_psram_reclaim_handoff_2026-05-06.md`.
+- **Trigger:** K1v2 Phase 5 testing exposed real low-heap pressure: WebServer low-heap shedding latched around 8.9-10.5 KB internal free heap and `RendererActor::handleSetEffect()` rejected effect switches below its 12 KB floor.
+- **Current evidence:** commit `63a4b392` disabled production diagnostic monitors for K1v2 and restored ~6.9 KB static RAM. K1v2 `/dev/cu.usbmodem2101` / MAC `b4:3a:45:a5:87:f8` then booted with `17776` B free internal heap, `15848` B min free, `8180` B max alloc, `showSkips=0`, and accepted `0x2103` plus `0x0100` effect switches.
+- **Goal:** recover enough additional internal DRAM/SRAM to keep K1v2 out of low-heap shedding during normal AP/effect-switch testing, preferably `>=22 KB` no-client boot free internal heap and at least `>=8 KB` largest alloc/free block.
+- **First candidates:** cold/control-path SRAM consumers only: `CaptureStreamer` fallback/task buffers, `StaticAssetRoutes` 3 KB static buffer, `WsCommandRouter` handler table, and builtin effect registry metadata. Measure from the current ELF before patching.
+- **Hard stops:** do not lower heap guard thresholds as the fix; do not move `SnapshotBuffer<ControlBusFrame>` back to PSRAM; do not add render hot-path heap; do not enable STA; do not revive the failed two-unit manual A/B flow; do not stage unrelated dirty files.
+- **Return path:** after this pass is verified and committed, resume Phase 5 visual-quality tuning on promising effects (`0x2101`/`0x2102` etc.) with RTS/`0x2100` parked unless Captain explicitly reopens it.
+
 ### [DONE] ~~RendererActor vTaskDelay(1) costs 10 ms per frame~~ — resolved in d943101a
 - Original `vTaskDelay(1)` before `showLeds()` replaced with `vTaskDelay(0)` (equivalent to `taskYIELD()`)
 - Pre-show delay removed entirely; renderer now self-clocked at 120 FPS via `esp_rom_delay_us` frame pacer

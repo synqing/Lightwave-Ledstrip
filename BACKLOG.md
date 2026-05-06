@@ -14,6 +14,7 @@ What mic-domain RMS / peak / silentScale-trip range was the firmware tuned again
 - **Affected outputs:** ≥ 3.
 - **Priority:** URGENT.
 - **Audit status:** 2026-05-06 audit of `firmware-v3/docs/research/audio_feature_surface_v2_baseline_2026-04-27.md` completed in `firmware-v3/docs/research/c1_mic_domain_envelope_audit_2026-05-06.md`; it narrows the raw-hop RMS scale but does NOT close C-1 because calibrated peak envelope and stable silentScale trip/recovery evidence are still missing.
+- **Captain approval:** 2026-05-06 hardware envelope pass is green-lit. This authorises the capture pass; it does not close C-1 until the evidence exists.
 - **Revisit trigger:** Captain-allocated 30–60 min hardware envelope characterisation pass capturing raw hop RMS, `frame.rms`, waveform peak follower state, `audioConfidence`, `silentScale`, and `isSilent` across idle, quiet music, normal music, loud music, and stop-playback recovery.
 
 ### C-2 — Feature × effect × dwell coverage matrix (HIGH)
@@ -26,6 +27,8 @@ Which AFS v2 features × which Phase 5 effects × what minimum dwell each phenom
 Are the hybrid-beat-tracker corpus clips licensed for inclusion or path-reference in K1 firmware artefacts? What is the K1 repo's public-status at launch (open-source, public-on-release, private)?
 - **Blocks:** clip pool composition for sign-off sweep; calibrated WAV storage policy; any third-party music reference in this repo.
 - **Priority:** HIGH (legal exposure if assumed wrong).
+- **Captain answer:** 2026-05-06: the repo is already public. Clips are to stay private. Captain can suggest several music tracks when the sign-off corpus is actually needed.
+- **Current status:** Repo-public status and clip privacy are resolved. Do not commit clips or public path references to private clips. The exact reference-track list remains deferred until the sign-off corpus step.
 - **Revisit trigger:** Captain answers (a) repo public-status at launch, (b) hybrid-beat-tracker licence applicability for commercial-product testing, (c) presence/absence of a Captain-licensed audiophile reference library.
 
 ### C-4 — First sign-off purpose (MEDIUM — DECIDED)
@@ -97,7 +100,7 @@ Captain has authorised reversing the "AP-only-EVER, STA never worked" doctrine a
 - **Decision (current):** Bring `CONTROLBUS_NUM_ZONES` from 4 to 3 across all consumers. Choice of band-restructuring (drop one band, merge two, or repartition to 3 buckets) is a firmware engineering decision that needs evaluation against current AGC behaviour.
 - **Engineering scope (4 tasks):**
   1. **DONE (audit-only):** Current 4-zone partition and consumers documented in `firmware-v3/docs/research/f6_controlbus_num_zones_audit_2026-05-06.md`. Finding: the 4-zone ControlBus AGC path is source/doc debt and still live in legacy/non-ES `UpdateFromHop()` paths, but production K1v2 ESV11 disables the REST/WS Zone AGC surface and calls `applyDerivedFeatures()` rather than the Zone AGC stage.
-  2. **Decide band-restructuring approach.** Three viable options: (a) drop the highest band (typically least musically informative), (b) merge two adjacent bands (sub-bass + bass, or upper-mid + treble), (c) re-partition to 3 logarithmic-spectrum buckets that better match the user-facing visual zone semantics. Decision needs Captain input.
+  2. **Decide band-restructuring approach.** Three viable options: (a) drop the highest band (typically least musically informative), (b) merge two adjacent bands (sub-bass + bass, or upper-mid + treble), (c) re-partition to 3 logarithmic-spectrum buckets that better match the user-facing visual zone semantics. Captain requested the need for this process be explained before choosing.
   3. **Refactor consumers.** `AudioActor.cpp:316`, `AudioActor.h:416-417` (`followers[CONTROLBUS_NUM_ZONES]`, `maxMags[CONTROLBUS_NUM_ZONES]`) — these arrays auto-resize via the constant but the band-mapping logic in AudioActor needs to be re-checked. Search for any hardcoded `[3]` indices that assume 4 zones.
   4. **Hardware-test before commit.** Per `feedback_hardware_test_before_commit.md`: build success not enough. Flash and audit AGC behaviour against reference audio corpus. Confirm visual zone behaviour unchanged or improved.
 - **Reason:** The 4-zone audio AGC array is an internal implementation detail that contradicts the user-facing 3-zone contract. The contradiction creates two long-term risks: (a) future agents will document the 4-zone array as canonical and propagate it into specs/docs/UI (already happened once, rejected); (b) any code path that bridges audio AGC zones to user-facing zone IDs has an implicit off-by-one that may already be silently masking visual artifacts. Fixing the constant aligns internal and external semantics.
@@ -191,7 +194,7 @@ Original execution branch `feature/synergy-topology-phase-0-1` was folded into l
 - Move 4.1 AUD-21 VoiceMusicClassifier — commit 5021d96a
 - Move 4.2 PER-18 AudioGatedConditionalDecay — commit ba816631
 - Move 4.4 F6 First-Light Ignition (cinematic boot effect) — commit 4d12edc5 (Captain hardware visual confirmed in commit body)
-- Move 4.3 F3 Liquid Stillness curation — planned in `firmware-v3/docs/research/synergy-topology/MOVE_4_3_LIQUID_STILLNESS_CURATION_2026-05-05.md`; implementation is gated on Captain selecting the final 8–12 ambient programmes from the audition slate.
+- Move 4.3 F3 Liquid Stillness curation — planned in `firmware-v3/docs/research/synergy-topology/MOVE_4_3_LIQUID_STILLNESS_CURATION_2026-05-05.md`; Captain noted/approved the gate on 2026-05-06, and implementation remains gated on Captain selecting the final 8–12 ambient programmes from the audition slate.
 
 ### Next Synergy-Topology re-entry recommendation — CAPTAIN RATIFIED 2026-05-05
 - Phase 0 ledger gate is resolved above.
@@ -279,7 +282,8 @@ These are NOT phases; they are validated engineering intents that update both fi
 ### VP render path audit follow-ups (2026-05-05)
 - DONE: gamma LUT lifecycle/status correctness (`adacee3d`). NVS and runtime colour-correction config writes now route through `ColorCorrectionEngine::setConfig()`, and REST/WS/SerialCLI/SerialJSON expose `gammaEnabled`, `gammaValue`, `lutGenerationId`, and LUT proof samples.
 - DONE: source-grounded VP frame lifecycle audit (`3978c167`). The audit documents one shared output path with a buffer-ownership fork, not two render pipelines.
-- GATED: buffer-ownership correction. Current source applies `ColorCorrectionEngine::processBuffer()` to `m_leds` in `RendererActor::onTick()`, while direct dual-channel effects can author `m_strip1/m_strip2` and bypass the corrected surface before `showLeds()`. Patching this changes visible output for strip-authored effects, so do not implement without explicit Captain approval or a non-subjective validation protocol.
+- APPROVED NEXT STEP: Captain approved the VP validation-protocol gate on 2026-05-06. Draft and use a non-subjective visual test protocol before buffer-ownership correction or silence-policy metadata changes.
+- GATED: buffer-ownership correction. Current source applies `ColorCorrectionEngine::processBuffer()` to `m_leds` in `RendererActor::onTick()`, while direct dual-channel effects can author `m_strip1/m_strip2` and bypass the corrected surface before `showLeds()`. Patching this changes visible output for strip-authored effects, so do not implement until the approved validation protocol exists and is followed.
 - GATED: silence-policy metadata. Global `silentScale` is an output brightness policy and can make ambient/non-reactive effects appear audio-reactive. Add per-effect policy metadata only behind tests and explicit product approval; default changes are visible behaviour.
 - SKIPPED: subjective two-unit/manual colour A/B. Do not revive the failed timed A/B workflow or use its observations as evidence. Any future visual-default change needs a new protocol first.
 

@@ -29,6 +29,7 @@ MATRIX: tuple[HarnessStep, ...] = (
     HarnessStep("zone effect isolation", (("pio", "test", "-e", "native_test_zone_effect_isolation"),)),
     HarnessStep("reflective twin policy", (("pio", "test", "-e", "native_test_reflective_twin_policy"),)),
     HarnessStep("inter-strip phase delay", (("pio", "test", "-e", "native_test_interstrip_phase_delay"),)),
+    HarnessStep("vp stack introspection", (("pio", "test", "-e", "native_test_vp_stack_introspection"),)),
     HarnessStep("cross-strip wave interference", (("pio", "test", "-e", "native_test_cross_strip_wave_interference"),)),
     HarnessStep("audio benchmark", (("pio", "test", "-e", "native_audio_benchmark"),)),
     HarnessStep(

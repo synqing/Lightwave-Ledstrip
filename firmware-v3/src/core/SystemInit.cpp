@@ -511,6 +511,7 @@ void printHelpBanner() {
     Serial.println("  dbg spectrum  - Print 64-bin spectrum NOW");
     Serial.println("  dbg beat      - Print beat tracking NOW");
     Serial.println("  dbg memory    - Print heap/stack NOW");
+    Serial.println("  vp stack      - Print VP stack topology, surfaces, and colour layer state");
     Serial.println("  dbg interval status <N>  - Auto status every N sec (0=off)");
     Serial.println("  dbg interval spectrum <N>- Auto spectrum every N sec (0=off)");
 #if FEATURE_MABUTRACE

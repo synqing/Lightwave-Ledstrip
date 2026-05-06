@@ -30,6 +30,7 @@
 
 #include "Actor.h"
 #include "../bus/MessageBus.h"
+#include "../diagnostics/VpStackIntrospection.h"
 #include "../../effects/enhancement/ColorCorrectionEngine.h"
 #include "../../effects/enhancement/EdgeMixer.h"
 #include "../../config/features.h"
@@ -252,6 +253,57 @@ public:
     bool isLedOutputBusy() const { return m_ledDriver.isShowInProgress(); }
     const hal::LedDriverStats& getLedDriverStats() const { return m_ledDriver.getStats(); }
     bool isLedDitheringEnabled() const { return m_ledDriver.isDitheringEnabled(); }
+
+    struct VpStackSnapshot {
+        EffectId effectId = INVALID_EFFECT_ID;
+        const char* effectName = "Unknown";
+        uint8_t paletteId = 0;
+        const char* paletteName = "Unknown";
+        uint8_t brightness = 0;
+        uint8_t speed = 0;
+        uint8_t intensity = 0;
+        uint8_t saturation = 0;
+        uint8_t complexity = 0;
+        uint8_t variation = 0;
+        uint8_t hue = 0;
+        uint8_t mood = 0;
+        RendererMode rendererMode = RendererMode::Unified;
+        diagnostics::VpTopology topology = diagnostics::VpTopology::Unified;
+        diagnostics::VpSurfaceState surfaces{};
+        RenderStats renderStats{};
+        hal::LedDriverStats ledStats{};
+        bool ledDitheringEnabled = true;
+        bool colourCorrectionToggleEnabled = false;
+        bool colourCorrectionSkippedByEffect = false;
+        bool colourCorrectionApplied = false;
+        uint32_t correctionApplyCount = 0;
+        uint32_t correctionSkipCount = 0;
+        enhancement::ColorCorrectionConfig colourConfig{};
+        enhancement::GammaLutStatus gamma{};
+        bool toneMapNeeded = false;
+        bool audioAvailable = false;
+        bool globalSilenceBypassed = false;
+        bool globalSilenceScaleActive = false;
+        bool hardSilenceGateEffect = false;
+        float silentScale = 1.0f;
+        enhancement::EdgeMixerMode edgeMode = enhancement::EdgeMixerMode::MIRROR;
+        enhancement::EdgeMixerSpatial edgeSpatial = enhancement::EdgeMixerSpatial::UNIFORM;
+        enhancement::EdgeMixerTemporal edgeTemporal = enhancement::EdgeMixerTemporal::STATIC;
+        uint8_t edgeSpread = 0;
+        uint8_t edgeStrength = 0;
+        bool captureEnabled = false;
+        uint8_t captureTapMask = 0;
+        EffectId captureEffectId = INVALID_EFFECT_ID;
+        uint8_t capturePaletteId = 0;
+        uint8_t captureBrightness = 0;
+        uint8_t captureSpeed = 0;
+        uint32_t captureFrameIndex = 0;
+        uint32_t captureTimestampUs = 0;
+        bool wireFenceActive = true;
+        uint32_t expectedWireTimeUs = 0;
+    };
+
+    VpStackSnapshot getVpStackSnapshot() const;
 
     /**
      * @brief Get a copy of the current LED buffer
@@ -625,12 +677,12 @@ public:
      * @brief Get capture metadata (effect ID, palette ID, frame index, timestamp)
      */
     struct CaptureMetadata {
-        EffectId effectId;
-        uint8_t paletteId;
-        uint8_t brightness;
-        uint8_t speed;
-        uint32_t frameIndex;
-        uint32_t timestampUs;
+        EffectId effectId = INVALID_EFFECT_ID;
+        uint8_t paletteId = 0;
+        uint8_t brightness = 0;
+        uint8_t speed = 0;
+        uint32_t frameIndex = 0;
+        uint32_t timestampUs = 0;
     };
     CaptureMetadata getCaptureMetadata() const;
 

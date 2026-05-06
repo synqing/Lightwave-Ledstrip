@@ -87,6 +87,154 @@ using namespace lightwaveos::narrative;
 namespace lightwaveos {
 namespace serial {
 
+namespace {
+
+const char* boolName(bool value) {
+    return value ? "true" : "false";
+}
+
+const char* onOffName(bool value) {
+    return value ? "on" : "off";
+}
+
+const char* rendererModeName(RendererMode mode) {
+    switch (mode) {
+        case RendererMode::Unified:
+            return "unified";
+        case RendererMode::Independent:
+            return "independent";
+    }
+    return "unknown";
+}
+
+const char* colourCorrectionModeName(enhancement::CorrectionMode mode) {
+    switch (mode) {
+        case enhancement::CorrectionMode::OFF:
+            return "off";
+        case enhancement::CorrectionMode::HSV:
+            return "hsv";
+        case enhancement::CorrectionMode::RGB:
+            return "rgb";
+        case enhancement::CorrectionMode::BOTH:
+            return "both";
+    }
+    return "unknown";
+}
+
+void printVpStackSnapshot(const RendererActor::VpStackSnapshot& snap) {
+    using lightwaveos::diagnostics::authoredSurfaceName;
+    using lightwaveos::diagnostics::correctionSurfaceName;
+    using lightwaveos::diagnostics::outputSurfaceName;
+    using lightwaveos::diagnostics::topologyName;
+
+    Serial.println("\n=== VP Stack Introspection ===");
+    Serial.printf("effect: 0x%04X %s\n",
+                  static_cast<unsigned>(snap.effectId),
+                  snap.effectName ? snap.effectName : "Unknown");
+    Serial.printf("palette: %u %s\n",
+                  snap.paletteId,
+                  snap.paletteName ? snap.paletteName : "Unknown");
+    Serial.printf("controls: brightness=%u speed=%u intensity=%u saturation=%u complexity=%u variation=%u hue=%u mood=%u\n",
+                  snap.brightness, snap.speed, snap.intensity, snap.saturation,
+                  snap.complexity, snap.variation, snap.hue, snap.mood);
+
+    Serial.printf("topology: mode=%s vp=%s authored=%s correction_surface=%s output=%s mismatch=%s\n",
+                  rendererModeName(snap.rendererMode),
+                  topologyName(snap.topology),
+                  authoredSurfaceName(snap.surfaces.authored),
+                  correctionSurfaceName(snap.surfaces.correction),
+                  outputSurfaceName(snap.surfaces.output),
+                  boolName(snap.surfaces.surfaceMismatch));
+
+    Serial.println("layers:");
+    Serial.printf("  1 effect_render: active surface=%s\n",
+                  authoredSurfaceName(snap.surfaces.authored));
+    Serial.printf("  2 colour_correction: %s toggle=%s skipped_by_effect=%s apply_count=%lu skip_count=%lu\n",
+                  snap.colourCorrectionApplied ? "active" : "bypassed",
+                  onOffName(snap.colourCorrectionToggleEnabled),
+                  boolName(snap.colourCorrectionSkippedByEffect),
+                  static_cast<unsigned long>(snap.correctionApplyCount),
+                  static_cast<unsigned long>(snap.correctionSkipCount));
+    Serial.printf("  3 tone_map: %s\n", snap.toneMapNeeded ? "active" : "bypassed");
+    Serial.printf("  4 split/converge: %s -> physical_strips\n",
+                  authoredSurfaceName(snap.surfaces.authored));
+    Serial.printf("  5 silence_policy: global_active=%s bypassed=%s hard_gate_effect=%s silent_scale=%.3f audio=%s\n",
+                  boolName(snap.globalSilenceScaleActive),
+                  boolName(snap.globalSilenceBypassed),
+                  boolName(snap.hardSilenceGateEffect),
+                  snap.silentScale,
+                  boolName(snap.audioAvailable));
+    Serial.printf("  6 edge_mixer: mode=%s spatial=%s temporal=%s spread=%u strength=%u\n",
+                  enhancement::EdgeMixer::modeName(snap.edgeMode),
+                  enhancement::EdgeMixer::spatialName(snap.edgeSpatial),
+                  enhancement::EdgeMixer::temporalName(snap.edgeTemporal),
+                  snap.edgeSpread,
+                  snap.edgeStrength);
+    Serial.printf("  7 led_show: dither=%s wire_fence=%s expected_wire_us=%lu show_skips=%lu failures=%lu rmt_errors=%lu underruns=%lu\n",
+                  onOffName(snap.ledDitheringEnabled),
+                  boolName(snap.wireFenceActive),
+                  static_cast<unsigned long>(snap.expectedWireTimeUs),
+                  static_cast<unsigned long>(snap.ledStats.showSkips),
+                  static_cast<unsigned long>(snap.ledStats.ledShowFailures),
+                  static_cast<unsigned long>(snap.ledStats.rmtErrors),
+                  static_cast<unsigned long>(snap.ledStats.rmtUnderruns));
+
+    const auto& cfg = snap.colourConfig;
+    const auto& gamma = snap.gamma;
+    Serial.println("colour:");
+    Serial.printf("  mode=%s hsv_min_sat=%u rgb_white_threshold=%u rgb_target_min=%u saturation_boost=%u\n",
+                  colourCorrectionModeName(cfg.mode),
+                  cfg.hsvMinSaturation,
+                  cfg.rgbWhiteThreshold,
+                  cfg.rgbTargetMin,
+                  cfg.saturationBoostAmount);
+    Serial.printf("  auto_exposure=%s target=%u brown_guardrail=%s v_clamp=%s max_brightness=%u\n",
+                  onOffName(cfg.autoExposureEnabled),
+                  cfg.autoExposureTarget,
+                  onOffName(cfg.brownGuardrailEnabled),
+                  onOffName(cfg.vClampEnabled),
+                  cfg.maxBrightness);
+    Serial.printf("  gamma=%s value=%.3f lut_gen=%lu samples=[%u,%u,%u,%u,%u,%u]\n",
+                  onOffName(gamma.gammaEnabled),
+                  gamma.gammaValue,
+                  static_cast<unsigned long>(gamma.lutGenerationId),
+                  gamma.lut0, gamma.lut32, gamma.lut64,
+                  gamma.lut128, gamma.lut192, gamma.lut255);
+
+    Serial.println("frame:");
+    Serial.printf("  target_fps=%u frames=%lu drops=%lu fps=%u avg_us=%lu min_us=%lu max_us=%lu cpu=%u%%\n",
+                  LedConfig::TARGET_FPS,
+                  static_cast<unsigned long>(snap.renderStats.framesRendered),
+                  static_cast<unsigned long>(snap.renderStats.frameDrops),
+                  snap.renderStats.currentFPS,
+                  static_cast<unsigned long>(snap.renderStats.avgFrameTimeUs),
+                  static_cast<unsigned long>(snap.renderStats.minFrameTimeUs),
+                  static_cast<unsigned long>(snap.renderStats.maxFrameTimeUs),
+                  snap.renderStats.cpuPercent);
+    Serial.printf("  led_show: frames=%lu last_us=%lu avg_us=%lu max_us=%lu brightness=%u\n",
+                  static_cast<unsigned long>(snap.ledStats.frameCount),
+                  static_cast<unsigned long>(snap.ledStats.lastShowUs),
+                  static_cast<unsigned long>(snap.ledStats.avgShowUs),
+                  static_cast<unsigned long>(snap.ledStats.maxShowUs),
+                  snap.ledStats.currentBrightness);
+
+    Serial.println("capture:");
+    Serial.printf("  enabled=%s tap_mask=0x%02X last_effect=0x%04X last_palette=%u frame=%lu timestamp_us=%lu\n",
+                  boolName(snap.captureEnabled),
+                  snap.captureTapMask,
+                  static_cast<unsigned>(snap.captureEffectId),
+                  snap.capturePaletteId,
+                  static_cast<unsigned long>(snap.captureFrameIndex),
+                  static_cast<unsigned long>(snap.captureTimestampUs));
+
+    if (snap.surfaces.surfaceMismatch) {
+        Serial.println("warning: colour correction is active on m_leds while the authored surface is physical_strips");
+    }
+    Serial.println("==============================");
+}
+
+} // namespace
+
 // ============================================================================
 // Lifecycle
 // ============================================================================
@@ -297,6 +445,16 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
     }
     else
 #endif
+    if (inputLower == "vp stack" || inputLower == "vpstack" || inputLower == "vp-stack") {
+        handledMulti = true;
+        RendererActor* ren = actors.getRenderer();
+        if (!ren) {
+            Serial.println("VP stack: renderer not available");
+        } else {
+            printVpStackSnapshot(ren->getVpStackSnapshot());
+        }
+    }
+    else
     if (inputLower.startsWith("dither")) {
         handledMulti = true;
         RendererActor* ren = actors.getRenderer();

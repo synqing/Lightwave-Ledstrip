@@ -1229,6 +1229,109 @@ RendererActor::CaptureMetadata RendererActor::getCaptureMetadata() const {
     return m_captureMetadata;
 }
 
+RendererActor::VpStackSnapshot RendererActor::getVpStackSnapshot() const {
+    VpStackSnapshot snapshot;
+
+    const EffectId safeEffect =
+        m_currentEffectValid ? m_validatedEffectId : validateEffectId(m_currentEffect);
+
+    snapshot.effectId = safeEffect;
+    snapshot.effectName = getEffectName(safeEffect);
+    snapshot.paletteId = m_paletteIndex;
+    snapshot.paletteName = getPaletteName(m_paletteIndex);
+    snapshot.brightness = m_brightness;
+    snapshot.speed = m_speed;
+    snapshot.intensity = m_intensity;
+    snapshot.saturation = m_saturation;
+    snapshot.complexity = m_complexity;
+    snapshot.variation = m_variation;
+    snapshot.hue = m_hue;
+    snapshot.mood = m_mood;
+    snapshot.rendererMode = m_rendererMode;
+
+    bool zonePath = false;
+    if (m_zoneComposer != nullptr) {
+        zonePath = m_zoneComposer->isEnabled();
+    }
+
+    if (m_rendererMode == RendererMode::Independent) {
+        snapshot.topology = diagnostics::VpTopology::DirectStrip;
+    } else if (zonePath) {
+        snapshot.topology = diagnostics::VpTopology::ZoneUnified;
+    } else if (m_effectContext.dualChannelMode) {
+        snapshot.topology = diagnostics::VpTopology::DirectStrip;
+    } else {
+        snapshot.topology = diagnostics::VpTopology::Unified;
+    }
+
+    const bool colourToggleEnabled =
+        ::lightwaveos::bench::isToggleEnabled(&::lightwaveos::bench::g_bench_render_color_correction);
+    const bool colourSkippedByEffect =
+        ::PatternRegistry::shouldSkipColorCorrection(safeEffect);
+    const bool colourApplied = colourToggleEnabled && !colourSkippedByEffect;
+
+    snapshot.surfaces =
+        diagnostics::deriveVpSurfaces(snapshot.topology,
+                                      m_effectContext.dualChannelMode,
+                                      colourApplied);
+    snapshot.renderStats = m_stats;
+    snapshot.ledStats = m_ledDriver.getStats();
+    snapshot.ledDitheringEnabled = m_ledDriver.isDitheringEnabled();
+    snapshot.colourCorrectionToggleEnabled = colourToggleEnabled;
+    snapshot.colourCorrectionSkippedByEffect = colourSkippedByEffect;
+    snapshot.colourCorrectionApplied = colourApplied;
+    snapshot.correctionApplyCount = m_correctionApplyCount;
+    snapshot.correctionSkipCount = m_correctionSkipCount;
+
+    auto& colourEngine = enhancement::ColorCorrectionEngine::getInstance();
+    snapshot.colourConfig = colourEngine.getConfig();
+    snapshot.gamma = colourEngine.getGammaLutStatus();
+    snapshot.toneMapNeeded = needsToneMap(safeEffect);
+
+#if FEATURE_AUDIO_SYNC
+    snapshot.audioAvailable = (m_controlBusBuffer != nullptr);
+    snapshot.silentScale = m_lastControlBus.silentScale;
+    snapshot.globalSilenceBypassed = (safeEffect == EID_CROSS_STRIP_WAVE_INTERFERENCE);
+    snapshot.globalSilenceScaleActive =
+        !snapshot.globalSilenceBypassed &&
+        snapshot.audioAvailable &&
+        m_lastControlBus.silentScale < 0.999f;
+    snapshot.hardSilenceGateEffect =
+        needsSilenceGate(safeEffect) && ::PatternRegistry::isAudioReactive(safeEffect);
+#else
+    snapshot.audioAvailable = false;
+    snapshot.silentScale = 1.0f;
+    snapshot.globalSilenceBypassed = false;
+    snapshot.globalSilenceScaleActive = false;
+    snapshot.hardSilenceGateEffect = false;
+#endif
+
+    auto& edgeMixer = enhancement::EdgeMixer::getInstance();
+    snapshot.edgeMode = edgeMixer.getMode();
+    snapshot.edgeSpatial = edgeMixer.getSpatial();
+    snapshot.edgeTemporal = edgeMixer.getTemporal();
+    snapshot.edgeSpread = edgeMixer.getSpread();
+    snapshot.edgeStrength = edgeMixer.getStrength();
+
+    snapshot.captureEnabled = m_captureEnabled;
+    snapshot.captureTapMask = m_captureTapMask;
+    snapshot.captureEffectId = m_captureMetadata.effectId;
+    snapshot.capturePaletteId = m_captureMetadata.paletteId;
+    snapshot.captureBrightness = m_captureMetadata.brightness;
+    snapshot.captureSpeed = m_captureMetadata.speed;
+    snapshot.captureFrameIndex = m_captureMetadata.frameIndex;
+    snapshot.captureTimestampUs = m_captureMetadata.timestampUs;
+
+    snapshot.wireFenceActive = true;
+#if CHIP_ESP32_S3
+    snapshot.expectedWireTimeUs = 5600;
+#else
+    snapshot.expectedWireTimeUs = 0;
+#endif
+
+    return snapshot;
+}
+
 #if FEATURE_AUDIO_SYNC
 audio::AudioContractTuning RendererActor::getAudioContractTuning() const {
     audio::AudioContractTuning out;

@@ -297,6 +297,7 @@ These are NOT phases; they are validated engineering intents that update both fi
 - The ~2 KB ControlBusFrame is copied atomically across cores via SnapshotBuffer
 - If cross-core contention becomes measurable, split into hot (~100 B: RMS, flux, bands) and cold (~1.9 KB: full spectrum, waveform) sub-structs with independent update rates
 - 2026-05-06 evidence after duplicate renderer-copy removal: direct snapshot payload copy is still ~251 µs p99 and `audio_snapshot_read` is ~460 µs p99 on K1v2 `0x2102`. Hot/cold split is the next plausible lever, but it is a contract refactor touching stimulus, legacy inactive Trinity compatibility, debug/streaming, and effect compatibility; do not start it as a small patch.
+- Trinity status note: Captain clarified on 2026-05-06 that Trinity has never been actively deployed or utilised; source hooks should be treated as dormant compatibility only. Evidence note: `firmware-v3/docs/research/trinity_inactive_status_note_2026-05-06.md`.
 
 ### MabuTrace library risk
 - 7 GitHub stars, 1 fork, single maintainer (mabuware/Matthias Buhlmann)

@@ -108,19 +108,17 @@ private:
 #endif
 
     // ── Buffers ──────────────────────────────────────────────────────
-    // Pre-assembled frame buffer — allocated in PSRAM when available.
+    // Pre-assembled frame buffer — allocated in PSRAM.
     static constexpr size_t kFrameBufSize = 1024;
-    uint8_t  m_frameBufFallback[kFrameBufSize] = {};
-    uint8_t* m_frameBuf = m_frameBufFallback;
+    uint8_t* m_frameBuf = nullptr;
 
     // Dump-frame scratch (320 LEDs) — shared with the `capture dump` CLI.
     static constexpr uint16_t kLedCount = 320;
-    CRGB     m_dumpFrameFallback[kLedCount] = {};
-    CRGB*    m_dumpFrameScratch = m_dumpFrameFallback;
+    CRGB*    m_dumpFrameScratch = nullptr;
 
     // Dedicated CRGB buffer for the async capture task (avoids racing
     // with the dump command which uses m_dumpFrameScratch).
-    CRGB     m_taskFrameBuf[kLedCount] = {};
+    CRGB*    m_taskFrameBuf = nullptr;
 
     bool     m_initialised = false;
 };

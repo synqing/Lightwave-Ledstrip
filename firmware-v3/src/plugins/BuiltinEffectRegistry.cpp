@@ -10,17 +10,42 @@
  */
 
 #include "BuiltinEffectRegistry.h"
+#include <cstdlib>
 #include <cstring>
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#endif
 
 namespace lightwaveos {
 namespace plugins {
 
-// Static storage
-BuiltinEffectRegistry::Entry BuiltinEffectRegistry::s_entries[MAX_EFFECTS] = {};
+// Static registry storage is allocated once during effect registration so the
+// table can live in PSRAM on K1v2 instead of permanent internal DRAM.
+BuiltinEffectRegistry::Entry* BuiltinEffectRegistry::s_entries = nullptr;
 uint16_t BuiltinEffectRegistry::s_count = 0;
+
+bool BuiltinEffectRegistry::ensureStorage() {
+    if (s_entries) {
+        return true;
+    }
+
+#if defined(NATIVE_BUILD)
+    s_entries = static_cast<Entry*>(std::calloc(MAX_EFFECTS, sizeof(Entry)));
+#elif defined(BOARD_HAS_PSRAM)
+    s_entries = static_cast<Entry*>(
+        heap_caps_calloc(MAX_EFFECTS, sizeof(Entry), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+#else
+    s_entries = static_cast<Entry*>(
+        heap_caps_calloc(MAX_EFFECTS, sizeof(Entry), MALLOC_CAP_8BIT));
+#endif
+    return s_entries != nullptr;
+}
 
 bool BuiltinEffectRegistry::registerBuiltin(EffectId id, IEffect* effect) {
     if (id == INVALID_EFFECT_ID || effect == nullptr) {
+        return false;
+    }
+    if (!ensureStorage()) {
         return false;
     }
 
@@ -43,6 +68,9 @@ bool BuiltinEffectRegistry::registerBuiltin(EffectId id, IEffect* effect) {
 }
 
 IEffect* BuiltinEffectRegistry::getBuiltin(EffectId id) {
+    if (!s_entries) {
+        return nullptr;
+    }
     for (uint16_t i = 0; i < s_count; ++i) {
         if (s_entries[i].id == id) {
             return s_entries[i].effect;
@@ -52,6 +80,9 @@ IEffect* BuiltinEffectRegistry::getBuiltin(EffectId id) {
 }
 
 bool BuiltinEffectRegistry::hasBuiltin(EffectId id) {
+    if (!s_entries) {
+        return false;
+    }
     for (uint16_t i = 0; i < s_count; ++i) {
         if (s_entries[i].id == id) {
             return true;
@@ -65,7 +96,9 @@ uint16_t BuiltinEffectRegistry::getBuiltinCount() {
 }
 
 void BuiltinEffectRegistry::clear() {
-    memset(s_entries, 0, sizeof(s_entries));
+    if (s_entries) {
+        memset(s_entries, 0, MAX_EFFECTS * sizeof(Entry));
+    }
     s_count = 0;
 }
 

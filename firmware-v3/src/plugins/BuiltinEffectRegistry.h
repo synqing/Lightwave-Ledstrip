@@ -73,8 +73,9 @@ private:
         EffectId id;
         IEffect* effect;
     };
-    static Entry s_entries[MAX_EFFECTS];
+    static Entry* s_entries;
     static uint16_t s_count;
+    static bool ensureStorage();
 };
 
 } // namespace plugins

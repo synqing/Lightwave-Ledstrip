@@ -6,17 +6,50 @@
 #include "WsCommandRouter.h"
 #include "WebServerContext.h"
 #include "../ApiResponse.h"
+#include <cstdlib>
 #include <cstring>
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#endif
 
 namespace lightwaveos {
 namespace network {
 namespace webserver {
 
-// Static storage for command handlers
-WsCommandEntry WsCommandRouter::s_handlers[MAX_HANDLERS];
+// Command handler storage is allocated once during registration so the table
+// does not reserve internal DRAM while idle.
+WsCommandEntry* WsCommandRouter::s_handlers = nullptr;
 size_t WsCommandRouter::s_handlerCount = 0;
 
+bool WsCommandRouter::ensureStorage() {
+    if (s_handlers) {
+        return true;
+    }
+
+    const size_t bytes = MAX_HANDLERS * sizeof(WsCommandEntry);
+#if defined(NATIVE_BUILD)
+    s_handlers = static_cast<WsCommandEntry*>(std::calloc(MAX_HANDLERS, sizeof(WsCommandEntry)));
+#elif defined(BOARD_HAS_PSRAM)
+    s_handlers = static_cast<WsCommandEntry*>(
+        heap_caps_calloc(MAX_HANDLERS, sizeof(WsCommandEntry),
+                         MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+#else
+    s_handlers = static_cast<WsCommandEntry*>(
+        heap_caps_calloc(MAX_HANDLERS, sizeof(WsCommandEntry), MALLOC_CAP_8BIT));
+#endif
+
+    if (!s_handlers) {
+        Serial.printf("[WsCommandRouter] ERROR: handler table allocation failed (%u bytes)\n",
+                      static_cast<unsigned>(bytes));
+        return false;
+    }
+    return true;
+}
+
 void WsCommandRouter::registerCommand(const char* type, WsCommandHandler handler) {
+    if (!ensureStorage()) {
+        return;
+    }
     if (s_handlerCount >= MAX_HANDLERS) {
         Serial.printf("[WsCommandRouter] ERROR: Handler table full, cannot register '%s'\n", type);
         return;

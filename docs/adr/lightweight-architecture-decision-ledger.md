@@ -43,6 +43,8 @@ abstract: "Lightweight architecture decision ledger for durable K1 decisions tha
 | ADL-006 | DORMANT | Trinity status | Trinity is legacy inactive compatibility/dormant hooks, not active product behaviour. | `firmware-v3/docs/research/trinity_inactive_status_note_2026-05-06.md:7-38`, `docs/protocol/k1-ws-contract.yaml:1447-1497` | Captain explicitly revives Trinity or code paths become active in production. | Effects / protocol | 2026-05-06 |
 | ADL-007 | SHIPPED | K1v2 SRAM reclaim boundary | Cold/control-path SRAM reclaim is allowed; do not lower heap guards, alter render hot paths, change WiFi mode, or move ControlBusFrame out of DRAM. | `firmware-v3/docs/research/k1v2_sram_psram_reclaim_handoff_2026-05-06.md:97-109`, `firmware-v3/docs/research/k1v2_sram_psram_reclaim_run_2026-05-06.md:32-63`, `instructions/changelog/2026-05-06--firmware-v3--k1v2-batch-a-sram-reclaim.md` | Heap pressure returns under normal AP/effect-switch load. | K1v2 memory | 2026-05-06 |
 | ADL-008 | ACTIVE | VP stack truth model | There is one frame lifecycle with a buffer-ownership fork, not two unrelated render pipelines. | `firmware-v3/docs/audit/VP_RENDER_PATH_LAYER_AUDIT_2026-05-05.md:13-23`, `firmware-v3/docs/debugging/VP_STACK_INTROSPECTION_COMMAND_SPEC.md` | Renderer branch or buffer ownership implementation changes. | VP architecture | 2026-05-06 |
+| ADL-009 | SHIPPED/GATED | BPS `0x2102` class status | Beat Parity Sprite remains an allowed event-sprite class. The immediate silence/background repair is complete, but the effect is visually unsatisfactory and must not be treated as the new waveform/pull-in class. | `firmware-v3/docs/research/lgp_beat_emotiscope_architecture_review_2026-05-06.md`, `firmware-v3/test/test_native/test_beat_parity_sprite.cpp`, `/private/tmp/k1_c5_visual_only_runs/BPS-1_20260506_223708.visual.json` | Captain explicitly reopens BPS event-sprite class, or BPS is selected for future class development. | Phase 5 / effects | 2026-05-07 |
+| ADL-010 | ACTIVE/GATED | Hybrid/V1 Waveform Pull-In class | Hybrid/V1 Waveform Pull-In is a new audio-reactive effect class, separate from BPS. It may read as centre-focused while primary motion travels inward to LEDs 79/80. Snapwave is a crown-jewel reference for this class, not a direct drop-in implementation. | `firmware-v3/docs/research/lgp_beat_emotiscope_architecture_review_2026-05-06.md`, `/Users/spectrasynq/Workspace_Management/Software/LightwaveOS_Official/SNAPWAVE_ORIGINAL_IMPLEMENTATION.md`, `/Users/spectrasynq/Workspace_Management/Software/K1.Landing-Page/docs/SNAPWAVE-MOTION-ALGORITHM-ANALYSIS.md` | Captain opens a dedicated Hybrid/V1 Pull-In or Snapwave-derived design task. | Effects / AP-VP | 2026-05-07 |
 
 ## Entry Template
 
@@ -51,3 +53,13 @@ abstract: "Lightweight architecture decision ledger for durable K1 decisions tha
 ```
 
 Optional detail sections may be added below the table when a row needs nuance. Do not add forward task lists here.
+
+## ADL-009 / ADL-010 Detail — BPS Parked, Pull-In Class Declared
+
+**Captain decision date:** 2026-05-07.
+
+**BPS `0x2102` decision:** BPS is allowed to continue existing as an event-sprite class. The immediate repair task is complete: silence now stays dark, and the raw RMS/gHue background corruption has been removed in the candidate patch. The remaining product judgement is not "BPS is excellent"; it is "BPS works, but the visual language is unsatisfactory for the current crown-jewel direction." Future work may revisit BPS as its own class, but not as part of the Pull-In class decision.
+
+**Hybrid/V1 Waveform Pull-In decision:** The desired new class is not BPS. It is a waveform-like audio-reactive class where the fixture can still read as centre-organised around LEDs 79/80, while the primary visible transport can move inward from edge regions to the centre focal point. This falls under the centre-origin/inward-to-centre allowance and must not be confused with arbitrary linear edge sweeps.
+
+**Snapwave reference boundary:** Snapwave is relevant because its documented algorithm combines history shifting, dynamic trails, chromagram-driven time oscillation, positional mapping, and harmonic colour. It must be studied before designing the Pull-In class. It must not be blindly ported: K1 AP-VP semantics, centre/inward topology, no-rainbow constraints, no heap in render, dt-correct timing, and the 2.0 ms effect-code ceiling still apply.

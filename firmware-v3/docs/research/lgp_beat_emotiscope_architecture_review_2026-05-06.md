@@ -1,5 +1,7 @@
 # LGP Beat / Emotiscope Architecture Review
 
+**Visual characterisation anchor:** `firmware-v3/docs/research/k1_visual_characterisation_database.md` is the top-level product-language database for this lane. Use it to name visual traits/classes and keep Captain visual language tied to source-anchored mechanisms.
+
 **Date:** 2026-05-06
 **RBDO label:** GROUNDED for source-anchored findings; DEGRADED-MODE for visual-quality conclusions until Captain hardware judgement exists.
 **Scope:** Read-only architecture review of the LGP Beat / Phase 5 effect family, with PVF `0x2101` and BPS `0x2102` as first targets.
@@ -257,3 +259,49 @@ Current likely explanation:
 Evidence gap:
 
 - Need a targeted BPS-2 row that records `bps_kick_trigger`, `bps_sprite_spawn`, `bps_active_sprites`, frame drops, and Captain's audio timing observation over at least the first 8-10 seconds of the same music type.
+
+## 2026-05-07 Design Lock
+
+Captain decision:
+
+- BPS `0x2102` keeps its current identity as an event-sprite class.
+- The immediate BPS repair task is complete for this workstream: silence/dark behaviour is visually confirmed, and the candidate patch removes the raw RMS/gHue background corruption.
+- BPS is not visually excellent. It works as a class of effect, but it is visually unsatisfactory for the current crown-jewel direction.
+- Do not keep iterating BPS in this lane. It may be explored and developed later as its own class, but not right now.
+- The desired new class is **Hybrid/V1 Waveform Pull-In**.
+
+Hybrid/V1 Waveform Pull-In definition:
+
+- This is a new audio-reactive effect class, separate from BPS.
+- The fixture should read as centre-organised around LEDs 79/80, while the primary visual transport can be edge-to-centre.
+- The centre is the focal impact/lock point, not necessarily the transport launch point.
+- This class is related to Waveform Hybrid/V1 behaviour and should be treated under the "inward to 79/80" centre-origin allowance, not as arbitrary linear edge sweeping.
+- This class should use musical endpoints and waveform/history semantics to own structure; RMS may shade or gate, but must not become a cheap amplitude bed.
+
+Visual references captured from Captain:
+
+- Images supplied on 2026-05-07 show large smooth waveform-like fields, centre-focal colour energy, and plate-scale trails rather than discrete node transport.
+- These references are visual direction only; they are not hardware validation evidence for an implementation.
+
+Snapwave consideration:
+
+- Captain identified Snapwave as a potential crown-jewel ancestor/reference before moving on.
+- Source references to preserve:
+  - `/Users/spectrasynq/Workspace_Management/Software/LightwaveOS_Official/SNAPWAVE_ORIGINAL_IMPLEMENTATION.md`
+  - `/Users/spectrasynq/Workspace_Management/Software/LightwaveOS_Official/SNAPWAVE_MODE_DEEP_TECHNICAL_ANALYSIS.md`
+  - `/Users/spectrasynq/Workspace_Management/Software/K1.Landing-Page/docs/00-SNAPWAVE-ANALYSIS-INDEX.md`
+  - `/Users/spectrasynq/Workspace_Management/Software/K1.Landing-Page/docs/SNAPWAVE-MOTION-ALGORITHM-ANALYSIS.md`
+  - `/Users/spectrasynq/Downloads/LightwaveOS_Official/SNAPWAVE_DEBUG_NOTES.txt`
+- Snapwave reference traits verified from the supplied docs:
+  - history shifting / spatial queue;
+  - dynamic trail fading;
+  - chromagram-driven time oscillation;
+  - `tanh()` snap/normalisation;
+  - harmonic colour from pitch-class energy;
+  - mirrored centre organisation.
+
+Decision boundary:
+
+- Do not call the future Pull-In class "BPS fixed".
+- Do not replace BPS in-place without a dedicated design/implementation task.
+- Do not port Snapwave directly without adapting it to K1 AP-VP semantics, centre/inward topology, no-rainbow restraint, render-path heap rules, dt-correct timing, and the 2.0 ms effect-code ceiling.

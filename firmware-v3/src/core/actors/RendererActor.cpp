@@ -1297,6 +1297,8 @@ RendererActor::VpStackSnapshot RendererActor::getVpStackSnapshot() const {
     snapshot.avgColourCorrectionUs = m_avgColourCorrectionUs;
     snapshot.lastShowLedsUs = m_lastShowLedsUs;
     snapshot.avgShowLedsUs = m_avgShowLedsUs;
+    snapshot.lastOutputPrepUs = m_lastOutputPrepUs;
+    snapshot.avgOutputPrepUs = m_avgOutputPrepUs;
     snapshot.lastPrePacingWorkUs = m_lastPrePacingWorkUs;
     snapshot.avgPrePacingWorkUs = m_avgPrePacingWorkUs;
     snapshot.ledDitheringEnabled = m_ledDriver.isDitheringEnabled();
@@ -2197,6 +2199,8 @@ void RendererActor::showLeds()
     if (m_strip1 == nullptr || m_strip2 == nullptr) {
         return;
     }
+    const uint32_t outputPrepStartUs = micros();
+
     // Conditional tone map: only additive-blending effects need washout control.
     // Non-additive effects skip entirely for sharper colour and ~3 ms savings.
     // LUT Reinhard (knee = 1.0): scale = 255 / (avg + 255), applied via nscale8.
@@ -2317,6 +2321,10 @@ void RendererActor::showLeds()
         }
         captureFrame(CaptureTap::TAP_C_PRE_WS2812, m_captureTapC);
     }
+
+    const uint32_t ledDriverStartUs = micros();
+    m_lastOutputPrepUs = ledDriverStartUs - outputPrepStartUs;
+    m_avgOutputPrepUs = smoothTimingUs(m_avgOutputPrepUs, m_lastOutputPrepUs);
 
     // Push to hardware
     m_ledDriver.show();

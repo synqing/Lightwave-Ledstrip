@@ -221,6 +221,10 @@ void printVpStackSnapshot(const RendererActor::VpStackSnapshot& snap) {
                   static_cast<unsigned long>(snap.avgShowLedsUs),
                   static_cast<unsigned long>(snap.lastPrePacingWorkUs),
                   static_cast<unsigned long>(snap.avgPrePacingWorkUs));
+    Serial.printf("  timing: output_prep last_us=%lu avg_us=%lu led_driver_show avg_us=%lu\n",
+                  static_cast<unsigned long>(snap.lastOutputPrepUs),
+                  static_cast<unsigned long>(snap.avgOutputPrepUs),
+                  static_cast<unsigned long>(snap.ledStats.avgShowUs));
     Serial.printf("  led_show: frames=%lu last_us=%lu avg_us=%lu max_us=%lu brightness=%u\n",
                   static_cast<unsigned long>(snap.ledStats.frameCount),
                   static_cast<unsigned long>(snap.ledStats.lastShowUs),

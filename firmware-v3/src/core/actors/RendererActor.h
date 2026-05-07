@@ -278,6 +278,8 @@ public:
         uint32_t avgColourCorrectionUs = 0;
         uint32_t lastShowLedsUs = 0;
         uint32_t avgShowLedsUs = 0;
+        uint32_t lastOutputPrepUs = 0;
+        uint32_t avgOutputPrepUs = 0;
         uint32_t lastPrePacingWorkUs = 0;
         uint32_t avgPrePacingWorkUs = 0;
         bool ledDitheringEnabled = true;
@@ -913,6 +915,8 @@ private:
     uint32_t m_avgColourCorrectionUs = 0;
     uint32_t m_lastShowLedsUs = 0;
     uint32_t m_avgShowLedsUs = 0;
+    uint32_t m_lastOutputPrepUs = 0;
+    uint32_t m_avgOutputPrepUs = 0;
     uint32_t m_lastPrePacingWorkUs = 0;
     uint32_t m_avgPrePacingWorkUs = 0;
 

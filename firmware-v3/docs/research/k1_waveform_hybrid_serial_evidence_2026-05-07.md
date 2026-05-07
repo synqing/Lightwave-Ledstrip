@@ -727,6 +727,76 @@ Therefore:
 - The gap between `show_leds avg_us` and `led_show avg_us` is the current upper-bound clue for renderer-side work before/around the driver call, not proof that FastLED or the RMT transport is slow.
 - The current evidence supports splitting the observability, not changing output behaviour: a useful next patch would expose separate `post_correction_output_prep_us` and `led_driver_show_us` surfaces without changing the FastLED/RMT fence.
 
+## Output Prep Timing Split
+
+A read-only timing split was added after the source-boundary review:
+
+- `output_prep`: time spent inside `RendererActor::showLeds()` before `m_ledDriver.show()`;
+- `led_driver_show`: the existing `LedDriverStats::avgShowUs`, printed beside the split for direct comparison.
+
+Implementation boundaries:
+
+- fixed-width integer counters only;
+- no heap allocation added to render paths;
+- no output branch, colour correction, EdgeMixer, silence policy, gamma, dither, WiFi, or effect visual behaviour changed;
+- FastLED/RMT wire-time fence remains intact.
+
+Validation:
+
+```text
+clangd diagnostics smoke:
+  file: firmware-v3/src/core/actors/RendererActor.cpp
+  result: completed; known unrelated warnings only
+
+pio run -e esp32dev_audio_esv11_k1v2_32khz
+  result: SUCCESS in 00:01:10.454
+  RAM: 38.4% (125748 / 327680 bytes)
+  Flash: 33.5% (2461125 / 7340032 bytes)
+
+pio run -e esp32dev_audio_esv11_k1v2_32khz -t upload --upload-port /dev/cu.usbmodem2101
+  result: SUCCESS in 00:00:58.468
+  target MAC during upload: b4:3a:45:a5:87:f8
+```
+
+K1v2 `0x1313 K1 Waveform Hybrid`, first post-upload sample:
+
+```text
+frame: target_fps=120 frames=2844 drops=1770 fps=117 avg_us=8406 min_us=8245 max_us=32944 cpu=100%
+timing: effect_render last_us=470 avg_us=439 colour_correction last_us=747 avg_us=689
+timing: show_leds last_us=6410 avg_us=6403 pre_pacing_work last_us=8349 avg_us=8251
+timing: output_prep last_us=194 avg_us=180 led_driver_show avg_us=6184
+led_show: frames=2845 last_us=6187 avg_us=6184 max_us=9507 brightness=149
+```
+
+K1v2 `0x1302 K1 Waveform` comparison sample:
+
+```text
+frame: target_fps=120 frames=4981 drops=3078 fps=116 avg_us=8452 min_us=8245 max_us=32944 cpu=100%
+timing: effect_render last_us=438 avg_us=440 colour_correction last_us=768 avg_us=747
+timing: show_leds last_us=6424 avg_us=6424 pre_pacing_work last_us=8336 avg_us=8335
+timing: output_prep last_us=186 avg_us=194 led_driver_show avg_us=6188
+led_show: frames=4982 last_us=6206 avg_us=6188 max_us=9507 brightness=149
+```
+
+K1v2 final restored state, returned to `0x1313 K1 Waveform Hybrid`:
+
+```text
+frame: target_fps=120 frames=6026 drops=3718 fps=117 avg_us=8460 min_us=8245 max_us=32944 cpu=100%
+timing: effect_render last_us=532 avg_us=461 colour_correction last_us=615 avg_us=616
+timing: show_leds last_us=6427 avg_us=6396 pre_pacing_work last_us=8708 avg_us=8296
+timing: output_prep last_us=188 avg_us=178 led_driver_show avg_us=6176
+led_show: frames=6027 last_us=6201 avg_us=6176 max_us=9507 brightness=149
+memory: free_heap=27672 min_free_heap=26140 max_alloc_heap=18420 stack_watermark=10432 words
+```
+
+Finding:
+
+- The naming problem is now closed by measurement: `show_leds` was too broad for causal claims.
+- In the captured Waveform-family samples, renderer-side output prep is small (`~178-194 us` average).
+- The dominant part of `show_leds` is the LED-driver show surface (`~6176-6188 us` average), which includes the protective wire-time delay.
+- That means the next optimisation question is not "rewrite Waveform" and not "disable EdgeMixer". It is whether the current 120 FPS target plus the fixed WS2812 wire-fence budget leaves enough shared-path headroom for K1v2, and that is a global VP cadence/transport question.
+- No LED output faults were observed: `show_skips=0`, `failures=0`, `rmt_errors=0`, and `underruns=0`.
+
 ## Next Step
 
 Continue Waveform-family characterisation with per-layer timing evidence. No firmware behaviour change is justified by this note alone. The next useful source question is whether the current `show_leds` timing surface can be split further into wrapper overhead versus driver/wire-fence time without changing output behaviour.

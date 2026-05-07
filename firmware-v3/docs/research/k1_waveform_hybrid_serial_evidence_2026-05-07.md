@@ -708,6 +708,25 @@ Finding:
 - No LED output faults were observed: `show_skips=0`, `failures=0`, `rmt_errors=0`, and `underruns=0` throughout this pass.
 - This is still not a visual PASS or ship-gate signal; it is a source/serial characterisation of runtime pressure.
 
+## `show_leds` Source Boundary
+
+This source pass was performed only after a fresh Codex session returned a successful clangd diagnostics smoke on `RendererActor.cpp`. The diagnostics were the known unrelated warnings for two `%lu` format arguments and three unused includes.
+
+The `vp stack` timing field named `show_leds` is a renderer-wrapper timing surface, not a FastLED-only timer:
+
+- `RendererActor.cpp:1002-1009` starts the `show_leds` timer immediately before `showLeds()` and stops it immediately after `showLeds()` returns.
+- `RendererActor.cpp:2200-2322` shows the body of `showLeds()` includes conditional tone map work, unified-to-strip `memcpy`, the combined silence gate, EdgeMixer processing, optional Tap C capture, and then `m_ledDriver.show()`.
+- `LedDriver_S3.h:70-71` defines a `250 us` minimum show gap and a `5600 us` WS2812 wire-time guard.
+- `LedDriver_S3.cpp:147-187` shows `LedDriver_S3::show()` includes mutex acquisition, minimum-gap waiting, buffer sync into FastLED TX buffers, `FastLED.show()`, the full `kWireTimeUs` delay, stats update, and mutex release.
+- `LedDriver_S3.cpp:171-182` scopes the lower-level `fastled_rmt_show` trace and computes `LedDriverStats::lastShowUs` / `avgShowUs` from the driver-level `now` timestamp through the post-wire-fence end timestamp.
+
+Therefore:
+
+- `timing: show_leds ...` in `vp stack` currently measures all of `RendererActor::showLeds()`, including pre-driver shared VP work that sits after colour correction.
+- `led_show: ... last_us/avg_us/max_us` in `vp stack` comes from `LedDriverStats` and is narrower than the renderer wrapper, but still includes the protective wire-fence delay and buffer-sync/min-gap overhead.
+- The gap between `show_leds avg_us` and `led_show avg_us` is the current upper-bound clue for renderer-side work before/around the driver call, not proof that FastLED or the RMT transport is slow.
+- The current evidence supports splitting the observability, not changing output behaviour: a useful next patch would expose separate `post_correction_output_prep_us` and `led_driver_show_us` surfaces without changing the FastLED/RMT fence.
+
 ## Next Step
 
 Continue Waveform-family characterisation with per-layer timing evidence. No firmware behaviour change is justified by this note alone. The next useful source question is whether the current `show_leds` timing surface can be split further into wrapper overhead versus driver/wire-fence time without changing output behaviour.

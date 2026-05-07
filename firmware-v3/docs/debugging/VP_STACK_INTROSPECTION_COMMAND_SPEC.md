@@ -54,12 +54,14 @@ Report:
 - `showSkips`;
 - renderer stack watermark.
 - per-layer timing for `effect_render`, colour correction, `show_leds`, and total pre-pacing work when available.
+- `show_leds` means the renderer `showLeds()` wrapper, not FastLED-only time. Interpret it beside the separate `led_show` driver stats surface.
 
 Existing source anchors:
 
 - serial `s` status via `ActorSystem::printStatus()`;
 - renderer status counters in `RendererActor`.
 - 2026-05-07 implementation extension: `vp stack` now prints `effect_render`, colour-correction, `show_leds`, and `pre_pacing_work` last/rolling-average microsecond counters. These are read-only observability fields and must not be used to change visual defaults without the normal validation protocol.
+- 2026-05-07 source boundary note: `show_leds` wraps `RendererActor::showLeds()`, which includes post-correction output prep plus `LedDriver_S3::show()`. The separate `led_show` line reports `LedDriverStats`, which is closer to the driver/FastLED/wire-fence surface but still includes the protective wire-time delay.
 
 ### 2. Render Topology
 

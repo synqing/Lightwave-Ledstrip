@@ -604,6 +604,110 @@ Finding:
 - The useful next optimisation target is not a blind Waveform render rewrite. It is controlled per-layer evidence around colour correction, EdgeMixer/show path, and any future trace-enabled build.
 - K1v2 was returned to `0x1313 K1 Waveform Hybrid` before the serial monitor was closed.
 
+## Controlled Runtime Layer Isolation
+
+This pass used K1v2 `/dev/cu.usbmodem2101`, MAC `b4:3a:45:a5:87:f8`, on commit `e3a696ef`. All controls were runtime-only and restored immediately. No persistent save command was used.
+
+Baseline lock:
+
+```text
+effect: 0x1313 K1 Waveform Hybrid
+controls: brightness=149 speed=25 intensity=128 saturation=253 complexity=128 variation=0
+colour: mode=both auto_exposure=off gamma=on value=2.200 brown_guardrail=off
+edge_mixer: mode=tetradic spatial=uniform temporal=rms_gate spread=30 strength=255
+led_show: dither=on wire_fence=true expected_wire_us=5600 show_skips=0 failures=0 rmt_errors=0 underruns=0
+memory: free_heap=27672 min_free_heap=26192 max_alloc_heap=18420
+```
+
+`0x1313 K1 Waveform Hybrid` baseline:
+
+```text
+frame: target_fps=120 frames=83901 drops=51977 fps=118 avg_us=8440 min_us=8244 max_us=32933 cpu=100%
+timing: effect_render last_us=500 avg_us=449 colour_correction last_us=777 avg_us=707
+timing: show_leds last_us=6407 avg_us=6379 pre_pacing_work last_us=8697 avg_us=8316
+led_show: frames=83902 last_us=6177 avg_us=6161 max_us=10002 brightness=149
+```
+
+`0x1313`, dither temporarily off, then restored:
+
+```text
+command: dither off
+frame: target_fps=120 frames=93385 drops=57367 fps=118 avg_us=8452 min_us=8244 max_us=32933 cpu=100%
+timing: effect_render last_us=451 avg_us=451 colour_correction last_us=831 avg_us=755
+timing: show_leds last_us=6366 avg_us=6384 pre_pacing_work last_us=8434 avg_us=8338
+led_show: frames=93386 last_us=6100 avg_us=6162 max_us=10002 brightness=149
+restore: dither on
+```
+
+`0x1313`, colour correction mode temporarily off, then restored:
+
+```text
+command: cc 0
+colour: mode=off
+frame: target_fps=120 frames=96156 drops=59352 fps=117 avg_us=8432 min_us=8244 max_us=32933 cpu=100%
+timing: effect_render last_us=420 avg_us=458 colour_correction last_us=463 avg_us=531
+timing: show_leds last_us=6378 avg_us=6379 pre_pacing_work last_us=8338 avg_us=8187
+led_show: frames=96158 last_us=6176 avg_us=6163 max_us=10002 brightness=149
+restore: cc 3, confirmed Mode 3 BOTH
+```
+
+`0x1313`, EdgeMixer strength temporarily zero, then restored:
+
+```text
+command: {"type":"setEdgeMixer","strength":0}
+result: success, mode=tetradic spread=30 strength=0 spatial=uniform temporal=rms_gate
+frame: target_fps=120 frames=99690 drops=61309 fps=117 avg_us=8437 min_us=8244 max_us=32933 cpu=100%
+timing: effect_render last_us=537 avg_us=459 colour_correction last_us=838 avg_us=784
+timing: show_leds last_us=6349 avg_us=6356 pre_pacing_work last_us=8795 avg_us=8296
+led_show: frames=99691 last_us=6171 avg_us=6179 max_us=10002 brightness=149
+restore: {"type":"setEdgeMixer","strength":255}, confirmed tetradic strength=255
+```
+
+`0x1302 K1 Waveform` comparison baseline:
+
+```text
+effect: 0x1302 K1 Waveform
+frame: target_fps=120 frames=103404 drops=63321 fps=119 avg_us=8472 min_us=8244 max_us=32933 cpu=100%
+timing: effect_render last_us=491 avg_us=451 colour_correction last_us=704 avg_us=687
+timing: show_leds last_us=6532 avg_us=6388 pre_pacing_work last_us=8503 avg_us=8347
+led_show: frames=103405 last_us=6244 avg_us=6165 max_us=10002 brightness=149
+```
+
+`0x1302`, colour correction mode temporarily off, then restored:
+
+```text
+command: cc 0
+colour: mode=off
+frame: target_fps=120 frames=105538 drops=64416 fps=119 avg_us=8440 min_us=8244 max_us=32933 cpu=100%
+timing: effect_render last_us=457 avg_us=439 colour_correction last_us=722 avg_us=699
+timing: show_leds last_us=6410 avg_us=6393 pre_pacing_work last_us=8431 avg_us=8313
+led_show: frames=105539 last_us=6176 avg_us=6169 max_us=10002 brightness=149
+restore: cc 3, confirmed Mode 3 BOTH
+```
+
+Final restored state:
+
+```text
+effect: 0x1313 K1 Waveform Hybrid
+colour: mode=both auto_exposure=off gamma=on value=2.200 brown_guardrail=off
+edge_mixer: mode=tetradic spatial=uniform temporal=rms_gate spread=30 strength=255
+led_show: dither=on wire_fence=true expected_wire_us=5600 show_skips=0 failures=0 rmt_errors=0 underruns=0
+frame: target_fps=120 frames=108548 drops=66187 fps=118 avg_us=8426 min_us=8244 max_us=32933 cpu=100%
+timing: effect_render last_us=409 avg_us=447 colour_correction last_us=601 avg_us=603
+timing: show_leds last_us=6388 avg_us=6377 pre_pacing_work last_us=8042 avg_us=8231
+led_show: frames=108550 last_us=6170 avg_us=6171 max_us=10002 brightness=149
+memory: free_heap=27608 min_free_heap=26192 max_alloc_heap=18420 stack_watermark=10432 words
+```
+
+Finding:
+
+- Dither state does not materially explain the timing pressure in this short sample.
+- Temporarily disabling colour correction reduced the `0x1313` colour-correction timing surface, but did not eliminate the pre-pacing budget pressure.
+- Temporarily neutralising EdgeMixer strength did not materially reduce `show_leds` or pre-pacing pressure.
+- `0x1302` and `0x1313` continue to look similar on timing: the effect render component stays well under the `2.0 ms` effect-code ceiling, while total frame pressure remains dominated by the protected output path and shared VP stages.
+- No LED output faults were observed: `show_skips=0`, `failures=0`, `rmt_errors=0`, and `underruns=0` throughout this pass.
+- This is still not a visual PASS or ship-gate signal; it is a source/serial characterisation of runtime pressure.
+
 ## Next Step
 
-Continue Waveform-family characterisation with per-layer timing evidence. No firmware behaviour change is justified by this note alone.
+Continue Waveform-family characterisation with per-layer timing evidence. No firmware behaviour change is justified by this note alone. The next useful source question is whether the current `show_leds` timing surface can be split further into wrapper overhead versus driver/wire-fence time without changing output behaviour.

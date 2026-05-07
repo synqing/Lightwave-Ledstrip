@@ -6,6 +6,10 @@ The Risk-Bounded Degraded Operation gate at the top of `CLAUDE.md` applies to **
 
 ESP32-S3 LED controller for a dual-strip Light Guide Plate. 320 WS2812 LEDs, 100+ effects, audio-reactive, web-controlled.
 
+## Work Blocking Protocol
+
+All agents must follow `instructions/work-blocking-protocol-v1.md`. When critical work is discovered outside the current mission, surface it, define concrete scope and success/failure conditions with Captain, record it in `BACKLOG.md` under Work Blocks, then return to the original mission unless Captain explicitly re-scopes the session or an RBDO hard stop prevents continuation.
+
 ## Memory And Claude-Mem Routing
 
 For prior-session context, follow root `CLAUDE.md` § Session Start and `docs/WORKFLOW_ROUTING.md` before searching ad hoc. Current claude-mem memory routing is `mcp__plugin_claude-mem_mcp-search__search` → `mcp__plugin_claude-mem_mcp-search__timeline` → `mcp__plugin_claude-mem_mcp-search__get_observations`; do not use stale `mem-search` tool names. Use `$RECALL_CLI` first for exact raw transcript phrases, claude-mem memory search for synthesised observations and decisions, and direct source/DB/process checks for current truth. `smart_search`, `smart_outline`, and `smart_unfold` are Smart Explore code-navigation helpers only: if they return `Transport closed`, unsupported-language, or parser errors, do not treat that as claude-mem memory outage evidence and do not block. Fall back immediately to worker `GET /api/search`, SQLite FTS in `~/.claude-mem/claude-mem.db`, `$RECALL_CLI`, `rg`, or clangd according to whether the need is memory or current source. If claude-mem reports health, version, or backlog warnings, verify live state before trusting recent memory. Do not enable generated folder `CLAUDE.md` files or edit inside `<claude-mem-context>` blocks without an explicit Captain decision.

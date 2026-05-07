@@ -4,6 +4,34 @@ Prioritised engineering backlog. Items are tagged by category and roughly ordere
 
 ---
 
+## Critical — Work Blocks
+
+Work Blocks are critical tasks discovered while executing another mission. They must be scoped, logged, assigned out, and then the original mission must resume unless Captain explicitly re-scopes the session or an RBDO hard stop prevents continuation. Protocol: `instructions/work-blocking-protocol-v1.md`.
+
+### WB-1 — Systemic naming, definition, and metric accountability audit (OPEN — ASSIGN OUT)
+
+- **Problem statement:** Recent visual-pipeline work exposed misleading names and descriptions around renderer metrics and timing surfaces. Examples include `frameDrops` reading as skipped output frames when it is currently deadline-miss accounting, `cpu=100%` reading as whole-device CPU utilisation when it is renderer frame-budget occupancy, and `show_leds` reading as FastLED-only timing when it included output preparation plus LED driver show.
+- **Trigger / evidence:** K1v2 waveform/hybrid characterisation and VP Stack timing split, especially commits `6ec1d0b6` and `7c867df4`; docs: `firmware-v3/docs/research/k1_waveform_hybrid_serial_evidence_2026-05-07.md`, `firmware-v3/docs/debugging/VP_STACK_INTROSPECTION_COMMAND_SPEC.md`.
+- **Scope:** Audit high-risk metric names, debug labels, protocol fields, docs descriptions, and agent-facing terminology where the name can lead to wrong tactical conclusions. For each item, record actual definition, likely misread, operational risk, source anchor, and proposed action: rename, split, document, deprecate, or leave as-is with justification.
+- **Non-goals:** Do not rename broad surfaces blindly. Do not break client contracts without migration. Do not pause the current effects-characterisation lane after this Work Block is logged.
+- **Success conditions:** A source-anchored inventory exists; every proposed change has compatibility impact noted; every new or revised metric/debug field defines numerator, denominator, timing window, inclusion/exclusion boundary, and owner; approved corrections are reflected in docs and code where appropriate.
+- **Failure conditions:** Loose prose without source anchors; renames without migration plan; treating one corrected metric as proof that the wider naming/definition problem is solved.
+- **Owner / pickup mode:** Separate governance/observability agent or team. Start from the cited docs and current renderer/serial status surfaces.
+- **Resume rule for original mission:** Effects visual-quality work continues after this entry is logged. Do not turn waveform/PVF/BPS tuning into a repo-wide terminology audit in the same session.
+
+### WB-2 — FastLED/RMT transport visibility and ownership study (OPEN — ASSIGN OUT)
+
+- **Problem statement:** FastLED is not currently proven broken. The problem is insufficient project visibility into the FastLED overlay, RMT driver behaviour, wire-time fencing, return semantics, and low-level LED transport configuration now that those details affect K1 visual-pipeline timing interpretation.
+- **Trigger / evidence:** The VP Stack timing split showed the need to separate output preparation from LED driver show timing. Source anchors include `firmware-v3/src/core/led/LedDriver_S3.cpp` and `firmware-v3/src/core/led/LedDriver_S3.h`; docs and commits: `6ec1d0b6`, `7c867df4`, `firmware-v3/docs/research/k1_waveform_hybrid_serial_evidence_2026-05-07.md`, `firmware-v3/docs/debugging/VP_STACK_INTROSPECTION_COMMAND_SPEC.md`.
+- **Scope:** Map the active LED transport from `LedDriver_S3` through the vendored FastLED RMT4 overlay into ESP-IDF RMT calls. Establish what blocks, what returns early, what the fixed wire fence covers, how dual 160-LED strip timing behaves, and what instrumentation would prove TX start/TX complete/reset-latch boundaries on K1v1 and K1v2.
+- **Non-goals:** Do not declare FastLED broken without evidence. Do not remove or weaken the FastLED/RMT fence as part of this study. Do not rewrite LED transport inside the current effects-characterisation lane.
+- **Success conditions:** A source-anchored transport map exists; timing diagram distinguishes CPU preparation, `FastLED.show()`, RMT TX, fixed fence, and latch/reset windows; hardware instrumentation plan or evidence is recorded; decision matrix compares keep-upstream, vendor-fork, project-owned transport wrapper, and full in-house LED driver options.
+- **Failure conditions:** Library-blame without proof; generic rewrite proposal without test harness and safety gates; changing LED output behaviour before the study has hardware evidence.
+- **Owner / pickup mode:** Separate low-level firmware/transport agent or team. Treat this as an investigation first, not an implementation pass.
+- **Resume rule for original mission:** Effects visual-quality work continues after this entry is logged. FastLED/RMT ownership is not the next PVF/BPS/waveform tuning task unless Captain explicitly reopens it.
+
+---
+
 ## Critical — Upstream Calibration Debt
 
 Per the RBDO Gate (`CLAUDE.md` top), these upstream facts are unresolved. Until each is resolved or explicitly accepted under DEGRADED-MODE with disclosed risk, every tactical output that depends on them must be labelled DEGRADED-MODE or REFUSED. New tactical outputs MUST NOT add a fourth dependent to any URGENT row without resolving it first.

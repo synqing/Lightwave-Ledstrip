@@ -40,6 +40,24 @@ Every tactical output (recommendation, decision, code change, plan, edit, commit
 
 ---
 
+## Work Blocking Protocol — Mandatory
+
+If critical work is discovered while executing the current mission, do not silently change mission. Follow `instructions/work-blocking-protocol-v1.md`.
+
+A Work Block is a critical task, fix, investigation, or accountability gap that matters to correctness, safety, product quality, governance, or future agent reliability, but is outside the approved scope of the current mission.
+
+Required behaviour:
+
+1. Surface the issue plainly to Captain.
+2. Define scope, non-goals, success conditions, failure conditions, and evidence required to close it.
+3. Record it in `BACKLOG.md` under the Work Blocks section.
+4. Hand it to another agent/team unless Captain explicitly re-scopes the current session.
+5. Return to the original mission once the block is logged, unless continuing would violate an RBDO hard stop.
+
+This protocol exists to prevent rabbit holes while preserving important discoveries as accountable work.
+
+---
+
 ## Context Management
 
 This CLAUDE.md is loaded into every conversation. Keep main context for decisions and outcomes only.

@@ -53,11 +53,13 @@ Report:
 - average/max LED show time;
 - `showSkips`;
 - renderer stack watermark.
+- per-layer timing for `effect_render`, colour correction, `show_leds`, and total pre-pacing work when available.
 
 Existing source anchors:
 
 - serial `s` status via `ActorSystem::printStatus()`;
 - renderer status counters in `RendererActor`.
+- 2026-05-07 implementation extension: `vp stack` now prints `effect_render`, colour-correction, `show_leds`, and `pre_pacing_work` last/rolling-average microsecond counters. These are read-only observability fields and must not be used to change visual defaults without the normal validation protocol.
 
 ### 2. Render Topology
 

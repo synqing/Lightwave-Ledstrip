@@ -527,6 +527,83 @@ Next evidence needed before optimisation:
 - Capture a trace-enabled build or add/read an existing per-layer serial timing surface that separates `effect_render`, colour correction, EdgeMixer, and LED show.
 - Do not optimise Waveform render loops or global VP stages from total frame averages alone.
 
+## Per-Layer VP Stack Timing Instrumentation
+
+A read-only `vp stack` timing patch was added to expose:
+
+- `effect_render last_us/avg_us`;
+- `colour_correction last_us/avg_us`;
+- `show_leds last_us/avg_us`;
+- `pre_pacing_work last_us/avg_us`.
+
+Implementation boundaries:
+
+- fixed-width integer counters only;
+- no heap allocation added to render paths;
+- no global VP defaults changed;
+- no colour correction, EdgeMixer, silence, gamma, WiFi, or effect visual behaviour changed.
+
+Validation:
+
+```text
+pio run -e esp32dev_audio_esv11_k1v2_32khz
+result: SUCCESS in 00:01:27.406
+RAM: 38.4% (125748 / 327680 bytes)
+Flash: 33.5% (2460945 / 7340032 bytes)
+
+pio run -e esp32dev_audio_esv11_k1v2_32khz -t upload --upload-port /dev/cu.usbmodem2101
+result: SUCCESS in 00:01:03.843
+target MAC during upload: b4:3a:45:a5:87:f8
+```
+
+K1v2 `0x1313 K1 Waveform Hybrid` per-layer sample:
+
+```text
+effect: 0x1313 K1 Waveform Hybrid
+topology: mode=unified vp=unified authored=m_leds correction_surface=m_leds output=physical_strips mismatch=false
+led_show: dither=on wire_fence=true expected_wire_us=5600 show_skips=0 failures=0 rmt_errors=0 underruns=0
+frame: target_fps=120 frames=3011 drops=2564 fps=116 avg_us=8531 min_us=8247 max_us=32933 cpu=100%
+timing: effect_render last_us=524 avg_us=478 colour_correction last_us=765 avg_us=801
+timing: show_leds last_us=6413 avg_us=6390 pre_pacing_work last_us=8457 avg_us=8464
+led_show: frames=3012 last_us=6190 avg_us=6164 max_us=10002 brightness=149
+```
+
+K1v2 `0x1302 K1 Waveform` per-layer sample:
+
+```text
+effect: 0x1302 K1 Waveform
+topology: mode=unified vp=unified authored=m_leds correction_surface=m_leds output=physical_strips mismatch=false
+led_show: dither=on wire_fence=true expected_wire_us=5600 show_skips=0 failures=0 rmt_errors=0 underruns=0
+frame: target_fps=120 frames=6451 drops=5188 fps=111 avg_us=8879 min_us=8245 max_us=32933 cpu=100%
+timing: effect_render last_us=529 avg_us=449 colour_correction last_us=1137 avg_us=1177
+timing: show_leds last_us=6299 avg_us=6477 pre_pacing_work last_us=8767 avg_us=8879
+led_show: frames=6452 last_us=6071 avg_us=6173 max_us=10002 brightness=149
+```
+
+K1v2 status after the `0x1313` sample:
+
+```text
+Effect: 4883 (K1 Waveform Hybrid)
+FPS: 117 (target: 120)
+Frames: 3988, Drops: 3239
+Frame time: avg=8534, min=8246, max=32933 us
+LED show: avg=6160, max=10002 us, skips=0
+Heap: 8089387 / min 8087843 bytes
+SPIRAM free: 8061715 bytes
+Stack watermark: 10432 words
+Free heap: 27672 bytes
+Min free heap: 26192 bytes
+Max alloc heap: 18420 bytes
+```
+
+Finding:
+
+- In these samples, Waveform-family `effect_render` is under `0.6 ms` and the rolling average is under `0.5 ms`.
+- The total frame pressure is dominated by the protected show path and shared VP work, especially LED show plus colour correction.
+- `0x1313` is not proven to be slower than `0x1302`; both are close enough that this should be treated as global/per-layer budget pressure until more controlled per-layer samples exist.
+- The useful next optimisation target is not a blind Waveform render rewrite. It is controlled per-layer evidence around colour correction, EdgeMixer/show path, and any future trace-enabled build.
+- K1v2 was returned to `0x1313 K1 Waveform Hybrid` before the serial monitor was closed.
+
 ## Next Step
 
 Continue Waveform-family characterisation with per-layer timing evidence. No firmware behaviour change is justified by this note alone.

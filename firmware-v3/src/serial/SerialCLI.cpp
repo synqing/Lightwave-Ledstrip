@@ -211,6 +211,16 @@ void printVpStackSnapshot(const RendererActor::VpStackSnapshot& snap) {
                   static_cast<unsigned long>(snap.renderStats.minFrameTimeUs),
                   static_cast<unsigned long>(snap.renderStats.maxFrameTimeUs),
                   snap.renderStats.cpuPercent);
+    Serial.printf("  timing: effect_render last_us=%lu avg_us=%lu colour_correction last_us=%lu avg_us=%lu\n",
+                  static_cast<unsigned long>(snap.lastEffectRenderUs),
+                  static_cast<unsigned long>(snap.avgEffectRenderUs),
+                  static_cast<unsigned long>(snap.lastColourCorrectionUs),
+                  static_cast<unsigned long>(snap.avgColourCorrectionUs));
+    Serial.printf("  timing: show_leds last_us=%lu avg_us=%lu pre_pacing_work last_us=%lu avg_us=%lu\n",
+                  static_cast<unsigned long>(snap.lastShowLedsUs),
+                  static_cast<unsigned long>(snap.avgShowLedsUs),
+                  static_cast<unsigned long>(snap.lastPrePacingWorkUs),
+                  static_cast<unsigned long>(snap.avgPrePacingWorkUs));
     Serial.printf("  led_show: frames=%lu last_us=%lu avg_us=%lu max_us=%lu brightness=%u\n",
                   static_cast<unsigned long>(snap.ledStats.frameCount),
                   static_cast<unsigned long>(snap.ledStats.lastShowUs),

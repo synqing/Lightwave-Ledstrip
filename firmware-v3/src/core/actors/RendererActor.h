@@ -272,6 +272,14 @@ public:
         diagnostics::VpSurfaceState surfaces{};
         RenderStats renderStats{};
         hal::LedDriverStats ledStats{};
+        uint32_t lastEffectRenderUs = 0;
+        uint32_t avgEffectRenderUs = 0;
+        uint32_t lastColourCorrectionUs = 0;
+        uint32_t avgColourCorrectionUs = 0;
+        uint32_t lastShowLedsUs = 0;
+        uint32_t avgShowLedsUs = 0;
+        uint32_t lastPrePacingWorkUs = 0;
+        uint32_t avgPrePacingWorkUs = 0;
         bool ledDitheringEnabled = true;
         bool colourCorrectionToggleEnabled = false;
         bool colourCorrectionSkippedByEffect = false;
@@ -899,6 +907,14 @@ private:
 
     // Statistics
     RenderStats m_stats;
+    uint32_t m_lastEffectRenderUs = 0;
+    uint32_t m_avgEffectRenderUs = 0;
+    uint32_t m_lastColourCorrectionUs = 0;
+    uint32_t m_avgColourCorrectionUs = 0;
+    uint32_t m_lastShowLedsUs = 0;
+    uint32_t m_avgShowLedsUs = 0;
+    uint32_t m_lastPrePacingWorkUs = 0;
+    uint32_t m_avgPrePacingWorkUs = 0;
 
     hal::LedDriver m_ledDriver;
 

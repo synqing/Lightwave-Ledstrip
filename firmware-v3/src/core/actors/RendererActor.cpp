@@ -106,6 +106,10 @@ float computeSpeedTimeFactor(uint8_t speed) {
     return kMinSpeedTimeFactor + (1.0f - kMinSpeedTimeFactor) * curved;
 }
 
+uint32_t smoothTimingUs(uint32_t avgUs, uint32_t sampleUs) {
+    return (avgUs == 0U) ? sampleUs : ((avgUs * 9U + sampleUs) / 10U);
+}
+
 }  // namespace
 
 // Stub for legacy effect ID tracking - no-op when legacy effects are disabled
@@ -984,6 +988,8 @@ void RendererActor::onTick()
             m_correctionSkipCount++;
         }
         const uint32_t _cc_end_us = micros();
+        m_lastColourCorrectionUs = _cc_end_us - _cc_start_us;
+        m_avgColourCorrectionUs = smoothTimingUs(m_avgColourCorrectionUs, m_lastColourCorrectionUs);
         // Surface 1 Tier 1 (folded per Master OQ #2 — always-on, ~80 events/sec).
         TRACE_COUNTER("color_correction_us", static_cast<int>(_cc_end_us - _cc_start_us));
     }
@@ -994,7 +1000,14 @@ void RendererActor::onTick()
     }
 
     // Push to strips (patched FastLED RMT4: CPU returns quickly; wire time runs in parallel).
-    { TRACE_SCOPE("show_leds"); showLeds(); }
+    {
+        TRACE_SCOPE("show_leds");
+        const uint32_t showStartUs = micros();
+        showLeds();
+        const uint32_t showEndUs = micros();
+        m_lastShowLedsUs = showEndUs - showStartUs;
+        m_avgShowLedsUs = smoothTimingUs(m_avgShowLedsUs, m_lastShowLedsUs);
+    }
 
     // Calculate frame time (pre-throttle)
     uint32_t frameEndUs = micros();
@@ -1050,6 +1063,8 @@ void RendererActor::onTick()
     // Update statistics (use raw time for drops, throttled time for FPS).
     // Surface 1 Tier 1: log RAW pre-pacing work time so we measure actual
     // CPU time spent in render rather than the post-throttle 8.33 ms cadence.
+    m_lastPrePacingWorkUs = rawFrameTimeUs;
+    m_avgPrePacingWorkUs = smoothTimingUs(m_avgPrePacingWorkUs, m_lastPrePacingWorkUs);
     TRACE_COUNTER("render_frame_work_us", static_cast<int>(rawFrameTimeUs));
     // Surface 1 Tier 1: deadline-miss instant when raw work exceeds the
     // 2.0 ms render contract ceiling (CLAUDE.md hard constraints).
@@ -1276,6 +1291,14 @@ RendererActor::VpStackSnapshot RendererActor::getVpStackSnapshot() const {
                                       colourApplied);
     snapshot.renderStats = m_stats;
     snapshot.ledStats = m_ledDriver.getStats();
+    snapshot.lastEffectRenderUs = m_lastEffectRenderUs;
+    snapshot.avgEffectRenderUs = m_avgEffectRenderUs;
+    snapshot.lastColourCorrectionUs = m_lastColourCorrectionUs;
+    snapshot.avgColourCorrectionUs = m_avgColourCorrectionUs;
+    snapshot.lastShowLedsUs = m_lastShowLedsUs;
+    snapshot.avgShowLedsUs = m_avgShowLedsUs;
+    snapshot.lastPrePacingWorkUs = m_lastPrePacingWorkUs;
+    snapshot.avgPrePacingWorkUs = m_avgPrePacingWorkUs;
     snapshot.ledDitheringEnabled = m_ledDriver.isDitheringEnabled();
     snapshot.colourCorrectionToggleEnabled = colourToggleEnabled;
     snapshot.colourCorrectionSkippedByEffect = colourSkippedByEffect;
@@ -2057,7 +2080,14 @@ void RendererActor::renderFrame()
         ctx.frameNumber = m_effectFrameCount;
         ctx.totalTimeMs = static_cast<uint32_t>(m_effectTimeSeconds * 1000.0f + 0.5f);
 
-        { TRACE_SCOPE("effect_render"); safeReg->effect->render(ctx); }
+        {
+            TRACE_SCOPE("effect_render");
+            const uint32_t effectStartUs = micros();
+            safeReg->effect->render(ctx);
+            const uint32_t effectEndUs = micros();
+            m_lastEffectRenderUs = effectEndUs - effectStartUs;
+            m_avgEffectRenderUs = smoothTimingUs(m_avgEffectRenderUs, m_lastEffectRenderUs);
+        }
 
         // Phase 3 Move 3.1: Reflective Twin enforcement. A render body can
         // request direct dual-strip output only if its metadata declares the

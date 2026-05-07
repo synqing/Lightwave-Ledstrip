@@ -1,10 +1,12 @@
 ---
-abstract: "Specification for a future read-only VP stack introspection command. Captures what the command must report, which source owners hold each field, and which visual-pipeline defaults it must not change."
+abstract: "Specification and current serial implementation status for the read-only VP stack introspection command. Captures what the command reports, which source owners hold each field, and which visual-pipeline defaults it must not change."
 ---
 
 # VP Stack Introspection Command Spec
 
-**Status:** DRAFT SPEC ONLY - Captain-approved for documentation/tooling package on 2026-05-06. No firmware behaviour changes are made by this document.
+**Status:** PARTIALLY IMPLEMENTED READ-ONLY SERIAL SURFACE.
+
+The serial `vp stack` command exists and currently reports the active render topology, colour state, silence policy, EdgeMixer state, LED transport guard state, and per-layer timing fields. REST/WS and any future machine-readable form remain future work. This document is still the behavioural contract for the command: introspection must not change renderer behaviour, correction defaults, EdgeMixer state, silence policy, gamma, dithering, WiFi mode, or LED transport fences.
 
 **Authority anchors:**
 - `firmware-v3/docs/audit/VP_RENDER_PATH_LAYER_AUDIT_2026-05-05.md:36-55` defines the ordered render lifecycle.
@@ -15,15 +17,15 @@ abstract: "Specification for a future read-only VP stack introspection command. 
 
 ## Purpose
 
-The future command should answer one question:
+The command answers one question:
 
 > What visual-pipeline layers are active for the current frame path, and which buffers do they actually touch?
 
 It is a read-only truth dump. It must not change renderer behaviour, correction defaults, EdgeMixer state, silence policy, gamma, dithering, or WiFi mode.
 
-## Proposed Command Surface
+## Command Surface
 
-Start with serial:
+Current serial form:
 
 ```text
 vp stack

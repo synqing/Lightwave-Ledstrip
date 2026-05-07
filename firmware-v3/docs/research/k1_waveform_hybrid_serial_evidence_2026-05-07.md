@@ -522,10 +522,9 @@ result: failed; no [TRACE] Done marker and no MabuTrace markers captured.
 likely reason: current firmware image is not a trace build or FEATURE_MABUTRACE is off.
 ```
 
-Next evidence needed before optimisation:
+This gap was later closed by the read-only `vp stack` per-layer timing split recorded below. Do not use this failed trace attempt as current evidence that per-layer timing is unavailable.
 
-- Capture a trace-enabled build or add/read an existing per-layer serial timing surface that separates `effect_render`, colour correction, EdgeMixer, and LED show.
-- Do not optimise Waveform render loops or global VP stages from total frame averages alone.
+Current optimisation guard still applies: do not optimise Waveform render loops or global VP stages from total frame averages alone.
 
 ## Per-Layer VP Stack Timing Instrumentation
 
@@ -791,7 +790,7 @@ memory: free_heap=27672 min_free_heap=26140 max_alloc_heap=18420 stack_watermark
 
 Finding:
 
-- The naming problem is now closed by measurement: `show_leds` was too broad for causal claims.
+- The local `show_leds` boundary ambiguity is now closed by measurement: `show_leds` was too broad for causal claims. The broader naming/accountability problem remains assigned out as `WB-1` in `BACKLOG.md`.
 - In the captured Waveform-family samples, renderer-side output prep is small (`~178-194 us` average).
 - The dominant part of `show_leds` is the LED-driver show surface (`~6176-6188 us` average), which includes the protective wire-time delay.
 - That means the next optimisation question is not "rewrite Waveform" and not "disable EdgeMixer". It is whether the current 120 FPS target plus the fixed WS2812 wire-fence budget leaves enough shared-path headroom for K1v2, and that is a global VP cadence/transport question.
@@ -799,4 +798,93 @@ Finding:
 
 ## Next Step
 
-Continue Waveform-family characterisation with per-layer timing evidence. No firmware behaviour change is justified by this note alone. The next useful source question is whether the current `show_leds` timing surface can be split further into wrapper overhead versus driver/wire-fence time without changing output behaviour.
+Continue Waveform-family characterisation with controlled per-layer timing evidence. No firmware behaviour change is justified by this note alone. The split between `output_prep` and `led_driver_show` already exists; any broader VP cadence or FastLED/RMT ownership question belongs to the assigned-out Work Blocks in `BACKLOG.md` § Critical — Work Blocks unless Captain explicitly re-scopes the effects lane.
+
+## Follow-Up K1v2 Baseline After Work Blocking Handoff
+
+Date: 2026-05-07.
+
+Purpose: resume the original effects lane after logging Work Blocks WB-1 and WB-2, using current serial evidence before any new behaviour change.
+
+K1v2 remained AP-only on `/dev/cu.usbmodem2101`, with no clients connected. The device was returned to `0x1313 K1 Waveform Hybrid` before closing the monitor.
+
+`0x1313 K1 Waveform Hybrid`:
+
+```text
+effect: 0x1313 K1 Waveform Hybrid
+topology: mode=unified vp=unified authored=m_leds correction_surface=m_leds output=physical_strips mismatch=false
+controls: brightness=149 speed=25 intensity=128 saturation=253 complexity=128 variation=0 hue=229 mood=255
+silence_policy: global_active=true bypassed=false hard_gate_effect=false silent_scale=0.994 audio=true
+edge_mixer: mode=tetradic spatial=uniform temporal=rms_gate spread=30 strength=255
+led_show: dither=on wire_fence=true expected_wire_us=5600 show_skips=0 failures=0 rmt_errors=0 underruns=0
+frame: target_fps=120 frames=341592 drops=238333 fps=105 avg_us=9451 min_us=8245 max_us=32944 cpu=100%
+timing: effect_render last_us=466 avg_us=461 colour_correction last_us=1735 avg_us=1656
+timing: show_leds last_us=6645 avg_us=6543 pre_pacing_work last_us=9563 avg_us=9451
+timing: output_prep last_us=309 avg_us=308 led_driver_show avg_us=6195
+led_show: frames=341593 last_us=6293 avg_us=6195 max_us=9507 brightness=149
+memory: free_heap=27672 min_free_heap=26140 max_alloc_heap=18420 stack_watermark=10432 words
+```
+
+`0x1302 K1 Waveform`:
+
+```text
+effect: 0x1302 K1 Waveform
+topology: mode=unified vp=unified authored=m_leds correction_surface=m_leds output=physical_strips mismatch=false
+controls: brightness=149 speed=25 intensity=128 saturation=253 complexity=128 variation=0 hue=208 mood=255
+silence_policy: global_active=false bypassed=false hard_gate_effect=false silent_scale=1.000 audio=true
+edge_mixer: mode=tetradic spatial=uniform temporal=rms_gate spread=30 strength=255
+led_show: dither=on wire_fence=true expected_wire_us=5600 show_skips=0 failures=0 rmt_errors=0 underruns=0
+frame: target_fps=120 frames=343622 drops=239909 fps=117 avg_us=8453 min_us=8245 max_us=32944 cpu=100%
+timing: effect_render last_us=467 avg_us=427 colour_correction last_us=822 avg_us=788
+timing: show_leds last_us=6434 avg_us=6409 pre_pacing_work last_us=8655 avg_us=8321
+timing: output_prep last_us=202 avg_us=185 led_driver_show avg_us=6185
+led_show: frames=343623 last_us=6192 avg_us=6185 max_us=9507 brightness=149
+memory: free_heap=27672 min_free_heap=26140 max_alloc_heap=18420 stack_watermark=10432 words
+```
+
+Final restored `0x1313 K1 Waveform Hybrid` sample:
+
+```text
+effect: 0x1313 K1 Waveform Hybrid
+topology: mode=unified vp=unified authored=m_leds correction_surface=m_leds output=physical_strips mismatch=false
+silence_policy: global_active=false bypassed=false hard_gate_effect=false silent_scale=1.000 audio=true
+led_show: dither=on wire_fence=true expected_wire_us=5600 show_skips=0 failures=0 rmt_errors=0 underruns=0
+frame: target_fps=120 frames=344417 drops=240376 fps=116 avg_us=8441 min_us=8245 max_us=32944 cpu=100%
+timing: effect_render last_us=558 avg_us=448 colour_correction last_us=613 avg_us=676
+timing: show_leds last_us=6465 avg_us=6419 pre_pacing_work last_us=8614 avg_us=8319
+timing: output_prep last_us=182 avg_us=181 led_driver_show avg_us=6198
+led_show: frames=344418 last_us=6250 avg_us=6198 max_us=9507 brightness=149
+memory: free_heap=27672 min_free_heap=26140 max_alloc_heap=18420 stack_watermark=10432 words
+```
+
+Finding:
+
+- Both waveform effects remain unified, centre-origin-compatible render-path users with no authored/correction/output surface mismatch.
+- Both effects reported `show_skips=0`, `failures=0`, `rmt_errors=0`, and `underruns=0`.
+- Internal heap stayed stable across effect switches.
+- `effect_render` remains comfortably under the `2.0 ms` effect-code ceiling in these samples.
+- Total frame timing remains narrow/degraded and should stay visible in future work, but today’s evidence still does not justify an effect-local performance rewrite.
+
+## Source Mechanism Refresh
+
+clangd hover resolved the active render methods in this session:
+
+```text
+SbK1WaveformEffect::renderEffect(plugins::EffectContext& ctx) -> void
+SbK1WaveformHybridEffect::renderEffect(plugins::EffectContext& ctx) -> void
+```
+
+Mechanism anchors:
+
+- `SbK1WaveformEffect.cpp:235-247` and `SbK1WaveformHybridEffect.cpp:258-267` apply the effect-local native speed floor: `ctx.speed < 27` renders with effective speed `27` for scroll-rate calculation only.
+- `SbK1WaveformHybridEffect.cpp:157-207` implements Hybrid's local colour-budget lift: widened chroma share and local PHOTONS compensation, without changing global VP defaults.
+- `SbK1WaveformEffect.cpp:215-227` and `SbK1WaveformHybridEffect.cpp:235-246` keep dt-correct trail fade tied to waveform amplitude plus confidence/silentScale release.
+- `SbK1WaveformEffect.cpp:255-283` and `SbK1WaveformHybridEffect.cpp:280-305` inject the dot from waveform peak position into the trail buffer.
+- `SbK1WaveformEffect.cpp:285-299` and `SbK1WaveformHybridEffect.cpp:307-327` mirror around the centre pair and copy strip 1 to strip 2.
+
+Interpretation:
+
+- `Waveform Native Speed Floor` is now both Captain-visual and source-anchored.
+- `Hybrid Colour Budget Floor` is source-anchored as an effect-local tuning decision, but still needs the next Captain visual judgement before promotion beyond desired/tuned candidate.
+- `Waveform Loiter` remains a tolerated named state: the likely mechanism is still colour/trail injection continuing while waveform amplitude is too low to form strong galloping structure and confidence/silence gates remain open.
+- No new firmware behaviour change is justified from this pass.

@@ -397,6 +397,94 @@ result: same behaviour
 
 Conclusion: Captain's visual assessment matches a real under-the-hood state. It is not the same as `audio.available=false`; it is an effect-local uncertainty state produced by a mismatch between surviving chroma/confidence and collapsed waveform-position energy.
 
+## Next-Phase Runtime Baseline After 555f841e
+
+After the Waveform tuning commit and Codex clangd routing commit, K1v2 was checked again on `/dev/cu.usbmodem2101`.
+
+Repository state:
+
+```text
+HEAD: 555f841e docs(repo): clarify codex clangd transport recovery
+working tree: clean
+K1v2 port: /dev/cu.usbmodem2101
+K1v2 serial: B4:3A:45:A5:87:F8
+```
+
+Important boundary:
+
+```text
+clangd diagnostics smoke on SbK1WaveformEffect.cpp:
+  result: Transport closed
+```
+
+Per the Codex clangd routing rule, this live Codex session is poisoned for C++ symbol/reference/definition work. The following observations are serial runtime evidence only. They do not promote any new C++ source-mechanism claim.
+
+`0x1313 K1 Waveform Hybrid` baseline:
+
+```text
+effect: 0x1313 K1 Waveform Hybrid
+controls: brightness=149 speed=25 intensity=128 saturation=253 complexity=128 variation=0 hue=194 mood=255
+topology: mode=unified vp=unified authored=m_leds correction_surface=m_leds output=physical_strips mismatch=false
+silence_policy: global_active=false bypassed=false hard_gate_effect=false silent_scale=1.000 audio=true
+edge_mixer: mode=tetradic spatial=uniform temporal=rms_gate spread=30 strength=255
+led_show: dither=on wire_fence=true expected_wire_us=5600 show_skips=0 failures=0 rmt_errors=0 underruns=0
+frame: target_fps=120 frames=438011 drops=286986 fps=117 avg_us=8500 min_us=8244 max_us=32921 cpu=100%
+led_show: frames=438012 last_us=6198 avg_us=6182 max_us=7493 brightness=149
+```
+
+`0x1313` status/memory:
+
+```text
+Effect: 4883 (K1 Waveform Hybrid)
+FPS: 119 (target: 120)
+Frames: 438808, Drops: 287416
+Frame time: avg=8548, min=8244, max=32921 us
+LED show: avg=6181, max=7493 us, skips=0
+Heap: 8089403 / min 8087831 bytes
+SPIRAM free: 8061747 bytes
+Stack watermark: 10432 words
+Free heap: 27656 bytes
+Min free heap: 26148 bytes
+Max alloc heap: 18420 bytes
+```
+
+`0x1302 K1 Waveform` baseline:
+
+```text
+effect: 0x1302 K1 Waveform
+controls: brightness=149 speed=25 intensity=128 saturation=253 complexity=128 variation=0 hue=167 mood=255
+topology: mode=unified vp=unified authored=m_leds correction_surface=m_leds output=physical_strips mismatch=false
+silence_policy: global_active=false bypassed=false hard_gate_effect=false silent_scale=1.000 audio=true
+edge_mixer: mode=tetradic spatial=uniform temporal=rms_gate spread=30 strength=255
+led_show: dither=on wire_fence=true expected_wire_us=5600 show_skips=0 failures=0 rmt_errors=0 underruns=0
+frame: target_fps=120 frames=441312 drops=289397 fps=117 avg_us=8546 min_us=8244 max_us=32921 cpu=100%
+led_show: frames=441313 last_us=6277 avg_us=6172 max_us=7493 brightness=149
+```
+
+`0x1302` status/memory:
+
+```text
+Effect: 4866 (K1 Waveform)
+FPS: 117 (target: 120)
+Frames: 442061, Drops: 289861
+Frame time: avg=8515, min=8244, max=32921 us
+LED show: avg=6206, max=7493 us, skips=0
+Heap: 8089403 / min 8087831 bytes
+SPIRAM free: 8061747 bytes
+Stack watermark: 10432 words
+Free heap: 27656 bytes
+Min free heap: 26148 bytes
+Max alloc heap: 18420 bytes
+```
+
+K1v2 was returned to `0x1313 K1 Waveform Hybrid` before the serial monitor was closed.
+
+Runtime finding:
+
+- Both Waveform-family effects use the same clean global VP stack and show no LED output faults in the captured window.
+- Both remain under visible timing pressure at current runtime settings: `fps=117-119`, average frame time around `8500 us`, high accumulated frame drops, and `CPU=100%`.
+- This is a technical runtime trait, not a Captain visual trait yet. It is captured in the ledger as `Waveform Runtime Timing Pressure` with unknown visual linkage and unknown source mechanism.
+
 ## Next Step
 
-Continue the Waveform-family characterisation loop: observe -> `vp stack` -> source mechanism -> native characterisation test -> ledger entry -> decision. No Captain action is required by this note.
+Continue the Waveform-family characterisation loop in a fresh Codex session before source-mechanism work: reset clangd MCP children, run exactly one diagnostics smoke, then proceed only if the semantic route succeeds.

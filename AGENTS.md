@@ -14,11 +14,15 @@ For prior-session context, follow root `CLAUDE.md` § Session Start and `docs/WO
 
 Codex CLI does not load Claude Code's `clangd-lsp` plugin. On this machine, Codex must expose the global `clangd` MCP server in `~/.codex/config.toml`, backed by `/Users/spectrasynq/.local/bin/mcp-language-server-lightwave`, Homebrew clangd, `firmware-v3/compile_commands.json`, `--enable-config`, and an Xtensa query-driver glob matching `toolchain-xtensa-esp32s3*/bin/xtensa-esp32s3-elf-*`. The upstream `mcp-language-server@v0.1.1` diagnostics path is not acceptable here because it requests clangd pull diagnostics; the local `mcp-language-server-lightwave` binary uses pushed diagnostics. Existing Codex sessions must be restarted after MCP config changes. If Claude-style `mcp__clangd__find_definition` names are absent but generic semantic tools such as `definition`, `references`, `diagnostics`, and `hover` are present, use those tools. If no clangd semantic tool is exposed, report a tool failure; do not grep C++ symbols.
 
+`codex mcp get clangd` proves only the current config file. It does not prove that an already-running Codex session is using that config. If clangd fails after a config repair, check live children with `ps -axo pid,ppid,etime,command | rg 'mcp-language-server|clangd.*Lightwave-Ledstrip/firmware-v3'`; any child using `/Users/spectrasynq/.local/bin/mcp-language-server`, missing `--enable-config`, using `--background-index`, or using the non-wildcard `toolchain-xtensa-esp32s3/bin` query-driver is stale and requires a Codex session restart.
+
 `firmware-v3/.clangd` is part of the Codex clangd route. It strips Xtensa GCC-only flags, defines Xtensa preprocessor macros for Homebrew clangd parsing, and suppresses host-only ESP-IDF section-attribute diagnostics. Do not remove it just because PlatformIO builds without it; it is for semantic tooling, not firmware compilation.
 
 Use the MCP `diagnostics` tool as the Codex semantic smoke. Do not treat raw `clangd --check` internal `ExtractFunction` tweak failures as the operational gate when MCP diagnostics returns clean pushed diagnostics.
 
-If a Codex session reports `Transport closed` from the registered `clangd` MCP after the route is visible, treat it as a poisoned live child transport, not as permission to fall back to grep. First reset only the clangd MCP children with `tools/codex-clangd-mcp-reset.sh`, retry one semantic clangd call, and restart that Codex session if the same live handle still fails.
+In a newly restarted Codex session that has not yet called clangd, it is valid to run `tools/codex-clangd-mcp-reset.sh` from that session as pre-smoke hygiene and then immediately run exactly one MCP `diagnostics` smoke. The "poisoned live session" rule applies only after a clangd MCP call in that same session has already returned `Transport closed`.
+
+If a Codex session reports `Transport closed` from the registered `clangd` MCP after the route is visible, treat the live Codex session as poisoned. Do not retry clangd in that same session and do not fall back to grep for C++ symbol claims. Stop tactical C++ symbol work, run `tools/codex-clangd-mcp-reset.sh` from a separate shell or orchestrator context to clear child processes, then restart the Codex session before the next semantic clangd call.
 
 ## Build (PlatformIO)
 

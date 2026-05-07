@@ -14,6 +14,8 @@ pids="$(
 
 if [[ -z "${pids}" ]]; then
   echo "No Codex clangd MCP child processes found for ${workspace}"
+  echo "If this is pre-smoke hygiene in a fresh session before any clangd MCP call, proceed to MCP diagnostics."
+  echo "If this session already saw Transport closed, restart it before retrying clangd."
   exit 0
 fi
 
@@ -38,3 +40,5 @@ if [[ -n "${remaining}" ]]; then
 fi
 
 echo "Codex clangd MCP child process reset complete."
+echo "If this was pre-smoke hygiene in a fresh session before any clangd MCP call, proceed to MCP diagnostics."
+echo "If this session already saw Transport closed, restart it before retrying clangd; that live MCP handle is not recoverable in-process."

@@ -483,8 +483,50 @@ Runtime finding:
 
 - Both Waveform-family effects use the same clean global VP stack and show no LED output faults in the captured window.
 - Both remain under visible timing pressure at current runtime settings: `fps=117-119`, average frame time around `8500 us`, high accumulated frame drops, and `CPU=100%`.
-- This is a technical runtime trait, not a Captain visual trait yet. It is captured in the ledger as `Waveform Runtime Timing Pressure` with unknown visual linkage and unknown source mechanism.
+- This is a technical runtime trait, not a Captain visual trait yet. It is captured in the ledger as `Waveform Runtime Timing Pressure` with unknown visual linkage.
+
+## Waveform Runtime Timing Pressure - Source Mechanism
+
+This source pass was performed only after a fresh Codex session returned a successful clangd diagnostics smoke on `SbK1WaveformEffect.cpp`. The only diagnostics were unused-include warnings for `CoreEffects.h` and `features.h`.
+
+The timing-pressure mechanism is now source-anchored as a frame-budget and observability issue, not as an LED-output fault:
+
+- `RendererActor.h:105-115` sets `TOTAL_LEDS=320`, `TARGET_FPS=120`, and `FRAME_TIME_US=8333`.
+- `RendererActor.cpp:932-1059` measures frame time from the start of `onTick()` through `renderFrame()`, colour correction, `showLeds()`, and pacing/stat update. Drops increment when `rawFrameTimeUs > FRAME_TIME_US`.
+- `SerialCLI.cpp:204-219` prints the same render stats and LED-show stats separately in `vp stack`.
+- `LedDriver_S3.h:70-72` sets the protective WS2812 wire-time fence to `5600 us`; `LedDriver_S3.cpp:171-177` calls `FastLED.show()` and then waits that full wire time.
+- `SbK1WaveformEffect.cpp:156-299` and `SbK1WaveformHybridEffect.cpp:162-327` each perform multiple strip-length passes: chroma synthesis, trail fade over `160`, scroll shifts over the `160`-pixel trail buffer, centre mirroring, output to the first strip, and copy to the second strip. Hybrid adds all-bin colour processing and temporal RGB smoothing at `SbK1WaveformHybridEffect.cpp:162-219`.
+
+The serial arithmetic matches that source shape:
+
+```text
+0x1313: frame avg 8500-8548 us, LED-show avg 6181-6182 us
+0x1302: frame avg 8515-8546 us, LED-show avg 6172-6206 us
+120 FPS target: 8333 us
+wire-time fence: 5600 us
+```
+
+Therefore, the current evidence says:
+
+- LED transport is healthy: no `showSkips`, RMT errors, failures, or underruns.
+- The protected LED show consumes most of the 120 FPS frame period by design.
+- The remaining headroom for effect render + colour correction + tone map/split/silence/EdgeMixer + scheduler overhead is narrow.
+- The Waveform-family effects are near that total frame budget, but current evidence does not prove that `0x1313` is meaningfully worse than `0x1302`; their captured frame and LED-show averages are close.
+- The existing `render_frame_deadline_miss` trace check at `RendererActor.cpp:1050-1058` is not an effect-code-only measurement: `rawFrameTimeUs` includes `showLeds()`. Treat it as total pre-pacing frame work unless a narrower `effect_render_us` or per-layer trace is captured.
+
+Runtime characterisation attempt:
+
+```text
+command: ~/.platformio/penv/bin/python3 firmware-v3/tools/capture_trace.py --port /dev/cu.usbmodem2101 --effect 0x1313 --soak 4 --timeout 20 --output /private/tmp/k1_waveform_hybrid_0x1313_timing_trace_20260507.json --quiet
+result: failed; no [TRACE] Done marker and no MabuTrace markers captured.
+likely reason: current firmware image is not a trace build or FEATURE_MABUTRACE is off.
+```
+
+Next evidence needed before optimisation:
+
+- Capture a trace-enabled build or add/read an existing per-layer serial timing surface that separates `effect_render`, colour correction, EdgeMixer, and LED show.
+- Do not optimise Waveform render loops or global VP stages from total frame averages alone.
 
 ## Next Step
 
-Continue the Waveform-family characterisation loop in a fresh Codex session before source-mechanism work: reset clangd MCP children, run exactly one diagnostics smoke, then proceed only if the semantic route succeeds.
+Continue Waveform-family characterisation with per-layer timing evidence. No firmware behaviour change is justified by this note alone.

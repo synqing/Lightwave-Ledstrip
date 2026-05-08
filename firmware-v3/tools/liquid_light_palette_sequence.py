@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
 """Run the Liquid Light palette sequence on existing 0x0201 firmware.
 
-This deliberately does not add a new effect. It drives the current serial CLI:
+This deliberately does not add a new effect. By default it uses the current
+SerialJSON gateway for exact control:
+
+  {"type":"setPalette","paletteId":...}
+  {"type":"setBrightness","value":...}
+  {"type":"setSpeed","value":...}
+
+It can fall back to the current serial quick keys with --quick-keys:
 
   effect 0x0201
   . / ,        palette next / previous
@@ -9,13 +16,14 @@ This deliberately does not add a new effect. It drives the current serial CLI:
   [ / ]        speed down / up
 
 The palette story is:
-  Abyss -> Ocean -> Ocean Breeze 036 -> Ocean Breeze 068 -> Seafloor -> Rivendell
+  Nighttime -> Bathy -> Cool -> Blue Magenta White -> Blue Cyan Yellow -> GR65 Hult
 """
 
 from __future__ import annotations
 
 import argparse
 import glob
+import json
 import re
 import sys
 import time
@@ -34,6 +42,7 @@ except ImportError:
 
 
 EFFECT_ID = "0x0201"
+RESET_EFFECT_ID = "0x0200"
 DEFAULT_BAUD = 115200
 PALETTE_COUNT = 75
 
@@ -46,12 +55,12 @@ class PaletteStop:
 
 
 LIQUID_LIGHT_SEQUENCE: tuple[PaletteStop, ...] = (
-    PaletteStop(62, "Abyss", "deep blue base"),
-    PaletteStop(64, "Ocean", "broader blue field"),
-    PaletteStop(2, "Ocean Breeze 036", "richer cool blue"),
-    PaletteStop(8, "Ocean Breeze 068", "teal shift"),
-    PaletteStop(66, "Seafloor", "marine blue-green"),
-    PaletteStop(1, "Rivendell", "soft green resolve"),
+    PaletteStop(65, "Nighttime", "black-violet depth"),
+    PaletteStop(63, "Bathy", "deep cyan water column"),
+    PaletteStop(70, "Cool", "cyan-magenta holographic hit"),
+    PaletteStop(29, "Blue Magenta White", "black/blue/magenta caustic contrast"),
+    PaletteStop(32, "Blue Cyan Yellow", "electric cyan with controlled gold highlight"),
+    PaletteStop(15, "GR65 Hult", "magenta/blue/teal liquid finish"),
 )
 
 
@@ -76,6 +85,24 @@ def auto_port() -> str | None:
 def send_line(port: serial.Serial, line: str) -> None:
     port.write((line + "\n").encode("utf-8"))
     port.flush()
+
+
+def send_json_request(
+    port: serial.Serial,
+    request_type: str,
+    request_id: str,
+    *,
+    echo: bool,
+    read_time: float,
+    **fields: int | str,
+) -> None:
+    payload: dict[str, int | str] = {
+        "type": request_type,
+        "requestId": request_id,
+    }
+    payload.update(fields)
+    send_line(port, json.dumps(payload, separators=(",", ":")))
+    read_for(port, read_time, echo=echo)
 
 
 def read_for(port: serial.Serial, seconds: float, *, echo: bool) -> list[str]:
@@ -154,6 +181,66 @@ def move_palette(
     return target
 
 
+def set_palette_direct(
+    port: serial.Serial,
+    *,
+    target: int,
+    step_delay: float,
+    echo: bool,
+) -> int:
+    send_json_request(
+        port,
+        "setPalette",
+        f"ll-palette-{target}",
+        paletteId=target,
+        read_time=step_delay,
+        echo=echo,
+    )
+    return target
+
+
+def set_brightness_direct(
+    port: serial.Serial,
+    *,
+    target: int | None,
+    step_delay: float,
+    echo: bool,
+) -> None:
+    if target is None:
+        return
+
+    target = max(16, min(255, target))
+    send_json_request(
+        port,
+        "setBrightness",
+        "ll-brightness",
+        value=target,
+        read_time=step_delay,
+        echo=echo,
+    )
+
+
+def set_speed_direct(
+    port: serial.Serial,
+    *,
+    target: int | None,
+    step_delay: float,
+    echo: bool,
+) -> None:
+    if target is None:
+        return
+
+    target = max(1, min(100, target))
+    send_json_request(
+        port,
+        "setSpeed",
+        "ll-speed",
+        value=target,
+        read_time=step_delay,
+        echo=echo,
+    )
+
+
 def adjust_brightness(
     port: serial.Serial,
     *,
@@ -227,6 +314,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--read-timeout", type=float, default=1.2)
     parser.add_argument("--step-delay", type=float, default=0.08)
     parser.add_argument(
+        "--quick-keys",
+        action="store_true",
+        help="Use legacy quick keys instead of direct SerialJSON control.",
+    )
+    parser.add_argument(
+        "--no-reset-effect",
+        action="store_true",
+        help="Skip the forced effect re-init via 0x0200 -> 0x0201.",
+    )
+    parser.add_argument(
         "--assume-palette",
         type=int,
         help="Fallback current palette ID if vp stack cannot be parsed.",
@@ -266,15 +363,20 @@ def main(argv: list[str]) -> int:
 
     with port:
         port.reset_input_buffer()
+        if not args.no_reset_effect:
+            print(f"Resetting Holographic state via effect {RESET_EFFECT_ID}")
+            send_line(port, f"effect {RESET_EFFECT_ID}")
+            read_for(port, 0.5, echo=args.echo)
+
         print(f"Selecting effect {EFFECT_ID} LGP Holographic")
         send_line(port, f"effect {EFFECT_ID}")
-        read_for(port, 0.4, echo=args.echo)
+        read_for(port, 0.7, echo=args.echo)
 
         state = query_state(port, timeout=args.read_timeout, echo=args.echo)
         if state.palette_id is None and args.assume_palette is not None:
             state.palette_id = args.assume_palette % PALETTE_COUNT
 
-        if state.palette_id is None:
+        if args.quick_keys and state.palette_id is None:
             print(
                 "ERROR: could not parse current palette from `vp stack`; "
                 "retry with --echo or pass --assume-palette.",
@@ -282,20 +384,34 @@ def main(argv: list[str]) -> int:
             )
             return 3
 
-        adjust_brightness(
-            port,
-            current=state.brightness,
-            target=args.brightness,
-            step_delay=args.step_delay,
-            echo=args.echo,
-        )
-        adjust_speed(
-            port,
-            current=state.speed,
-            target=args.speed,
-            step_delay=args.step_delay,
-            echo=args.echo,
-        )
+        if args.quick_keys:
+            adjust_brightness(
+                port,
+                current=state.brightness,
+                target=args.brightness,
+                step_delay=args.step_delay,
+                echo=args.echo,
+            )
+            adjust_speed(
+                port,
+                current=state.speed,
+                target=args.speed,
+                step_delay=args.step_delay,
+                echo=args.echo,
+            )
+        else:
+            set_brightness_direct(
+                port,
+                target=args.brightness,
+                step_delay=args.step_delay,
+                echo=args.echo,
+            )
+            set_speed_direct(
+                port,
+                target=args.speed,
+                step_delay=args.step_delay,
+                echo=args.echo,
+            )
 
         loop_index = 0
         current_palette = state.palette_id
@@ -303,13 +419,24 @@ def main(argv: list[str]) -> int:
             loop_index += 1
             print(f"Loop {loop_index}" if args.loops else f"Loop {loop_index} (Ctrl-C to stop)")
             for stop in LIQUID_LIGHT_SEQUENCE:
-                current_palette = move_palette(
-                    port,
-                    current=current_palette,
-                    target=stop.palette_id,
-                    step_delay=args.step_delay,
-                    echo=args.echo,
-                )
+                if args.quick_keys:
+                    if current_palette is None:
+                        print("ERROR: current palette unknown in quick-key mode.", file=sys.stderr)
+                        return 3
+                    current_palette = move_palette(
+                        port,
+                        current=current_palette,
+                        target=stop.palette_id,
+                        step_delay=args.step_delay,
+                        echo=args.echo,
+                    )
+                else:
+                    current_palette = set_palette_direct(
+                        port,
+                        target=stop.palette_id,
+                        step_delay=args.step_delay,
+                        echo=args.echo,
+                    )
                 print(f"  palette {stop.palette_id:02d}: {stop.name} - {stop.intent}")
                 sleep_with_optional_rx(port, args.dwell, echo=args.echo)
 

@@ -1,6 +1,8 @@
 # K1v2 Liquid Light Palette Run - 2026-05-08
 
-Status: GROUNDED hardware execution, DEGRADED-MODE visual judgement pending.
+Status: GROUNDED hardware execution, REJECTED palette selection.
+
+Supersession: Captain rejected this palette sequence on 2026-05-09. Use `lp_hero_liquid_light_palette_recut_2026-05-09.md` for the forward Liquid Light palette path.
 
 ## Purpose
 

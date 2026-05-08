@@ -1,5 +1,7 @@
 # 2026-05-09 - firmware-v3 - LP hero liquid light palette recut
 
+Superseded: Captain supplied the forward palette sequence later on 2026-05-09. Use `2026-05-09--firmware-v3--lp-hero-liquid-light-captain-palette.md` for the active palette decision.
+
 ## Summary
 
 - Replaced the rejected Liquid Light palette sequence with a harder, candidate camera-facing Holographic recut: Nighttime, Bathy, Cool, Blue Magenta White, Blue Cyan Yellow, GR65 Hult.

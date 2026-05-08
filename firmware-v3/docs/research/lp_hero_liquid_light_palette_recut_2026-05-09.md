@@ -1,6 +1,8 @@
 # K1v2 Liquid Light Palette Recut - 2026-05-09
 
-Status: GROUNDED hardware execution, DEGRADED-MODE visual judgement pending.
+Status: GROUNDED hardware execution, SUPERSEDED by Captain-selected palette sequence.
+
+Supersession: Captain supplied the forward palette sequence on 2026-05-09. Use `lp_hero_liquid_light_captain_palette_2026-05-09.md` for the active Liquid Light palette path.
 
 ## Reason
 

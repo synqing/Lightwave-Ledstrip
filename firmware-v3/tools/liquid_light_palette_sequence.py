@@ -16,7 +16,7 @@ It can fall back to the current serial quick keys with --quick-keys:
   [ / ]        speed down / up
 
 The palette story is:
-  Nighttime -> Bathy -> Cool -> Blue Magenta White -> Blue Cyan Yellow -> GR65 Hult
+  Red Magenta Yellow -> Autumn 19 -> Fire -> Emerald Dragon -> Vintage 57 -> GR64 Hult -> Vintage 01
 """
 
 from __future__ import annotations
@@ -55,12 +55,13 @@ class PaletteStop:
 
 
 LIQUID_LIGHT_SEQUENCE: tuple[PaletteStop, ...] = (
-    PaletteStop(65, "Nighttime", "black-violet depth"),
-    PaletteStop(63, "Bathy", "deep cyan water column"),
-    PaletteStop(70, "Cool", "cyan-magenta holographic hit"),
-    PaletteStop(29, "Blue Magenta White", "black/blue/magenta caustic contrast"),
-    PaletteStop(32, "Blue Cyan Yellow", "electric cyan with controlled gold highlight"),
-    PaletteStop(15, "GR65 Hult", "magenta/blue/teal liquid finish"),
+    PaletteStop(31, "Red Magenta Yellow", "high-energy red/magenta/yellow liquid impact"),
+    PaletteStop(28, "Autumn 19", "deeper amber-red organic transition"),
+    PaletteStop(24, "Fire", "hot core flare"),
+    PaletteStop(22, "Emerald Dragon", "green counterpoint and product contrast"),
+    PaletteStop(19, "Vintage 57", "smoky gold/green restraint"),
+    PaletteStop(16, "GR64 Hult", "teal/olive depth shift"),
+    PaletteStop(10, "Vintage 01", "dark vintage amber resolve"),
 )
 
 

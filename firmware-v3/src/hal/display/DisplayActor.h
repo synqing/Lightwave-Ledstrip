@@ -35,6 +35,13 @@
  * Thread safety:
  *   DisplayActor only READS from RendererActor via its thread-safe accessors.
  *   All AMOLED SPI transactions happen exclusively on this actor's task.
+ *
+ * Directory placement (hal/display/ vs core/actors/):
+ *   DisplayActor lives under hal/display/ — alongside RM690B0Driver — because it
+ *   OWNS the panel driver. It is a peripheral-owning actor; the actor wrapper
+ *   exists to schedule SPI transactions and read RendererActor accessors safely.
+ *   This is intentional, NOT a layering violation: peripheral-owning actors live
+ *   with their peripheral.
  */
 
 #pragma once

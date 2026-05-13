@@ -122,9 +122,9 @@ void SynqMatrix::reset() {
     m_suppressedReason.store(static_cast<uint8_t>(SynqMatrixSuppressedReason::Disabled), std::memory_order_release);
     m_previousSuppressedReason.store(static_cast<uint8_t>(SynqMatrixSuppressedReason::Disabled), std::memory_order_release);
     m_classificationReason.store(static_cast<uint8_t>(SynqMatrixClassificationReason::None), std::memory_order_release);
-    m_rawSongState.store(static_cast<uint8_t>(SynqMatrixState::Unknown), std::memory_order_release);
-    m_previousSongState.store(static_cast<uint8_t>(SynqMatrixState::Unknown), std::memory_order_release);
-    m_currentSongState.store(static_cast<uint8_t>(SynqMatrixState::Unknown), std::memory_order_release);
+    m_rawState.store(static_cast<uint8_t>(SynqMatrixState::Unknown), std::memory_order_release);
+    m_previousState.store(static_cast<uint8_t>(SynqMatrixState::Unknown), std::memory_order_release);
+    m_currentState.store(static_cast<uint8_t>(SynqMatrixState::Unknown), std::memory_order_release);
     m_lastAction.store(static_cast<uint8_t>(SynqMatrixLastAction::None), std::memory_order_release);
     m_intent.store(static_cast<uint8_t>(SynqMatrixIntent::QuietHold), std::memory_order_release);
     m_actionPlan.store(static_cast<uint8_t>(SynqMatrixActionPlan::None), std::memory_order_release);
@@ -265,11 +265,11 @@ SynqMatrixStatus SynqMatrix::getStatus() const {
     status.classificationReason =
         static_cast<SynqMatrixClassificationReason>(m_classificationReason.load(std::memory_order_acquire));
     status.rawSongState =
-        static_cast<SynqMatrixState>(m_rawSongState.load(std::memory_order_acquire));
+        static_cast<SynqMatrixState>(m_rawState.load(std::memory_order_acquire));
     status.previousSongState =
-        static_cast<SynqMatrixState>(m_previousSongState.load(std::memory_order_acquire));
+        static_cast<SynqMatrixState>(m_previousState.load(std::memory_order_acquire));
     status.currentSongState =
-        static_cast<SynqMatrixState>(m_currentSongState.load(std::memory_order_acquire));
+        static_cast<SynqMatrixState>(m_currentState.load(std::memory_order_acquire));
     status.candidateSongState =
         static_cast<SynqMatrixState>(m_candidateState.load(std::memory_order_acquire));
     status.lastAction = static_cast<SynqMatrixLastAction>(m_lastAction.load(std::memory_order_acquire));
@@ -359,9 +359,9 @@ void SynqMatrix::restoreRuntimeState(const SynqMatrixRuntimeState& state) {
     m_suppressedReason.store(static_cast<uint8_t>(state.status.suppressedReason), std::memory_order_release);
     m_previousSuppressedReason.store(static_cast<uint8_t>(state.status.previousSuppressedReason), std::memory_order_release);
     m_classificationReason.store(static_cast<uint8_t>(state.status.classificationReason), std::memory_order_release);
-    m_rawSongState.store(static_cast<uint8_t>(state.status.rawSongState), std::memory_order_release);
-    m_previousSongState.store(static_cast<uint8_t>(state.status.previousSongState), std::memory_order_release);
-    m_currentSongState.store(static_cast<uint8_t>(state.status.currentSongState), std::memory_order_release);
+    m_rawState.store(static_cast<uint8_t>(state.status.rawSongState), std::memory_order_release);
+    m_previousState.store(static_cast<uint8_t>(state.status.previousSongState), std::memory_order_release);
+    m_currentState.store(static_cast<uint8_t>(state.status.currentSongState), std::memory_order_release);
     m_candidateState.store(static_cast<uint8_t>(state.status.candidateSongState), std::memory_order_release);
     m_lastAction.store(static_cast<uint8_t>(state.status.lastAction), std::memory_order_release);
     m_intent.store(static_cast<uint8_t>(state.status.intent), std::memory_order_release);
@@ -555,7 +555,7 @@ bool SynqMatrix::tick(const audio::ControlBusFrame& frame,
     const SynqMatrixMode mode = static_cast<SynqMatrixMode>(m_mode.load(std::memory_order_acquire));
     if (!enabled || mode == SynqMatrixMode::Off) {
         m_effectiveMode.store(static_cast<uint8_t>(SynqMatrixMode::Off), std::memory_order_release);
-        m_currentSongState.store(static_cast<uint8_t>(SynqMatrixState::Silence), std::memory_order_release);
+        m_currentState.store(static_cast<uint8_t>(SynqMatrixState::Silence), std::memory_order_release);
         m_selectedPolicyIndex.store(0, std::memory_order_release);
         m_selectedEffectId.store(INVALID_EFFECT_ID, std::memory_order_release);
         updateIntentTelemetry(SynqMatrixState::Silence, SynqMatrixActionPlan::None, features);
@@ -576,7 +576,7 @@ bool SynqMatrix::tick(const audio::ControlBusFrame& frame,
         return false;
     }
     if (mode != SynqMatrixMode::Director) {
-        updateIntentTelemetry(static_cast<SynqMatrixState>(m_currentSongState.load(std::memory_order_acquire)),
+        updateIntentTelemetry(static_cast<SynqMatrixState>(m_currentState.load(std::memory_order_acquire)),
                               SynqMatrixActionPlan::ParameterModulation,
                               features);
         setSuppressed(SynqMatrixSuppressedReason::SwitchingDisabled, SynqMatrixOwner::Director);
@@ -590,7 +590,7 @@ bool SynqMatrix::tick(const audio::ControlBusFrame& frame,
     m_lastEvaluationAtMs.store(nowMs, std::memory_order_release);
 
     if (!audioAvailable) {
-        m_currentSongState.store(static_cast<uint8_t>(SynqMatrixState::Silence), std::memory_order_release);
+        m_currentState.store(static_cast<uint8_t>(SynqMatrixState::Silence), std::memory_order_release);
         setSuppressed(SynqMatrixSuppressedReason::NoAudio, SynqMatrixOwner::None);
         m_lastAction.store(static_cast<uint8_t>(SynqMatrixLastAction::SwitchSuppressed), std::memory_order_release);
         return false;
@@ -602,7 +602,7 @@ bool SynqMatrix::tick(const audio::ControlBusFrame& frame,
 
     const SynqMatrixState rawState = classifyState(frame, features, audioAvailable, confidence);
     const SynqMatrixState previousStable =
-        static_cast<SynqMatrixState>(m_currentSongState.load(std::memory_order_acquire));
+        static_cast<SynqMatrixState>(m_currentState.load(std::memory_order_acquire));
     const SynqMatrixState stableState = updateStableState(rawState, confidence, nowMs);
     updateIntentTelemetry(stableState,
                           resolveActionPlan(mode,
@@ -828,7 +828,7 @@ bool SynqMatrix::apply(const audio::ControlBusFrame& frame,
 
     if (!enabled || mode == SynqMatrixMode::Off) {
         m_effectiveMode.store(static_cast<uint8_t>(SynqMatrixMode::Off), std::memory_order_release);
-        m_currentSongState.store(static_cast<uint8_t>(SynqMatrixState::Silence), std::memory_order_release);
+        m_currentState.store(static_cast<uint8_t>(SynqMatrixState::Silence), std::memory_order_release);
         m_driveQ1000.store(0, std::memory_order_release);
         updateIntentTelemetry(SynqMatrixState::Silence, SynqMatrixActionPlan::None, features);
         setSuppressed(SynqMatrixSuppressedReason::Disabled, SynqMatrixOwner::None);
@@ -1055,7 +1055,7 @@ SynqMatrixState SynqMatrix::classifyState(const audio::ControlBusFrame& frame,
     SynqMatrixClassificationReason reason = SynqMatrixClassificationReason::SteadyDefault;
 
     const SynqMatrixState stable =
-        static_cast<SynqMatrixState>(m_currentSongState.load(std::memory_order_acquire));
+        static_cast<SynqMatrixState>(m_currentState.load(std::memory_order_acquire));
     const float silenceEnter = (stable == SynqMatrixState::Silence) ? 0.10f : 0.06f;
     if (!audioAvailable || frame.isSilent || frame.silentScale < 0.08f ||
         confidence < 0.05f ||
@@ -1069,7 +1069,7 @@ SynqMatrixState SynqMatrix::classifyState(const audio::ControlBusFrame& frame,
         } else {
             reason = SynqMatrixClassificationReason::SilentFrame;
         }
-        m_rawSongState.store(static_cast<uint8_t>(state), std::memory_order_release);
+        m_rawState.store(static_cast<uint8_t>(state), std::memory_order_release);
         m_classificationReason.store(static_cast<uint8_t>(reason), std::memory_order_release);
         return state;
     }
@@ -1105,7 +1105,7 @@ SynqMatrixState SynqMatrix::classifyState(const audio::ControlBusFrame& frame,
         reason = SynqMatrixClassificationReason::AmbientLowEnergy;
     }
 
-    m_rawSongState.store(static_cast<uint8_t>(state), std::memory_order_release);
+    m_rawState.store(static_cast<uint8_t>(state), std::memory_order_release);
     m_classificationReason.store(static_cast<uint8_t>(reason), std::memory_order_release);
     return state;
 }
@@ -1114,10 +1114,10 @@ SynqMatrixState SynqMatrix::updateStableState(SynqMatrixState rawState,
                                                     float confidence,
                                                     uint32_t nowMs) {
     SynqMatrixState stable =
-        static_cast<SynqMatrixState>(m_currentSongState.load(std::memory_order_acquire));
+        static_cast<SynqMatrixState>(m_currentState.load(std::memory_order_acquire));
     if (stable == SynqMatrixState::Unknown) {
         stable = rawState;
-        m_currentSongState.store(static_cast<uint8_t>(stable), std::memory_order_release);
+        m_currentState.store(static_cast<uint8_t>(stable), std::memory_order_release);
         m_stateEnteredAtMs.store(nowMs, std::memory_order_release);
         m_candidateState.store(static_cast<uint8_t>(rawState), std::memory_order_release);
         m_candidateSinceMs.store(nowMs, std::memory_order_release);
@@ -1163,9 +1163,9 @@ SynqMatrixState SynqMatrix::updateStableState(SynqMatrixState rawState,
         return stable;
     }
 
-    m_previousSongState.store(static_cast<uint8_t>(stable), std::memory_order_release);
+    m_previousState.store(static_cast<uint8_t>(stable), std::memory_order_release);
     stable = rawState;
-    m_currentSongState.store(static_cast<uint8_t>(stable), std::memory_order_release);
+    m_currentState.store(static_cast<uint8_t>(stable), std::memory_order_release);
     m_stateEnteredAtMs.store(nowMs, std::memory_order_release);
     m_stateAgeMs.store(0, std::memory_order_release);
     m_candidateAgeMs.store(candidateAgeMs, std::memory_order_release);

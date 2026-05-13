@@ -426,9 +426,9 @@ private:
     std::atomic<uint8_t> m_suppressedReason{static_cast<uint8_t>(SynqMatrixSuppressedReason::Disabled)};
     std::atomic<uint8_t> m_previousSuppressedReason{static_cast<uint8_t>(SynqMatrixSuppressedReason::Disabled)};
     std::atomic<uint8_t> m_classificationReason{static_cast<uint8_t>(SynqMatrixClassificationReason::None)};
-    std::atomic<uint8_t> m_rawSongState{static_cast<uint8_t>(SynqMatrixState::Unknown)};
-    std::atomic<uint8_t> m_previousSongState{static_cast<uint8_t>(SynqMatrixState::Unknown)};
-    std::atomic<uint8_t> m_currentSongState{static_cast<uint8_t>(SynqMatrixState::Unknown)};
+    std::atomic<uint8_t> m_rawState{static_cast<uint8_t>(SynqMatrixState::Unknown)};
+    std::atomic<uint8_t> m_previousState{static_cast<uint8_t>(SynqMatrixState::Unknown)};
+    std::atomic<uint8_t> m_currentState{static_cast<uint8_t>(SynqMatrixState::Unknown)};
     std::atomic<uint8_t> m_lastAction{static_cast<uint8_t>(SynqMatrixLastAction::None)};
     std::atomic<uint8_t> m_intent{static_cast<uint8_t>(SynqMatrixIntent::QuietHold)};
     std::atomic<uint8_t> m_actionPlan{static_cast<uint8_t>(SynqMatrixActionPlan::None)};

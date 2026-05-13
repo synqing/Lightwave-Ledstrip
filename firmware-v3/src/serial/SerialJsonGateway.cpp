@@ -183,10 +183,10 @@ static void appendSynqMatrixStatus(JsonObject data,
         lightwaveos::synqmatrix::synqMatrixSuppressedReasonName(status.previousSuppressedReason);
     data["classificationReason"] =
         lightwaveos::synqmatrix::synqMatrixClassificationReasonName(status.classificationReason);
-    data["rawSongState"] = lightwaveos::synqmatrix::synqMatrixStateName(status.rawState);
-    data["previousSongState"] = lightwaveos::synqmatrix::synqMatrixStateName(status.previousState);
-    data["currentSongState"] = lightwaveos::synqmatrix::synqMatrixStateName(status.currentState);
-    data["candidateSongState"] = lightwaveos::synqmatrix::synqMatrixStateName(status.candidateState);
+    data["rawState"] = lightwaveos::synqmatrix::synqMatrixStateName(status.rawState);
+    data["previousState"] = lightwaveos::synqmatrix::synqMatrixStateName(status.previousState);
+    data["currentState"] = lightwaveos::synqmatrix::synqMatrixStateName(status.currentState);
+    data["candidateState"] = lightwaveos::synqmatrix::synqMatrixStateName(status.candidateState);
     data["intent"] = lightwaveos::synqmatrix::synqMatrixIntentName(status.intent);
     data["actionPlan"] = lightwaveos::synqmatrix::synqMatrixActionPlanName(status.actionPlan);
     data["boundaryGate"] = lightwaveos::synqmatrix::synqMatrixBoundaryGateName(status.boundaryGate);
@@ -845,20 +845,29 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
         serialJsonResponse(type, reqId, buf);
     }
     // ------------------------------------------------------------------
-    // songAware.* -- runtime-only SynqMatrix Director control/readback.
+    // synqMatrix.* (canonical) / songAware.* (legacy alias) --
+    // runtime-only SynqMatrix Director control/readback. Canonical arms
+    // take precedence in matching; both invoke the same logic with
+    // envelope-type echoed back to the caller.
     // ------------------------------------------------------------------
-    else if (strcmp(type, "songAware.config.get") == 0) {
+    else if (strcmp(type, "synqMatrix.config.get") == 0 ||
+             strcmp(type, "songAware.config.get") == 0) {
+        const char* envelope =
+            (strcmp(type, "synqMatrix.config.get") == 0) ? "synqMatrix.config" : "songAware.config";
         const auto config = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
         JsonDocument respDoc;
         JsonObject data = respDoc.to<JsonObject>();
         appendSynqMatrixConfig(data, config);
-        serialJsonDocResponse("songAware.config", reqId, respDoc);
+        serialJsonDocResponse(envelope, reqId, respDoc);
     }
-    else if (strcmp(type, "songAware.config.set") == 0) {
+    else if (strcmp(type, "synqMatrix.config.set") == 0 ||
+             strcmp(type, "songAware.config.set") == 0) {
+        const char* envelope =
+            (strcmp(type, "synqMatrix.config.set") == 0) ? "synqMatrix.config" : "songAware.config";
         auto config = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
         const char* error = nullptr;
         if (!applySynqMatrixConfigJson(doc.as<JsonObjectConst>(), config, &error)) {
-            serialJsonError(reqId, error ? error : "invalid songAware config");
+            serialJsonError(reqId, error ? error : "invalid SynqMatrix config");
             return;
         }
         captureSynqMatrixRestorePoint();
@@ -867,16 +876,18 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
         JsonDocument respDoc;
         JsonObject data = respDoc.to<JsonObject>();
         appendSynqMatrixConfig(data, config);
-        serialJsonDocResponse("songAware.config", reqId, respDoc);
+        serialJsonDocResponse(envelope, reqId, respDoc);
     }
-    else if (strcmp(type, "songAware.status") == 0) {
+    else if (strcmp(type, "synqMatrix.status") == 0 ||
+             strcmp(type, "songAware.status") == 0) {
         const auto status = lightwaveos::synqmatrix::SynqMatrix::instance().getStatus();
         JsonDocument respDoc;
         JsonObject data = respDoc.to<JsonObject>();
         appendSynqMatrixStatus(data, status);
         serialJsonDocResponse(type, reqId, respDoc);
     }
-    else if (strcmp(type, "songAware.reset") == 0) {
+    else if (strcmp(type, "synqMatrix.reset") == 0 ||
+             strcmp(type, "songAware.reset") == 0) {
         captureSynqMatrixRestorePoint();
         lightwaveos::synqmatrix::SynqMatrix::instance().reset();
         const auto status = lightwaveos::synqmatrix::SynqMatrix::instance().getStatus();
@@ -887,7 +898,8 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
         appendSynqMatrixStatus(statusObj, status);
         serialJsonDocResponse(type, reqId, respDoc);
     }
-    else if (strcmp(type, "songAware.restore") == 0) {
+    else if (strcmp(type, "synqMatrix.restore") == 0 ||
+             strcmp(type, "songAware.restore") == 0) {
         if (!g_synqMatrixRestorePointValid) {
             serialJsonError(reqId, "no restore point captured in this serial JSON session");
             return;
@@ -901,14 +913,16 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
         appendSynqMatrixStatus(statusObj, status);
         serialJsonDocResponse(type, reqId, respDoc);
     }
-    else if (strcmp(type, "songAware.debug") == 0) {
+    else if (strcmp(type, "synqMatrix.debug") == 0 ||
+             strcmp(type, "songAware.debug") == 0) {
         const auto debug = lightwaveos::synqmatrix::SynqMatrix::instance().getDebugSnapshot();
         JsonDocument respDoc;
         JsonObject data = respDoc.to<JsonObject>();
         appendSynqMatrixDebug(data, debug);
         serialJsonDocResponse(type, reqId, respDoc);
     }
-    else if (strcmp(type, "songAware.policy") == 0) {
+    else if (strcmp(type, "synqMatrix.policy") == 0 ||
+             strcmp(type, "songAware.policy") == 0) {
         const auto debug = lightwaveos::synqmatrix::SynqMatrix::instance().getDebugSnapshot();
         JsonDocument respDoc;
         JsonObject data = respDoc.to<JsonObject>();
@@ -925,14 +939,18 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
         data["allowlistCount"] = debug.allowlist.count;
         serialJsonDocResponse(type, reqId, respDoc);
     }
-    else if (strcmp(type, "songAware.allowlist") == 0) {
+    else if (strcmp(type, "synqMatrix.allowlist") == 0 ||
+             strcmp(type, "songAware.allowlist") == 0) {
         const auto allowlist = lightwaveos::synqmatrix::SynqMatrix::instance().getAllowlistSnapshot();
         JsonDocument respDoc;
         JsonObject data = respDoc.to<JsonObject>();
         appendSynqMatrixAllowlist(data, allowlist);
         serialJsonDocResponse(type, reqId, respDoc);
     }
-    else if (strcmp(type, "songAware.allowlist.set") == 0) {
+    else if (strcmp(type, "synqMatrix.allowlist.set") == 0 ||
+             strcmp(type, "songAware.allowlist.set") == 0) {
+        const char* envelope =
+            (strcmp(type, "synqMatrix.allowlist.set") == 0) ? "synqMatrix.allowlist" : "songAware.allowlist";
         if (!doc["state"].is<const char*>() || !doc["enabled"].is<bool>()) {
             serialJsonError(reqId, "state and enabled are required");
             return;
@@ -952,26 +970,36 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
         JsonDocument respDoc;
         JsonObject data = respDoc.to<JsonObject>();
         appendSynqMatrixAllowlist(data, allowlist);
-        serialJsonDocResponse("songAware.allowlist", reqId, respDoc);
+        serialJsonDocResponse(envelope, reqId, respDoc);
     }
-    else if (strcmp(type, "songAware.allowlist.reset") == 0) {
+    else if (strcmp(type, "synqMatrix.allowlist.reset") == 0 ||
+             strcmp(type, "songAware.allowlist.reset") == 0) {
+        const char* envelope =
+            (strcmp(type, "synqMatrix.allowlist.reset") == 0) ? "synqMatrix.allowlist" : "songAware.allowlist";
         captureSynqMatrixRestorePoint();
         lightwaveos::synqmatrix::SynqMatrix::instance().resetPolicyAllowlist();
         const auto allowlist = lightwaveos::synqmatrix::SynqMatrix::instance().getAllowlistSnapshot();
         JsonDocument respDoc;
         JsonObject data = respDoc.to<JsonObject>();
         appendSynqMatrixAllowlist(data, allowlist);
-        serialJsonDocResponse("songAware.allowlist", reqId, respDoc);
+        serialJsonDocResponse(envelope, reqId, respDoc);
     }
-    else if (strcmp(type, "songAware.health") == 0) {
+    else if (strcmp(type, "synqMatrix.health") == 0 ||
+             strcmp(type, "songAware.health") == 0) {
         const auto status = lightwaveos::synqmatrix::SynqMatrix::instance().getStatus();
         JsonDocument respDoc;
         JsonObject data = respDoc.to<JsonObject>();
         appendSynqMatrixHealth(data, status);
         serialJsonDocResponse(type, reqId, respDoc);
     }
-    else if (strcmp(type, "songAware.counters.reset") == 0 ||
+    else if (strcmp(type, "synqMatrix.counters.reset") == 0 ||
+             strcmp(type, "synqMatrix.countersReset") == 0 ||
+             strcmp(type, "songAware.counters.reset") == 0 ||
              strcmp(type, "songAware.countersReset") == 0) {
+        const bool canonical =
+            (strcmp(type, "synqMatrix.counters.reset") == 0) ||
+            (strcmp(type, "synqMatrix.countersReset") == 0);
+        const char* envelope = canonical ? "synqMatrix.counters.reset" : "songAware.counters.reset";
         captureSynqMatrixRestorePoint();
         lightwaveos::synqmatrix::SynqMatrix::instance().resetCounters();
         const auto status = lightwaveos::synqmatrix::SynqMatrix::instance().getStatus();
@@ -982,7 +1010,7 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
         appendSynqMatrixHealth(health, status);
         data["parameterUpdates"] = status.parameterUpdates;
         data["automaticEffectSwitches"] = status.automaticEffectSwitches;
-        serialJsonDocResponse("songAware.counters.reset", reqId, respDoc);
+        serialJsonDocResponse(envelope, reqId, respDoc);
     }
     // ------------------------------------------------------------------
     // colorCorrection.getConfig / colorCorrection.setConfig

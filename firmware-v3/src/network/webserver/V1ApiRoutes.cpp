@@ -259,14 +259,31 @@ void V1ApiRoutes::registerRoutes(
         }
     );
 
-    // Song-aware director config/status (runtime-only, no persistence)
+    // SynqMatrix director config/status (runtime-only, no persistence).
+    // Canonical name: /api/v1/synqmatrix/*. Legacy /api/v1/songAware/* aliases
+    // coexist for one release; both paths invoke the same handler.
     registry.onGet("/api/v1/songAware/config", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::SynqMatrixHandlers::handleGetConfig(request);
+    });
+    registry.onGet("/api/v1/synqmatrix/config", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
         handlers::SynqMatrixHandlers::handleGetConfig(request);
     });
 
     registry.onPost("/api/v1/songAware/config",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::SynqMatrixHandlers::handleSetConfig(request, data, len);
+            broadcastStatus();
+        }
+    );
+    registry.onPost("/api/v1/synqmatrix/config",
         [](AsyncWebServerRequest* request) {},
         nullptr,
         [checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
@@ -287,14 +304,34 @@ void V1ApiRoutes::registerRoutes(
             broadcastStatus();
         }
     );
+    registry.onPatch("/api/v1/synqmatrix/config",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::SynqMatrixHandlers::handleSetConfig(request, data, len);
+            broadcastStatus();
+        }
+    );
 
     registry.onGet("/api/v1/songAware/status", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
         handlers::SynqMatrixHandlers::handleGetStatus(request);
     });
+    registry.onGet("/api/v1/synqmatrix/status", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::SynqMatrixHandlers::handleGetStatus(request);
+    });
 
     registry.onGet("/api/v1/songAware/allowlist", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::SynqMatrixHandlers::handleGetAllowlist(request);
+    });
+    registry.onGet("/api/v1/synqmatrix/allowlist", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
         handlers::SynqMatrixHandlers::handleGetAllowlist(request);
@@ -310,8 +347,28 @@ void V1ApiRoutes::registerRoutes(
             broadcastStatus();
         }
     );
+    registry.onPatch("/api/v1/synqmatrix/allowlist",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::SynqMatrixHandlers::handleSetAllowlist(request, data, len);
+            broadcastStatus();
+        }
+    );
 
     registry.onPost("/api/v1/songAware/allowlist/reset",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t*, size_t, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::SynqMatrixHandlers::handleResetAllowlist(request);
+            broadcastStatus();
+        }
+    );
+    registry.onPost("/api/v1/synqmatrix/allowlist/reset",
         [](AsyncWebServerRequest* request) {},
         nullptr,
         [checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t*, size_t, size_t, size_t) {

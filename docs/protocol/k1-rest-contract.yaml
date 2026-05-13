@@ -166,7 +166,28 @@ endpoints:
     consumers: [ios]
 
   # ── SynqMatrix Director ──────────────────────────────────────────────────
+  # Canonical paths: /api/v1/synqmatrix/*. Legacy /api/v1/songAware/* aliases
+  # coexist for one release; both routes invoke the same handler.
   /api/v1/songAware/config:
+    method: GET
+    description: "Get runtime-only SynqMatrix configuration. Mode is the authority boundary; profile is aggression. No NVS persistence."
+    deprecated: true
+    alias_of: "/api/v1/synqmatrix/config"
+    note: "Deprecated 2026-05-13 — use /api/v1/synqmatrix/config canonical name. Both names route to the same handler. Aliases removed at the same firmware release that ships the SynqMatrix algorithmic contract."
+    response:
+      enabled: bool
+      mode: { type: string, enum: [off, assist, director] }
+      profile: { type: string, enum: [subtle, balanced, high] }
+      switchingEnabled: bool
+      familyMorphing: { type: bool, deprecated: true, note: "Accepted for compatibility; unsupported." }
+      constrainedSwitching: { type: bool, deprecated: true, note: "Alias of switchingEnabled for one release." }
+      sensitivity: { type: float, range: "0.0-1.0" }
+      intensityScalar: { type: float, range: "0.0-1.0" }
+      motionScalar: { type: float, range: "0.0-1.0" }
+      confidenceFloor: { type: float, range: "0.0-1.0" }
+    consumers: [ios, tab5, lab]
+
+  /api/v1/synqmatrix/config:
     method: GET
     description: "Get runtime-only SynqMatrix configuration. Mode is the authority boundary; profile is aggression. No NVS persistence."
     response:
@@ -185,6 +206,9 @@ endpoints:
   /api/v1/songAware/config:
     method: [POST, PATCH]
     description: "Set runtime-only synq-matrix director configuration, or run a bounded runtime action through the existing config route. No NVS persistence."
+    deprecated: true
+    alias_of: "/api/v1/synqmatrix/config"
+    note: "Deprecated 2026-05-13 — use /api/v1/synqmatrix/config canonical name. Both names route to the same handler. Aliases removed at the same firmware release that ships the SynqMatrix algorithmic contract."
     body:
       action: { type: string, optional: true, enum: [reset, wipe, restore, countersReset, counters_reset], note: "When present, runs the action instead of applying config fields. reset is a compatibility alias for wipe." }
       enabled: { type: bool, optional: true }
@@ -213,6 +237,9 @@ endpoints:
   /api/v1/songAware/status:
     method: GET
     description: "Get runtime synq-matrix director readback for validation. Optional view exposes health/debug/policy/allowlist readbacks without adding extra REST routes."
+    deprecated: true
+    alias_of: "/api/v1/synqmatrix/status"
+    note: "Deprecated 2026-05-13 — use /api/v1/synqmatrix/status canonical name. Both names route to the same handler. Aliases removed at the same firmware release that ships the SynqMatrix algorithmic contract."
     query_params:
       view: { type: string, optional: true, enum: [status, health, debug, policy, allowlist], default: status }
     response:
@@ -224,10 +251,10 @@ endpoints:
       suppressedReason: string
       previousSuppressedReason: string
       classificationReason: string
-      rawSongState: string
-      previousSongState: string
-      currentSongState: string
-      candidateSongState: string
+      rawState: string
+      previousState: string
+      currentState: string
+      candidateState: string
       intent: string
       actionPlan: string
       boundaryGate: string
@@ -284,12 +311,145 @@ endpoints:
   /api/v1/songAware/allowlist:
     method: GET
     description: "Get the runtime mutable state policy allowlist."
+    deprecated: true
+    alias_of: "/api/v1/synqmatrix/allowlist"
+    note: "Deprecated 2026-05-13 — use /api/v1/synqmatrix/allowlist canonical name. Both names route to the same handler. Aliases removed at the same firmware release that ships the SynqMatrix algorithmic contract."
     response:
       count: uint8
       policies: "array of {state,effectId,family,visualLanguage,reason,minConfidence,enabled}"
     consumers: [ios, tab5, lab]
 
   /api/v1/songAware/allowlist:
+    method: PATCH
+    description: "Enable or disable a SynqMatrix state policy row at runtime."
+    deprecated: true
+    alias_of: "/api/v1/synqmatrix/allowlist"
+    note: "Deprecated 2026-05-13 — use /api/v1/synqmatrix/allowlist canonical name. Both names route to the same handler. Aliases removed at the same firmware release that ships the SynqMatrix algorithmic contract."
+    body:
+      state: { type: string, required: true, enum: [unknown, silence, ambient, steady, build, drop, breakdown, dense, transition] }
+      enabled: { type: bool, required: true }
+    response:
+      count: uint8
+      policies: "array of {state,effectId,family,visualLanguage,reason,minConfidence,enabled}"
+    consumers: [ios, tab5, lab]
+
+  /api/v1/songAware/allowlist/reset:
+    method: POST
+    description: "Reset the runtime allowlist so all policy rows are enabled."
+    deprecated: true
+    alias_of: "/api/v1/synqmatrix/allowlist/reset"
+    note: "Deprecated 2026-05-13 — use /api/v1/synqmatrix/allowlist/reset canonical name. Both names route to the same handler. Aliases removed at the same firmware release that ships the SynqMatrix algorithmic contract."
+    consumers: [ios, tab5, lab]
+
+  # Canonical SynqMatrix entries (mirror the legacy entries above).
+  /api/v1/synqmatrix/config:
+    method: [POST, PATCH]
+    description: "Set runtime-only synq-matrix director configuration, or run a bounded runtime action through the existing config route. No NVS persistence."
+    body:
+      action: { type: string, optional: true, enum: [reset, wipe, restore, countersReset, counters_reset], note: "When present, runs the action instead of applying config fields. reset is a compatibility alias for wipe." }
+      enabled: { type: bool, optional: true }
+      mode: { type: string, optional: true, enum: [off, assist, director], compatibility: "on and parameter map to assist; subtle/balanced/high set profile and map mode to assist for one release." }
+      profile: { type: string, optional: true, enum: [subtle, balanced, high] }
+      switchingEnabled: { type: bool, optional: true }
+      familyMorphing: { type: bool, optional: true, deprecated: true, note: "Accepted for compatibility; unsupported." }
+      constrainedSwitching: { type: bool, optional: true, deprecated: true, note: "Alias of switchingEnabled for one release." }
+      sensitivity: { type: float, optional: true, range: "0.0-1.0" }
+      intensityScalar: { type: float, optional: true, range: "0.0-1.0" }
+      motionScalar: { type: float, optional: true, range: "0.0-1.0" }
+      confidenceFloor: { type: float, optional: true, range: "0.0-1.0" }
+    response:
+      enabled: bool
+      mode: string
+      profile: string
+      switchingEnabled: bool
+      familyMorphing: bool
+      constrainedSwitching: bool
+      sensitivity: float
+      intensityScalar: float
+      motionScalar: float
+      confidenceFloor: float
+    consumers: [ios, tab5, lab]
+
+  /api/v1/synqmatrix/status:
+    method: GET
+    description: "Get runtime synq-matrix director readback for validation. Optional view exposes health/debug/policy/allowlist readbacks without adding extra REST routes."
+    query_params:
+      view: { type: string, optional: true, enum: [status, health, debug, policy, allowlist], default: status }
+    response:
+      enabled: bool
+      mode: string
+      effectiveMode: string
+      profile: string
+      owner: string
+      suppressedReason: string
+      previousSuppressedReason: string
+      classificationReason: string
+      rawState: string
+      previousState: string
+      currentState: string
+      candidateState: string
+      intent: string
+      actionPlan: string
+      boundaryGate: string
+      boundaryReady: bool
+      waitingForBoundary: bool
+      boundaryConfidence: float
+      confidence: float
+      selectionScore: float
+      lastAction: string
+      activeEffectId: uint16
+      previousEffectId: uint16
+      selectedEffectId: uint16
+      selectedFamily: string
+      selectedVisualLanguage: string
+      lastSwitchReason: string
+      parameterUpdates: uint32
+      automaticEffectSwitches: uint32
+      lastDecisionAtMs: uint32
+      lastSwitchAtMs: uint32
+      stateAgeMs: uint32
+      candidateAgeMs: uint32
+      candidateHoldRemainingMs: uint32
+      dwellRemainingMs: uint32
+      cooldownRemainingMs: uint32
+      bootGraceRemainingMs: uint32
+      enableGraceRemainingMs: uint32
+      switchWindowRemainingMs: uint32
+      switchesInWindow: uint8
+      maxSwitchesPerWindow: uint8
+      antiThrashRemainingMs: uint32
+      lastSwitchFromEffectId: uint16
+      lastSwitchToEffectId: uint16
+      transitionActive: bool
+      transitionPreviousEffectId: uint16
+      transitionTargetEffectId: uint16
+      transitionStartedAtMs: uint32
+      transitionDurationMs: uint32
+      transitionRemainingMs: uint32
+      transitionProgress: float
+      rms: float
+      flux: float
+      bpm: float
+      audioConfidence: float
+      health:
+        healthDegraded: bool
+        showSkips: uint32
+        failures: uint32
+        rmtErrors: uint32
+        underruns: uint32
+        healthCleanForMs: uint32
+        healthCleanWindowRemainingMs: uint32
+    consumers: [ios, tab5, lab]
+
+  /api/v1/synqmatrix/allowlist:
+    method: GET
+    description: "Get the runtime mutable state policy allowlist."
+    response:
+      count: uint8
+      policies: "array of {state,effectId,family,visualLanguage,reason,minConfidence,enabled}"
+    consumers: [ios, tab5, lab]
+
+  /api/v1/synqmatrix/allowlist:
     method: PATCH
     description: "Enable or disable a SynqMatrix state policy row at runtime."
     body:
@@ -300,7 +460,7 @@ endpoints:
       policies: "array of {state,effectId,family,visualLanguage,reason,minConfidence,enabled}"
     consumers: [ios, tab5, lab]
 
-  /api/v1/songAware/allowlist/reset:
+  /api/v1/synqmatrix/allowlist/reset:
     method: POST
     description: "Reset the runtime allowlist so all policy rows are enabled."
     consumers: [ios, tab5, lab]

@@ -77,10 +77,10 @@ void encodeStatus(JsonObject& data, const synqmatrix::SynqMatrixStatus& status) 
     data["suppressedReason"] = synqmatrix::synqMatrixSuppressedReasonName(status.suppressedReason);
     data["previousSuppressedReason"] = synqmatrix::synqMatrixSuppressedReasonName(status.previousSuppressedReason);
     data["classificationReason"] = synqmatrix::synqMatrixClassificationReasonName(status.classificationReason);
-    data["rawSongState"] = synqmatrix::synqMatrixStateName(status.rawState);
-    data["previousSongState"] = synqmatrix::synqMatrixStateName(status.previousState);
-    data["currentSongState"] = synqmatrix::synqMatrixStateName(status.currentState);
-    data["candidateSongState"] = synqmatrix::synqMatrixStateName(status.candidateState);
+    data["rawState"] = synqmatrix::synqMatrixStateName(status.rawState);
+    data["previousState"] = synqmatrix::synqMatrixStateName(status.previousState);
+    data["currentState"] = synqmatrix::synqMatrixStateName(status.currentState);
+    data["candidateState"] = synqmatrix::synqMatrixStateName(status.candidateState);
     data["intent"] = synqmatrix::synqMatrixIntentName(status.intent);
     data["actionPlan"] = synqmatrix::synqMatrixActionPlanName(status.actionPlan);
     data["boundaryGate"] = synqmatrix::synqMatrixBoundaryGateName(status.boundaryGate);
@@ -265,7 +265,7 @@ void SynqMatrixHandlers::handleSetConfig(AsyncWebServerRequest* request, uint8_t
     if (strcmp(action, "restore") == 0) {
         if (!g_restorePointValid) {
             sendErrorResponse(request, HttpStatus::CONFLICT, ErrorCodes::INVALID_ACTION,
-                              "No songAware restore point captured by REST config");
+                              "No SynqMatrix restore point captured by REST config");
             return;
         }
         synqmatrix::SynqMatrix::instance().restoreRuntimeState(g_restorePoint);
@@ -300,7 +300,7 @@ void SynqMatrixHandlers::handleSetConfig(AsyncWebServerRequest* request, uint8_t
     const char* error = nullptr;
     if (!applyConfigJson(doc.as<JsonObjectConst>(), config, &error)) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST, ErrorCodes::INVALID_VALUE,
-                          error ? error : "Invalid songAware config");
+                          error ? error : "Invalid SynqMatrix config");
         return;
     }
 
@@ -388,7 +388,7 @@ void SynqMatrixHandlers::handleSetAllowlist(AsyncWebServerRequest* request, uint
     const auto state = synqmatrix::parseSynqMatrixState(doc["state"].as<const char*>(), &ok);
     if (!ok) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST, ErrorCodes::INVALID_VALUE,
-                          "Invalid songAware state");
+                          "Invalid SynqMatrix state");
         return;
     }
 

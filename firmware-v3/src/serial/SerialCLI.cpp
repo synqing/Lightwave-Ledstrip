@@ -109,7 +109,7 @@ void printSynqMatrixStatus() {
     if (ren != nullptr) {
         activeEffectName = ren->getEffectName(static_cast<EffectId>(st.activeEffectId));
     }
-    Serial.printf("songAware: enabled=%s mode=%s profile=%s switchingEnabled=%s familyMorphing=%s sensitivity=%.3f intensityScalar=%.3f motionScalar=%.3f confidenceFloor=%.3f\n",
+    Serial.printf("synqMatrix: enabled=%s mode=%s profile=%s switchingEnabled=%s familyMorphing=%s sensitivity=%.3f intensityScalar=%.3f motionScalar=%.3f confidenceFloor=%.3f\n",
                   boolName(cfg.enabled),
                   lightwaveos::synqmatrix::synqMatrixModeName(cfg.mode),
                   lightwaveos::synqmatrix::synqMatrixProfileName(cfg.profile),
@@ -119,7 +119,7 @@ void printSynqMatrixStatus() {
                   cfg.intensityScalar,
                   cfg.motionScalar,
                   cfg.confidenceFloor);
-    Serial.printf("songAware_status: mode=%s profile=%s owner=%s suppressed=%s state=%s intent=%s confidence=%.3f lastAction=%s actionPlan=%s boundary=%s ready=%s activeEffect=0x%04X activeEffectName=\"%s\" parameterUpdates=%lu automaticEffectSwitches=%lu lastDecisionAtMs=%lu\n",
+    Serial.printf("synqMatrix_status: mode=%s profile=%s owner=%s suppressed=%s state=%s intent=%s confidence=%.3f lastAction=%s actionPlan=%s boundary=%s ready=%s activeEffect=0x%04X activeEffectName=\"%s\" parameterUpdates=%lu automaticEffectSwitches=%lu lastDecisionAtMs=%lu\n",
                   lightwaveos::synqmatrix::synqMatrixModeName(st.effectiveMode),
                   lightwaveos::synqmatrix::synqMatrixProfileName(st.profile),
                   lightwaveos::synqmatrix::synqMatrixOwnerName(st.owner),
@@ -136,7 +136,7 @@ void printSynqMatrixStatus() {
                   static_cast<unsigned long>(st.parameterUpdates),
                   static_cast<unsigned long>(st.automaticEffectSwitches),
                   static_cast<unsigned long>(st.lastDecisionAtMs));
-    Serial.printf("songAware_director: selectedEffect=0x%04X selectedFamily=%s selectedVisualLanguage=%s lastSwitchAtMs=%lu dwellRemainingMs=%lu cooldownRemainingMs=%lu lastSwitchReason=%s\n",
+    Serial.printf("synqMatrix_director: selectedEffect=0x%04X selectedFamily=%s selectedVisualLanguage=%s lastSwitchAtMs=%lu dwellRemainingMs=%lu cooldownRemainingMs=%lu lastSwitchReason=%s\n",
                   static_cast<unsigned>(st.selectedEffectId),
                   st.selectedFamily,
                   st.selectedVisualLanguage,
@@ -144,12 +144,12 @@ void printSynqMatrixStatus() {
                   static_cast<unsigned long>(st.dwellRemainingMs),
                   static_cast<unsigned long>(st.cooldownRemainingMs),
                   st.lastSwitchReason);
-    Serial.printf("songAware_health: show_skips=%lu failures=%lu rmt_errors=%lu underruns=%lu\n",
+    Serial.printf("synqMatrix_health: show_skips=%lu failures=%lu rmt_errors=%lu underruns=%lu\n",
                   static_cast<unsigned long>(st.showSkips),
                   static_cast<unsigned long>(st.failures),
                   static_cast<unsigned long>(st.rmtErrors),
                   static_cast<unsigned long>(st.underruns));
-    Serial.printf("songAware_audio: RMS=%.3f flux=%.3f BPM=%.1f confidence=%.3f\n",
+    Serial.printf("synqMatrix_audio: RMS=%.3f flux=%.3f BPM=%.1f confidence=%.3f\n",
                   st.rms,
                   st.flux,
                   st.bpm,
@@ -190,7 +190,7 @@ void printSynqMatrixPolicySnapshot(const lightwaveos::synqmatrix::SynqMatrixPoli
 
 void printSynqMatrixAllowlist() {
     const auto allowlist = lightwaveos::synqmatrix::SynqMatrix::instance().getAllowlistSnapshot();
-    Serial.printf("songAware_allowlist: count=%u\n", allowlist.count);
+    Serial.printf("synqMatrix_allowlist: count=%u\n", allowlist.count);
     for (uint8_t i = 0; i < allowlist.count; ++i) {
         printSynqMatrixPolicySnapshot(allowlist.policies[i]);
     }
@@ -198,7 +198,7 @@ void printSynqMatrixAllowlist() {
 
 void printSynqMatrixPolicy() {
     const auto debug = lightwaveos::synqmatrix::SynqMatrix::instance().getDebugSnapshot();
-    Serial.println("songAware_policy:");
+    Serial.println("synqMatrix_policy:");
     Serial.printf("  bootGraceMs=%lu postEnableGraceMs=%lu stableStateHoldMs=%lu dropStateHoldMs=%lu\n",
                   static_cast<unsigned long>(debug.bootGraceMs),
                   static_cast<unsigned long>(debug.postEnableGraceMs),
@@ -217,7 +217,7 @@ void printSynqMatrixPolicy() {
 
 void printSynqMatrixHealth() {
     const auto st = lightwaveos::synqmatrix::SynqMatrix::instance().getStatus();
-    Serial.printf("songAware_health: degraded=%s show_skips=%lu failures=%lu rmt_errors=%lu underruns=%lu cleanForMs=%lu cleanWindowRemainingMs=%lu\n",
+    Serial.printf("synqMatrix_health: degraded=%s show_skips=%lu failures=%lu rmt_errors=%lu underruns=%lu cleanForMs=%lu cleanWindowRemainingMs=%lu\n",
                   boolName(st.healthDegraded),
                   static_cast<unsigned long>(st.showSkips),
                   static_cast<unsigned long>(st.failures),
@@ -230,28 +230,28 @@ void printSynqMatrixHealth() {
 void printSynqMatrixDebug() {
     const auto st = lightwaveos::synqmatrix::SynqMatrix::instance().getStatus();
     printSynqMatrixStatus();
-    Serial.printf("songAware_debug: rawState=%s previousState=%s candidateState=%s classificationReason=%s previousSuppressed=%s selectionScore=%.3f\n",
+    Serial.printf("synqMatrix_debug: rawState=%s previousState=%s candidateState=%s classificationReason=%s previousSuppressed=%s selectionScore=%.3f\n",
                   lightwaveos::synqmatrix::synqMatrixStateName(st.rawState),
                   lightwaveos::synqmatrix::synqMatrixStateName(st.previousState),
                   lightwaveos::synqmatrix::synqMatrixStateName(st.candidateState),
                   lightwaveos::synqmatrix::synqMatrixClassificationReasonName(st.classificationReason),
                   lightwaveos::synqmatrix::synqMatrixSuppressedReasonName(st.previousSuppressedReason),
                   st.selectionScore);
-    Serial.printf("songAware_debug_gates: stateAgeMs=%lu candidateAgeMs=%lu candidateHoldRemainingMs=%lu bootGraceRemainingMs=%lu enableGraceRemainingMs=%lu antiThrashRemainingMs=%lu\n",
+    Serial.printf("synqMatrix_debug_gates: stateAgeMs=%lu candidateAgeMs=%lu candidateHoldRemainingMs=%lu bootGraceRemainingMs=%lu enableGraceRemainingMs=%lu antiThrashRemainingMs=%lu\n",
                   static_cast<unsigned long>(st.stateAgeMs),
                   static_cast<unsigned long>(st.candidateAgeMs),
                   static_cast<unsigned long>(st.candidateHoldRemainingMs),
                   static_cast<unsigned long>(st.bootGraceRemainingMs),
                   static_cast<unsigned long>(st.enableGraceRemainingMs),
                   static_cast<unsigned long>(st.antiThrashRemainingMs));
-    Serial.printf("songAware_debug_switching: switchesInWindow=%u maxSwitchesPerWindow=%u switchWindowRemainingMs=%lu previousEffect=0x%04X lastFrom=0x%04X lastTo=0x%04X\n",
+    Serial.printf("synqMatrix_debug_switching: switchesInWindow=%u maxSwitchesPerWindow=%u switchWindowRemainingMs=%lu previousEffect=0x%04X lastFrom=0x%04X lastTo=0x%04X\n",
                   st.switchesInWindow,
                   st.maxSwitchesPerWindow,
                   static_cast<unsigned long>(st.switchWindowRemainingMs),
                   static_cast<unsigned>(st.previousEffectId),
                   static_cast<unsigned>(st.lastSwitchFromEffectId),
                   static_cast<unsigned>(st.lastSwitchToEffectId));
-    Serial.printf("songAware_debug_transition: active=%s previous=0x%04X target=0x%04X startedAtMs=%lu durationMs=%lu remainingMs=%lu progress=%.3f\n",
+    Serial.printf("synqMatrix_debug_transition: active=%s previous=0x%04X target=0x%04X startedAtMs=%lu durationMs=%lu remainingMs=%lu progress=%.3f\n",
                   boolName(st.transitionActive),
                   static_cast<unsigned>(st.transitionPreviousEffectId),
                   static_cast<unsigned>(st.transitionTargetEffectId),
@@ -740,7 +740,7 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
         cfg.constrainedSwitching = false;
         cfg.switchingEnabled = false;
         lightwaveos::synqmatrix::SynqMatrix::instance().setConfig(cfg);
-        Serial.println("songAware: 'on' is deprecated; set mode=assist profile unchanged switching=false");
+        Serial.println("SynqMatrix: 'on' is deprecated; set mode=assist profile unchanged switching=false");
         printSynqMatrixStatus();
     }
     else
@@ -754,7 +754,7 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
         cfg.constrainedSwitching = false;
         cfg.switchingEnabled = false;
         lightwaveos::synqmatrix::SynqMatrix::instance().setConfig(cfg);
-        Serial.println("songAware: OFF");
+        Serial.println("SynqMatrix: OFF");
         printSynqMatrixStatus();
     }
     else
@@ -768,7 +768,7 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
         auto profile = lightwaveos::synqmatrix::parseSynqMatrixProfile(modeText.c_str(), &profileOk);
         auto mode = lightwaveos::synqmatrix::parseSynqMatrixMode(modeText.c_str(), &ok);
         if (!ok) {
-            Serial.println("songAware mode invalid. Use: off|assist|director");
+            Serial.println("SynqMatrix mode invalid. Use: off|assist|director");
         } else {
             captureSynqMatrixRestorePoint();
             auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
@@ -777,12 +777,12 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
                 cfg.profile = profile;
                 cfg.mode = lightwaveos::synqmatrix::SynqMatrixMode::Assist;
                 cfg.enabled = true;
-                Serial.println("songAware: legacy mode token mapped to profile; mode=assist");
+                Serial.println("SynqMatrix: legacy mode token mapped to profile; mode=assist");
             } else {
                 cfg.mode = mode;
                 cfg.enabled = (mode != lightwaveos::synqmatrix::SynqMatrixMode::Off);
                 if (modeText == "on" || modeText == "parameter") {
-                    Serial.println("songAware: legacy mode token mapped to assist");
+                    Serial.println("SynqMatrix: legacy mode token mapped to assist");
                 }
             }
             cfg.familyMorphing = false;
@@ -803,7 +803,7 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
         bool ok = false;
         auto profile = lightwaveos::synqmatrix::parseSynqMatrixProfile(profileText.c_str(), &ok);
         if (!ok) {
-            Serial.println("songAware profile invalid. Use: subtle|balanced|high");
+            Serial.println("SynqMatrix profile invalid. Use: subtle|balanced|high");
         } else {
             captureSynqMatrixRestorePoint();
             auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
@@ -818,14 +818,14 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
         handledMulti = true;
         auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
         if (!cfg.enabled || cfg.mode != lightwaveos::synqmatrix::SynqMatrixMode::Director) {
-            Serial.println("songAware switching rejected: Director mode is required");
+            Serial.println("SynqMatrix switching rejected: Director mode is required");
         } else {
             captureSynqMatrixRestorePoint();
             cfg.familyMorphing = false;
             cfg.constrainedSwitching = true;
             cfg.switchingEnabled = true;
             lightwaveos::synqmatrix::SynqMatrix::instance().setConfig(cfg);
-            Serial.println("songAware switching: ON");
+            Serial.println("SynqMatrix switching: ON");
         }
         printSynqMatrixStatus();
     }
@@ -838,7 +838,7 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
         cfg.constrainedSwitching = false;
         cfg.switchingEnabled = false;
         lightwaveos::synqmatrix::SynqMatrix::instance().setConfig(cfg);
-        Serial.println("songAware switching: OFF");
+        Serial.println("SynqMatrix switching: OFF");
         printSynqMatrixStatus();
     }
     else
@@ -848,16 +848,16 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
         captureSynqMatrixRestorePoint();
         lightwaveos::synqmatrix::SynqMatrix::instance().reset();
         if (inputLower.endsWith("reset")) {
-            Serial.println("songAware: 'reset' is deprecated; use 'wipe'");
+            Serial.println("SynqMatrix: 'reset' is deprecated; use 'wipe'");
         }
-        Serial.println("songAware: WIPE");
+        Serial.println("SynqMatrix: WIPE");
         printSynqMatrixStatus();
     }
     else
     if (inputLower == "synqmatrix restore" || inputLower == "sa restore") {
         handledMulti = true;
         restoreSynqMatrixSafeBaseline(actors);
-        Serial.println("songAware: RESTORED safe baseline (0x1302, fixed controls, off)");
+        Serial.println("SynqMatrix: RESTORED safe baseline (0x1302, fixed controls, off)");
         printSynqMatrixStatus();
     }
     else
@@ -870,7 +870,7 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
         } else if (inputLower.startsWith("sa dbg ")) {
             level = static_cast<uint8_t>(inputLower.substring(7).toInt());
         } else {
-            Serial.println("songAware: 'debug' is deprecated; use 'sa dbg 4'");
+            Serial.println("SynqMatrix: 'debug' is deprecated; use 'sa dbg 4'");
             level = 4;
         }
         printSynqMatrixDebugLevel(level);
@@ -878,13 +878,13 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
     else
     if (inputLower == "synqmatrix policy" || inputLower == "sa policy") {
         handledMulti = true;
-        Serial.println("songAware: 'policy' is deprecated; use 'sa dbg 2'");
+        Serial.println("SynqMatrix: 'policy' is deprecated; use 'sa dbg 2'");
         printSynqMatrixDebugLevel(2);
     }
     else
     if (inputLower == "synqmatrix allowlist" || inputLower == "sa allowlist") {
         handledMulti = true;
-        Serial.println("songAware: 'allowlist' is mutable; use 'sa allow <state> on|off' to edit");
+        Serial.println("SynqMatrix: 'allowlist' is mutable; use 'sa allow <state> on|off' to edit");
         printSynqMatrixAllowlist();
     }
     else
@@ -896,7 +896,7 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
         args.trim();
         int split = args.indexOf(' ');
         if (split <= 0) {
-            Serial.println("songAware allow invalid. Use: sa allow <state> on|off");
+            Serial.println("SynqMatrix allow invalid. Use: sa allow <state> on|off");
         } else {
             String stateText = args.substring(0, split);
             String valueText = args.substring(split + 1);
@@ -907,7 +907,7 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
             const bool enable = (valueText == "on" || valueText == "true" || valueText == "1");
             const bool disable = (valueText == "off" || valueText == "false" || valueText == "0");
             if (!stateOk || (!enable && !disable)) {
-                Serial.println("songAware allow invalid. Use: sa allow <state> on|off");
+                Serial.println("SynqMatrix allow invalid. Use: sa allow <state> on|off");
             } else {
                 captureSynqMatrixRestorePoint();
                 lightwaveos::synqmatrix::SynqMatrix::instance().setPolicyAllowed(state, enable);
@@ -925,7 +925,7 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
     else
     if (inputLower == "synqmatrix health" || inputLower == "sa health") {
         handledMulti = true;
-        Serial.println("songAware: 'health' is deprecated; use 'sa dbg 3'");
+        Serial.println("SynqMatrix: 'health' is deprecated; use 'sa dbg 3'");
         printSynqMatrixDebugLevel(3);
     }
     else
@@ -933,7 +933,7 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
         handledMulti = true;
         captureSynqMatrixRestorePoint();
         lightwaveos::synqmatrix::SynqMatrix::instance().resetCounters();
-        Serial.println("songAware counters: RESET");
+        Serial.println("SynqMatrix counters: RESET");
         printSynqMatrixHealth();
     }
     else

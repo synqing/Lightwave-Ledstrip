@@ -1,6 +1,12 @@
 /**
  * @file WsSynqMatrixCommands.cpp
  * @brief WebSocket commands for runtime-only synq-matrix director controls.
+ *
+ * Canonical command names live under the `synqMatrix.*` namespace. The legacy
+ * `songAware.*` names are retained for one release as deprecated aliases — each
+ * canonical handler has a paired alias wrapper that delegates to the same impl
+ * with the legacy envelope type. Aliases will be removed when the SynqMatrix
+ * algorithmic contract ships.
  */
 
 #include "WsSynqMatrixCommands.h"
@@ -79,10 +85,10 @@ void encodeStatus(JsonObject& data, const synqmatrix::SynqMatrixStatus& status) 
     data["suppressedReason"] = synqmatrix::synqMatrixSuppressedReasonName(status.suppressedReason);
     data["previousSuppressedReason"] = synqmatrix::synqMatrixSuppressedReasonName(status.previousSuppressedReason);
     data["classificationReason"] = synqmatrix::synqMatrixClassificationReasonName(status.classificationReason);
-    data["rawSongState"] = synqmatrix::synqMatrixStateName(status.rawState);
-    data["previousSongState"] = synqmatrix::synqMatrixStateName(status.previousState);
-    data["currentSongState"] = synqmatrix::synqMatrixStateName(status.currentState);
-    data["candidateSongState"] = synqmatrix::synqMatrixStateName(status.candidateState);
+    data["rawState"] = synqmatrix::synqMatrixStateName(status.rawState);
+    data["previousState"] = synqmatrix::synqMatrixStateName(status.previousState);
+    data["currentState"] = synqmatrix::synqMatrixStateName(status.currentState);
+    data["candidateState"] = synqmatrix::synqMatrixStateName(status.candidateState);
     data["intent"] = synqmatrix::synqMatrixIntentName(status.intent);
     data["actionPlan"] = synqmatrix::synqMatrixActionPlanName(status.actionPlan);
     data["boundaryGate"] = synqmatrix::synqMatrixBoundaryGateName(status.boundaryGate);
@@ -228,81 +234,84 @@ bool applyConfigJson(JsonObjectConst root, synqmatrix::SynqMatrixConfig& config,
     return true;
 }
 
-void handleSynqMatrixConfigGet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&) {
+// ── Shared impls — each takes envelope-type as a parameter so canonical and
+//    legacy-alias wrappers emit the same payload under different envelope names.
+
+void handleSynqMatrixConfigGetImpl(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&, const char* envelopeType) {
     const char* requestId = doc["requestId"] | "";
     const auto config = synqmatrix::SynqMatrix::instance().getConfig();
-    client->text(buildWsResponse("songAware.config", requestId, [&config](JsonObject& data) {
+    client->text(buildWsResponse(envelopeType, requestId, [&config](JsonObject& data) {
         encodeConfig(data, config);
     }));
 }
 
-void handleSynqMatrixConfigSet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&) {
+void handleSynqMatrixConfigSetImpl(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&, const char* envelopeType) {
     const char* requestId = doc["requestId"] | "";
     synqmatrix::SynqMatrixConfig config = synqmatrix::SynqMatrix::instance().getConfig();
     const char* error = nullptr;
     if (!applyConfigJson(doc.as<JsonObjectConst>(), config, &error)) {
         client->text(buildWsError(ErrorCodes::INVALID_VALUE,
-                                  error ? error : "Invalid songAware config",
+                                  error ? error : "Invalid SynqMatrix config",
                                   requestId));
         return;
     }
 
     captureRestorePoint();
     synqmatrix::SynqMatrix::instance().setConfig(config);
-    client->text(buildWsResponse("songAware.config", requestId, [&config](JsonObject& data) {
+    client->text(buildWsResponse(envelopeType, requestId, [&config](JsonObject& data) {
         encodeConfig(data, config);
     }));
 }
 
-void handleSynqMatrixStatus(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&) {
+void handleSynqMatrixStatusImpl(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&, const char* envelopeType) {
     const char* requestId = doc["requestId"] | "";
     const auto status = synqmatrix::SynqMatrix::instance().getStatus();
-    client->text(buildWsResponse("songAware.status", requestId, [&status](JsonObject& data) {
+    client->text(buildWsResponse(envelopeType, requestId, [&status](JsonObject& data) {
         encodeStatus(data, status);
     }));
 }
 
-void handleSynqMatrixReset(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&) {
+void handleSynqMatrixResetImpl(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&, const char* envelopeType) {
     const char* requestId = doc["requestId"] | "";
     captureRestorePoint();
     synqmatrix::SynqMatrix::instance().reset();
     const auto status = synqmatrix::SynqMatrix::instance().getStatus();
-    client->text(buildWsResponse("songAware.reset", requestId, [&status](JsonObject& data) {
+    client->text(buildWsResponse(envelopeType, requestId, [&status](JsonObject& data) {
         data["reset"] = true;
         JsonObject statusObj = data["status"].to<JsonObject>();
         encodeStatus(statusObj, status);
     }));
 }
 
-void handleSynqMatrixRestore(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&) {
+void handleSynqMatrixRestoreImpl(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&, const char* envelopeType) {
     const char* requestId = doc["requestId"] | "";
     if (!g_restorePointValid) {
         client->text(buildWsError(ErrorCodes::INVALID_ACTION,
-                                  "No songAware restore point captured by WebSocket",
+                                  "No SynqMatrix restore point captured by WebSocket",
                                   requestId));
         return;
     }
     synqmatrix::SynqMatrix::instance().restoreRuntimeState(g_restorePoint);
     const auto status = synqmatrix::SynqMatrix::instance().getStatus();
-    client->text(buildWsResponse("songAware.restore", requestId, [&status](JsonObject& data) {
+    client->text(buildWsResponse(envelopeType, requestId, [&status](JsonObject& data) {
         data["restored"] = true;
         JsonObject statusObj = data["status"].to<JsonObject>();
         encodeStatus(statusObj, status);
     }));
 }
 
-void handleSynqMatrixDebug(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&) {
+void handleSynqMatrixDebugImpl(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&, const char* envelopeType) {
     const char* requestId = doc["requestId"] | "";
     const auto debug = synqmatrix::SynqMatrix::instance().getDebugSnapshot();
-    client->text(buildWsResponse("songAware.debug", requestId, [&debug](JsonObject& data) {
+    client->text(buildWsResponse(envelopeType, requestId, [&debug](JsonObject& data) {
         encodeDebug(data, debug);
     }));
 }
 
-void handleSynqMatrixPolicy(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&) {
+void handleSynqMatrixPolicyImpl(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&, const char* envelopeType) {
     const char* requestId = doc["requestId"] | "";
     const auto debug = synqmatrix::SynqMatrix::instance().getDebugSnapshot();
-    client->text(buildWsResponse("songAware.policy", requestId, [&debug](JsonObject& data) {
+    client->text(buildWsResponse(envelopeType, requestId, [&debug](JsonObject& data) {
         data["bootGraceMs"] = debug.bootGraceMs;
         data["postEnableGraceMs"] = debug.postEnableGraceMs;
         data["stableStateHoldMs"] = debug.stableStateHoldMs;
@@ -317,15 +326,15 @@ void handleSynqMatrixPolicy(AsyncWebSocketClient* client, JsonDocument& doc, con
     }));
 }
 
-void handleSynqMatrixAllowlist(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&) {
+void handleSynqMatrixAllowlistImpl(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&, const char* envelopeType) {
     const char* requestId = doc["requestId"] | "";
     const auto allowlist = synqmatrix::SynqMatrix::instance().getAllowlistSnapshot();
-    client->text(buildWsResponse("songAware.allowlist", requestId, [&allowlist](JsonObject& data) {
+    client->text(buildWsResponse(envelopeType, requestId, [&allowlist](JsonObject& data) {
         encodeAllowlist(data, allowlist);
     }));
 }
 
-void handleSynqMatrixAllowlistSet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&) {
+void handleSynqMatrixAllowlistSetImpl(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&, const char* envelopeType) {
     const char* requestId = doc["requestId"] | "";
     if (!doc["state"].is<const char*>() || !doc["enabled"].is<bool>()) {
         client->text(buildWsError(ErrorCodes::INVALID_VALUE,
@@ -337,42 +346,42 @@ void handleSynqMatrixAllowlistSet(AsyncWebSocketClient* client, JsonDocument& do
     const auto state = synqmatrix::parseSynqMatrixState(doc["state"].as<const char*>(), &ok);
     if (!ok) {
         client->text(buildWsError(ErrorCodes::INVALID_VALUE,
-                                  "Invalid songAware state",
+                                  "Invalid SynqMatrix state",
                                   requestId));
         return;
     }
     captureRestorePoint();
     synqmatrix::SynqMatrix::instance().setPolicyAllowed(state, doc["enabled"].as<bool>());
     const auto allowlist = synqmatrix::SynqMatrix::instance().getAllowlistSnapshot();
-    client->text(buildWsResponse("songAware.allowlist", requestId, [&allowlist](JsonObject& data) {
+    client->text(buildWsResponse(envelopeType, requestId, [&allowlist](JsonObject& data) {
         encodeAllowlist(data, allowlist);
     }));
 }
 
-void handleSynqMatrixAllowlistReset(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&) {
+void handleSynqMatrixAllowlistResetImpl(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&, const char* envelopeType) {
     const char* requestId = doc["requestId"] | "";
     captureRestorePoint();
     synqmatrix::SynqMatrix::instance().resetPolicyAllowlist();
     const auto allowlist = synqmatrix::SynqMatrix::instance().getAllowlistSnapshot();
-    client->text(buildWsResponse("songAware.allowlist", requestId, [&allowlist](JsonObject& data) {
+    client->text(buildWsResponse(envelopeType, requestId, [&allowlist](JsonObject& data) {
         encodeAllowlist(data, allowlist);
     }));
 }
 
-void handleSynqMatrixHealth(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&) {
+void handleSynqMatrixHealthImpl(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&, const char* envelopeType) {
     const char* requestId = doc["requestId"] | "";
     const auto status = synqmatrix::SynqMatrix::instance().getStatus();
-    client->text(buildWsResponse("songAware.health", requestId, [&status](JsonObject& data) {
+    client->text(buildWsResponse(envelopeType, requestId, [&status](JsonObject& data) {
         encodeHealth(data, status);
     }));
 }
 
-void handleSynqMatrixCountersReset(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&) {
+void handleSynqMatrixCountersResetImpl(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&, const char* envelopeType) {
     const char* requestId = doc["requestId"] | "";
     captureRestorePoint();
     synqmatrix::SynqMatrix::instance().resetCounters();
     const auto status = synqmatrix::SynqMatrix::instance().getStatus();
-    client->text(buildWsResponse("songAware.counters.reset", requestId, [&status](JsonObject& data) {
+    client->text(buildWsResponse(envelopeType, requestId, [&status](JsonObject& data) {
         data["reset"] = true;
         data["parameterUpdates"] = status.parameterUpdates;
         data["automaticEffectSwitches"] = status.automaticEffectSwitches;
@@ -381,23 +390,116 @@ void handleSynqMatrixCountersReset(AsyncWebSocketClient* client, JsonDocument& d
     }));
 }
 
+// ── Canonical wrappers (synqMatrix.* envelope) ────────────────────────────
+
+void handleSynqMatrixConfigGetCanonical(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    handleSynqMatrixConfigGetImpl(client, doc, ctx, "synqMatrix.config");
+}
+void handleSynqMatrixConfigSetCanonical(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    handleSynqMatrixConfigSetImpl(client, doc, ctx, "synqMatrix.config");
+}
+void handleSynqMatrixStatusCanonical(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    handleSynqMatrixStatusImpl(client, doc, ctx, "synqMatrix.status");
+}
+void handleSynqMatrixResetCanonical(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    handleSynqMatrixResetImpl(client, doc, ctx, "synqMatrix.reset");
+}
+void handleSynqMatrixRestoreCanonical(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    handleSynqMatrixRestoreImpl(client, doc, ctx, "synqMatrix.restore");
+}
+void handleSynqMatrixDebugCanonical(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    handleSynqMatrixDebugImpl(client, doc, ctx, "synqMatrix.debug");
+}
+void handleSynqMatrixPolicyCanonical(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    handleSynqMatrixPolicyImpl(client, doc, ctx, "synqMatrix.policy");
+}
+void handleSynqMatrixAllowlistCanonical(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    handleSynqMatrixAllowlistImpl(client, doc, ctx, "synqMatrix.allowlist");
+}
+void handleSynqMatrixAllowlistSetCanonical(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    handleSynqMatrixAllowlistSetImpl(client, doc, ctx, "synqMatrix.allowlist");
+}
+void handleSynqMatrixAllowlistResetCanonical(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    handleSynqMatrixAllowlistResetImpl(client, doc, ctx, "synqMatrix.allowlist");
+}
+void handleSynqMatrixHealthCanonical(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    handleSynqMatrixHealthImpl(client, doc, ctx, "synqMatrix.health");
+}
+void handleSynqMatrixCountersResetCanonical(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    handleSynqMatrixCountersResetImpl(client, doc, ctx, "synqMatrix.counters.reset");
+}
+
+// ── Legacy alias wrappers (songAware.* envelope, deprecated) ──────────────
+
+void handleSynqMatrixConfigGetLegacyAlias(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    handleSynqMatrixConfigGetImpl(client, doc, ctx, "songAware.config");
+}
+void handleSynqMatrixConfigSetLegacyAlias(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    handleSynqMatrixConfigSetImpl(client, doc, ctx, "songAware.config");
+}
+void handleSynqMatrixStatusLegacyAlias(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    handleSynqMatrixStatusImpl(client, doc, ctx, "songAware.status");
+}
+void handleSynqMatrixResetLegacyAlias(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    handleSynqMatrixResetImpl(client, doc, ctx, "songAware.reset");
+}
+void handleSynqMatrixRestoreLegacyAlias(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    handleSynqMatrixRestoreImpl(client, doc, ctx, "songAware.restore");
+}
+void handleSynqMatrixDebugLegacyAlias(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    handleSynqMatrixDebugImpl(client, doc, ctx, "songAware.debug");
+}
+void handleSynqMatrixPolicyLegacyAlias(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    handleSynqMatrixPolicyImpl(client, doc, ctx, "songAware.policy");
+}
+void handleSynqMatrixAllowlistLegacyAlias(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    handleSynqMatrixAllowlistImpl(client, doc, ctx, "songAware.allowlist");
+}
+void handleSynqMatrixAllowlistSetLegacyAlias(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    handleSynqMatrixAllowlistSetImpl(client, doc, ctx, "songAware.allowlist");
+}
+void handleSynqMatrixAllowlistResetLegacyAlias(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    handleSynqMatrixAllowlistResetImpl(client, doc, ctx, "songAware.allowlist");
+}
+void handleSynqMatrixHealthLegacyAlias(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    handleSynqMatrixHealthImpl(client, doc, ctx, "songAware.health");
+}
+void handleSynqMatrixCountersResetLegacyAlias(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    handleSynqMatrixCountersResetImpl(client, doc, ctx, "songAware.counters.reset");
+}
+
 } // namespace
 
 void registerWsSynqMatrixCommands(const WebServerContext& ctx) {
     (void)ctx;
-    WsCommandRouter::registerCommand("songAware.config.get", handleSynqMatrixConfigGet);
-    WsCommandRouter::registerCommand("songAware.config.set", handleSynqMatrixConfigSet);
-    WsCommandRouter::registerCommand("songAware.status", handleSynqMatrixStatus);
-    WsCommandRouter::registerCommand("songAware.reset", handleSynqMatrixReset);
-    WsCommandRouter::registerCommand("songAware.restore", handleSynqMatrixRestore);
-    WsCommandRouter::registerCommand("songAware.debug", handleSynqMatrixDebug);
-    WsCommandRouter::registerCommand("songAware.policy", handleSynqMatrixPolicy);
-    WsCommandRouter::registerCommand("songAware.allowlist", handleSynqMatrixAllowlist);
-    WsCommandRouter::registerCommand("songAware.allowlist.set", handleSynqMatrixAllowlistSet);
-    WsCommandRouter::registerCommand("songAware.allowlist.reset", handleSynqMatrixAllowlistReset);
-    WsCommandRouter::registerCommand("songAware.health", handleSynqMatrixHealth);
-    WsCommandRouter::registerCommand("songAware.counters.reset", handleSynqMatrixCountersReset);
-    WsCommandRouter::registerCommand("songAware.countersReset", handleSynqMatrixCountersReset);
+    // Canonical synqMatrix.* commands
+    WsCommandRouter::registerCommand("synqMatrix.config.get",      handleSynqMatrixConfigGetCanonical);
+    WsCommandRouter::registerCommand("synqMatrix.config.set",      handleSynqMatrixConfigSetCanonical);
+    WsCommandRouter::registerCommand("synqMatrix.status",          handleSynqMatrixStatusCanonical);
+    WsCommandRouter::registerCommand("synqMatrix.reset",           handleSynqMatrixResetCanonical);
+    WsCommandRouter::registerCommand("synqMatrix.restore",         handleSynqMatrixRestoreCanonical);
+    WsCommandRouter::registerCommand("synqMatrix.debug",           handleSynqMatrixDebugCanonical);
+    WsCommandRouter::registerCommand("synqMatrix.policy",          handleSynqMatrixPolicyCanonical);
+    WsCommandRouter::registerCommand("synqMatrix.allowlist",       handleSynqMatrixAllowlistCanonical);
+    WsCommandRouter::registerCommand("synqMatrix.allowlist.set",   handleSynqMatrixAllowlistSetCanonical);
+    WsCommandRouter::registerCommand("synqMatrix.allowlist.reset", handleSynqMatrixAllowlistResetCanonical);
+    WsCommandRouter::registerCommand("synqMatrix.health",          handleSynqMatrixHealthCanonical);
+    WsCommandRouter::registerCommand("synqMatrix.counters.reset",  handleSynqMatrixCountersResetCanonical);
+
+    // Legacy songAware.* aliases — deprecated, removed at SynqMatrix algorithmic-contract release.
+    WsCommandRouter::registerCommand("songAware.config.get",      handleSynqMatrixConfigGetLegacyAlias);
+    WsCommandRouter::registerCommand("songAware.config.set",      handleSynqMatrixConfigSetLegacyAlias);
+    WsCommandRouter::registerCommand("songAware.status",          handleSynqMatrixStatusLegacyAlias);
+    WsCommandRouter::registerCommand("songAware.reset",           handleSynqMatrixResetLegacyAlias);
+    WsCommandRouter::registerCommand("songAware.restore",         handleSynqMatrixRestoreLegacyAlias);
+    WsCommandRouter::registerCommand("songAware.debug",           handleSynqMatrixDebugLegacyAlias);
+    WsCommandRouter::registerCommand("songAware.policy",          handleSynqMatrixPolicyLegacyAlias);
+    WsCommandRouter::registerCommand("songAware.allowlist",       handleSynqMatrixAllowlistLegacyAlias);
+    WsCommandRouter::registerCommand("songAware.allowlist.set",   handleSynqMatrixAllowlistSetLegacyAlias);
+    WsCommandRouter::registerCommand("songAware.allowlist.reset", handleSynqMatrixAllowlistResetLegacyAlias);
+    WsCommandRouter::registerCommand("songAware.health",          handleSynqMatrixHealthLegacyAlias);
+    WsCommandRouter::registerCommand("songAware.counters.reset",  handleSynqMatrixCountersResetLegacyAlias);
+    WsCommandRouter::registerCommand("songAware.countersReset",   handleSynqMatrixCountersResetLegacyAlias);
 }
 
 } // namespace ws

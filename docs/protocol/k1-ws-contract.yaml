@@ -293,9 +293,271 @@ commands:
     consumers: [tab5, ios]
 
   # ── SynqMatrix Director ──────────────────────────────────────────────────
-  songAware.config.get:
+  # Canonical command names live under `synqMatrix.*`. The legacy `songAware.*`
+  # names below remain registered as deprecated aliases for one release; both
+  # names route to the same handler on K1. Aliases will be removed at the same
+  # firmware release that ships the SynqMatrix algorithmic contract.
+  synqMatrix.config.get:
     direction: "client -> K1"
     description: "Get runtime-only SynqMatrix configuration. Mode is the authority boundary; profile is aggression. No NVS persistence."
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "synqMatrix.config"
+      data:
+        enabled: bool
+        mode: { type: string, enum: [off, assist, director] }
+        profile: { type: string, enum: [subtle, balanced, high] }
+        switchingEnabled: bool
+        familyMorphing: { type: bool, deprecated: true }
+        constrainedSwitching: { type: bool, deprecated: true, note: "Alias of switchingEnabled for one release." }
+        sensitivity: { type: float, range: "0.0-1.0" }
+        intensityScalar: { type: float, range: "0.0-1.0" }
+        motionScalar: { type: float, range: "0.0-1.0" }
+        confidenceFloor: { type: float, range: "0.0-1.0" }
+    consumers: [tab5, ios, lab]
+
+  synqMatrix.config.set:
+    direction: "client -> K1"
+    description: "Set runtime-only SynqMatrix configuration."
+    request:
+      enabled: { type: bool, optional: true }
+      mode: { type: string, optional: true, enum: [off, assist, director], compatibility: "on and parameter map to assist; subtle/balanced/high set profile and map mode to assist for one release." }
+      profile: { type: string, optional: true, enum: [subtle, balanced, high] }
+      switchingEnabled: { type: bool, optional: true }
+      familyMorphing: { type: bool, optional: true, deprecated: true }
+      constrainedSwitching: { type: bool, optional: true, deprecated: true, note: "Alias of switchingEnabled for one release." }
+      sensitivity: { type: float, optional: true, range: "0.0-1.0" }
+      intensityScalar: { type: float, optional: true, range: "0.0-1.0" }
+      motionScalar: { type: float, optional: true, range: "0.0-1.0" }
+      confidenceFloor: { type: float, optional: true, range: "0.0-1.0" }
+      requestId: { type: string, optional: true }
+    response:
+      type: "synqMatrix.config"
+      data:
+        enabled: bool
+        mode: string
+        profile: string
+        switchingEnabled: bool
+        familyMorphing: bool
+        constrainedSwitching: bool
+        sensitivity: float
+        intensityScalar: float
+        motionScalar: float
+        confidenceFloor: float
+    consumers: [tab5, ios, lab]
+
+  synqMatrix.status:
+    direction: "client -> K1"
+    description: "Get runtime SynqMatrix readback including state, intent, action plan, gates, transition, and health."
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "synqMatrix.status"
+      data:
+        enabled: bool
+        mode: string
+        effectiveMode: string
+        profile: string
+        owner: string
+        suppressedReason: string
+        previousSuppressedReason: string
+        classificationReason: string
+        rawState: string
+        previousState: string
+        currentState: string
+        candidateState: string
+        intent: string
+        actionPlan: string
+        boundaryGate: string
+        boundaryReady: bool
+        waitingForBoundary: bool
+        boundaryConfidence: float
+        confidence: float
+        selectionScore: float
+        lastAction: string
+        activeEffectId: uint16
+        previousEffectId: uint16
+        selectedEffectId: uint16
+        selectedFamily: string
+        selectedVisualLanguage: string
+        lastSwitchReason: string
+        parameterUpdates: uint32
+        automaticEffectSwitches: uint32
+        lastDecisionAtMs: uint32
+        lastSwitchAtMs: uint32
+        stateAgeMs: uint32
+        candidateAgeMs: uint32
+        candidateHoldRemainingMs: uint32
+        dwellRemainingMs: uint32
+        cooldownRemainingMs: uint32
+        bootGraceRemainingMs: uint32
+        enableGraceRemainingMs: uint32
+        switchWindowRemainingMs: uint32
+        switchesInWindow: uint8
+        maxSwitchesPerWindow: uint8
+        antiThrashRemainingMs: uint32
+        lastSwitchFromEffectId: uint16
+        lastSwitchToEffectId: uint16
+        transitionActive: bool
+        transitionPreviousEffectId: uint16
+        transitionTargetEffectId: uint16
+        transitionStartedAtMs: uint32
+        transitionDurationMs: uint32
+        transitionRemainingMs: uint32
+        transitionProgress: float
+        rms: float
+        flux: float
+        bpm: float
+        audioConfidence: float
+        health:
+          healthDegraded: bool
+          showSkips: uint32
+          failures: uint32
+          rmtErrors: uint32
+          underruns: uint32
+          healthCleanForMs: uint32
+          healthCleanWindowRemainingMs: uint32
+    consumers: [tab5, ios, lab]
+
+  synqMatrix.reset:
+    direction: "client -> K1"
+    description: "Reset runtime-only SynqMatrix Director state to defaults. Captures a WebSocket-local restore point before reset."
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "synqMatrix.reset"
+      data:
+        reset: bool
+        status: "synqMatrix.status payload"
+    consumers: [tab5, ios, lab]
+
+  synqMatrix.restore:
+    direction: "client -> K1"
+    description: "Restore the last WebSocket-captured SynqMatrix runtime state. No NVS persistence."
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "synqMatrix.restore"
+      data:
+        restored: bool
+        status: "synqMatrix.status payload"
+    consumers: [tab5, ios, lab]
+
+  synqMatrix.debug:
+    direction: "client -> K1"
+    description: "Get full SynqMatrix debug snapshot: config, status, policy timing, and allowlist."
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "synqMatrix.debug"
+      data:
+        config: "synqMatrix.config payload"
+        status: "synqMatrix.status payload"
+        policy: "SynqMatrix timing/gate constants"
+        allowlist: "SynqMatrix runtime mutable state policy allowlist"
+    consumers: [tab5, ios, lab]
+
+  synqMatrix.policy:
+    direction: "client -> K1"
+    description: "Get SynqMatrix policy timing/gate constants and allowlist count."
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "synqMatrix.policy"
+      data:
+        bootGraceMs: uint32
+        postEnableGraceMs: uint32
+        stableStateHoldMs: uint32
+        dropStateHoldMs: uint32
+        minimumDwellMs: uint32
+        switchCooldownMs: uint32
+        switchWindowMs: uint32
+        maxSwitchesPerWindow: uint8
+        antiThrashWindowMs: uint32
+        healthCleanWindowMs: uint32
+        allowlistCount: uint8
+    consumers: [tab5, ios, lab]
+
+  synqMatrix.allowlist:
+    direction: "client -> K1"
+    description: "Get the runtime mutable SynqMatrix state/effect/family policy allowlist."
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "synqMatrix.allowlist"
+      data:
+        count: uint8
+        policies: "array of {state, effectId, family, visualLanguage, reason, minConfidence, enabled}"
+    consumers: [tab5, ios, lab]
+
+  synqMatrix.allowlist.set:
+    direction: "client -> K1"
+    description: "Enable or disable one SynqMatrix state policy row at runtime."
+    request:
+      state: { type: string, required: true, enum: [unknown, silence, ambient, steady, build, drop, breakdown, dense, transition] }
+      enabled: { type: bool, required: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "synqMatrix.allowlist"
+      data:
+        count: uint8
+        policies: "array of {state, effectId, family, visualLanguage, reason, minConfidence, enabled}"
+    consumers: [tab5, ios, lab]
+
+  synqMatrix.allowlist.reset:
+    direction: "client -> K1"
+    description: "Reset runtime allowlist so all policy rows are enabled."
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "synqMatrix.allowlist"
+      data:
+        count: uint8
+        policies: "array of {state, effectId, family, visualLanguage, reason, minConfidence, enabled}"
+    consumers: [tab5, ios, lab]
+
+  synqMatrix.health:
+    direction: "client -> K1"
+    description: "Get SynqMatrix health counters and clean-window state."
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "synqMatrix.health"
+      data:
+        healthDegraded: bool
+        showSkips: uint32
+        failures: uint32
+        rmtErrors: uint32
+        underruns: uint32
+        healthCleanForMs: uint32
+        healthCleanWindowRemainingMs: uint32
+    consumers: [tab5, ios, lab]
+
+  synqMatrix.counters.reset:
+    direction: "client -> K1"
+    description: "Reset SynqMatrix runtime counters and health-gate counters. Captures a WebSocket-local restore point before reset."
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "synqMatrix.counters.reset"
+      data:
+        reset: bool
+        parameterUpdates: uint32
+        automaticEffectSwitches: uint32
+        health: "synqMatrix.health payload"
+    consumers: [tab5, ios, lab]
+
+  # ── Legacy songAware.* aliases (DEPRECATED 2026-05-13) ─────────────────
+  # Each legacy entry routes to the same K1 handler as its synqMatrix.*
+  # canonical above and emits the legacy envelope type for one release.
+  # Aliases removed at the SynqMatrix algorithmic-contract firmware release.
+  songAware.config.get:
+    deprecated: true
+    alias_of: synqMatrix.config.get
+    note: "Deprecated 2026-05-13 — use synqMatrix.config.get canonical name. Both names route to the same handler. Aliases removed at the same firmware release that ships the SynqMatrix algorithmic contract."
+    direction: "client -> K1"
+    description: "Legacy alias. Get runtime-only SynqMatrix configuration."
     request:
       requestId: { type: string, optional: true }
     response:
@@ -314,8 +576,11 @@ commands:
     consumers: [tab5, ios, lab]
 
   songAware.config.set:
+    deprecated: true
+    alias_of: synqMatrix.config.set
+    note: "Deprecated 2026-05-13 — use synqMatrix.config.set canonical name. Both names route to the same handler. Aliases removed at the same firmware release that ships the SynqMatrix algorithmic contract."
     direction: "client -> K1"
-    description: "Set runtime-only SynqMatrix configuration."
+    description: "Legacy alias. Set runtime-only SynqMatrix configuration."
     request:
       enabled: { type: bool, optional: true }
       mode: { type: string, optional: true, enum: [off, assist, director], compatibility: "on and parameter map to assist; subtle/balanced/high set profile and map mode to assist for one release." }
@@ -344,8 +609,11 @@ commands:
     consumers: [tab5, ios, lab]
 
   songAware.status:
+    deprecated: true
+    alias_of: synqMatrix.status
+    note: "Deprecated 2026-05-13 — use synqMatrix.status canonical name. Both names route to the same handler. Aliases removed at the same firmware release that ships the SynqMatrix algorithmic contract."
     direction: "client -> K1"
-    description: "Get runtime SynqMatrix readback including state, intent, action plan, gates, transition, and health."
+    description: "Legacy alias. Get runtime SynqMatrix readback."
     request:
       requestId: { type: string, optional: true }
     response:
@@ -359,10 +627,10 @@ commands:
         suppressedReason: string
         previousSuppressedReason: string
         classificationReason: string
-        rawSongState: string
-        previousSongState: string
-        currentSongState: string
-        candidateSongState: string
+        rawState: string
+        previousState: string
+        currentState: string
+        candidateState: string
         intent: string
         actionPlan: string
         boundaryGate: string
@@ -417,8 +685,11 @@ commands:
     consumers: [tab5, ios, lab]
 
   songAware.reset:
+    deprecated: true
+    alias_of: synqMatrix.reset
+    note: "Deprecated 2026-05-13 — use synqMatrix.reset canonical name. Both names route to the same handler. Aliases removed at the same firmware release that ships the SynqMatrix algorithmic contract."
     direction: "client -> K1"
-    description: "Reset runtime-only SynqMatrix Director state to defaults. Captures a WebSocket-local restore point before reset."
+    description: "Legacy alias. Reset runtime-only SynqMatrix state."
     request:
       requestId: { type: string, optional: true }
     response:
@@ -429,8 +700,11 @@ commands:
     consumers: [tab5, ios, lab]
 
   songAware.restore:
+    deprecated: true
+    alias_of: synqMatrix.restore
+    note: "Deprecated 2026-05-13 — use synqMatrix.restore canonical name. Both names route to the same handler. Aliases removed at the same firmware release that ships the SynqMatrix algorithmic contract."
     direction: "client -> K1"
-    description: "Restore the last WebSocket-captured SynqMatrix runtime state. No NVS persistence."
+    description: "Legacy alias. Restore the last WebSocket-captured SynqMatrix runtime state."
     request:
       requestId: { type: string, optional: true }
     response:
@@ -441,8 +715,11 @@ commands:
     consumers: [tab5, ios, lab]
 
   songAware.debug:
+    deprecated: true
+    alias_of: synqMatrix.debug
+    note: "Deprecated 2026-05-13 — use synqMatrix.debug canonical name. Both names route to the same handler. Aliases removed at the same firmware release that ships the SynqMatrix algorithmic contract."
     direction: "client -> K1"
-    description: "Get full SynqMatrix debug snapshot: config, status, policy timing, and allowlist."
+    description: "Legacy alias. Get full SynqMatrix debug snapshot."
     request:
       requestId: { type: string, optional: true }
     response:
@@ -455,8 +732,11 @@ commands:
     consumers: [tab5, ios, lab]
 
   songAware.policy:
+    deprecated: true
+    alias_of: synqMatrix.policy
+    note: "Deprecated 2026-05-13 — use synqMatrix.policy canonical name. Both names route to the same handler. Aliases removed at the same firmware release that ships the SynqMatrix algorithmic contract."
     direction: "client -> K1"
-    description: "Get SynqMatrix policy timing/gate constants and allowlist count."
+    description: "Legacy alias. Get SynqMatrix policy timing/gate constants."
     request:
       requestId: { type: string, optional: true }
     response:
@@ -476,8 +756,11 @@ commands:
     consumers: [tab5, ios, lab]
 
   songAware.allowlist:
+    deprecated: true
+    alias_of: synqMatrix.allowlist
+    note: "Deprecated 2026-05-13 — use synqMatrix.allowlist canonical name. Both names route to the same handler. Aliases removed at the same firmware release that ships the SynqMatrix algorithmic contract."
     direction: "client -> K1"
-    description: "Get the runtime mutable SynqMatrix state/effect/family policy allowlist."
+    description: "Legacy alias. Get the runtime mutable SynqMatrix policy allowlist."
     request:
       requestId: { type: string, optional: true }
     response:
@@ -488,8 +771,11 @@ commands:
     consumers: [tab5, ios, lab]
 
   songAware.allowlist.set:
+    deprecated: true
+    alias_of: synqMatrix.allowlist.set
+    note: "Deprecated 2026-05-13 — use synqMatrix.allowlist.set canonical name. Both names route to the same handler. Aliases removed at the same firmware release that ships the SynqMatrix algorithmic contract."
     direction: "client -> K1"
-    description: "Enable or disable one SynqMatrix state policy row at runtime."
+    description: "Legacy alias. Enable or disable one SynqMatrix state policy row at runtime."
     request:
       state: { type: string, required: true, enum: [unknown, silence, ambient, steady, build, drop, breakdown, dense, transition] }
       enabled: { type: bool, required: true }
@@ -502,8 +788,11 @@ commands:
     consumers: [tab5, ios, lab]
 
   songAware.allowlist.reset:
+    deprecated: true
+    alias_of: synqMatrix.allowlist.reset
+    note: "Deprecated 2026-05-13 — use synqMatrix.allowlist.reset canonical name. Both names route to the same handler. Aliases removed at the same firmware release that ships the SynqMatrix algorithmic contract."
     direction: "client -> K1"
-    description: "Reset runtime allowlist so all policy rows are enabled."
+    description: "Legacy alias. Reset runtime allowlist so all policy rows are enabled."
     request:
       requestId: { type: string, optional: true }
     response:
@@ -514,8 +803,11 @@ commands:
     consumers: [tab5, ios, lab]
 
   songAware.health:
+    deprecated: true
+    alias_of: synqMatrix.health
+    note: "Deprecated 2026-05-13 — use synqMatrix.health canonical name. Both names route to the same handler. Aliases removed at the same firmware release that ships the SynqMatrix algorithmic contract."
     direction: "client -> K1"
-    description: "Get SynqMatrix health counters and clean-window state."
+    description: "Legacy alias. Get SynqMatrix health counters and clean-window state."
     request:
       requestId: { type: string, optional: true }
     response:
@@ -531,8 +823,11 @@ commands:
     consumers: [tab5, ios, lab]
 
   songAware.counters.reset:
+    deprecated: true
+    alias_of: synqMatrix.counters.reset
+    note: "Deprecated 2026-05-13 — use synqMatrix.counters.reset canonical name. Both names route to the same handler. Aliases removed at the same firmware release that ships the SynqMatrix algorithmic contract."
     direction: "client -> K1"
-    description: "Reset SynqMatrix runtime counters and health-gate counters. Captures a WebSocket-local restore point before reset."
+    description: "Legacy alias. Reset SynqMatrix runtime counters and health-gate counters."
     request:
       requestId: { type: string, optional: true }
     response:

@@ -124,7 +124,7 @@ void printSynqMatrixStatus() {
                   lightwaveos::synqmatrix::songAwareProfileName(st.profile),
                   lightwaveos::synqmatrix::songAwareOwnerName(st.owner),
                   lightwaveos::synqmatrix::songAwareSuppressedReasonName(st.suppressedReason),
-                  lightwaveos::synqmatrix::songAwareStateName(st.currentSongState),
+                  lightwaveos::synqmatrix::songAwareStateName(st.currentState),
                   lightwaveos::synqmatrix::songAwareIntentName(st.intent),
                   st.confidence,
                   lightwaveos::synqmatrix::songAwareLastActionName(st.lastAction),
@@ -164,7 +164,7 @@ void printSynqMatrixCompactStatus() {
                   lightwaveos::synqmatrix::songAwareModeName(cfg.mode),
                   lightwaveos::synqmatrix::songAwareProfileName(cfg.profile),
                   boolName(cfg.switchingEnabled),
-                  lightwaveos::synqmatrix::songAwareStateName(st.currentSongState),
+                  lightwaveos::synqmatrix::songAwareStateName(st.currentState),
                   lightwaveos::synqmatrix::songAwareIntentName(st.intent),
                   st.confidence,
                   lightwaveos::synqmatrix::songAwareSuppressedReasonName(st.suppressedReason),
@@ -231,9 +231,9 @@ void printSynqMatrixDebug() {
     const auto st = lightwaveos::synqmatrix::SynqMatrix::instance().getStatus();
     printSynqMatrixStatus();
     Serial.printf("songAware_debug: rawState=%s previousState=%s candidateState=%s classificationReason=%s previousSuppressed=%s selectionScore=%.3f\n",
-                  lightwaveos::synqmatrix::songAwareStateName(st.rawSongState),
-                  lightwaveos::synqmatrix::songAwareStateName(st.previousSongState),
-                  lightwaveos::synqmatrix::songAwareStateName(st.candidateSongState),
+                  lightwaveos::synqmatrix::songAwareStateName(st.rawState),
+                  lightwaveos::synqmatrix::songAwareStateName(st.previousState),
+                  lightwaveos::synqmatrix::songAwareStateName(st.candidateState),
                   lightwaveos::synqmatrix::songAwareClassificationReasonName(st.classificationReason),
                   lightwaveos::synqmatrix::songAwareSuppressedReasonName(st.previousSuppressedReason),
                   st.selectionScore);

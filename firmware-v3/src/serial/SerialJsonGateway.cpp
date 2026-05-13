@@ -183,10 +183,10 @@ static void appendSynqMatrixStatus(JsonObject data,
         lightwaveos::synqmatrix::songAwareSuppressedReasonName(status.previousSuppressedReason);
     data["classificationReason"] =
         lightwaveos::synqmatrix::songAwareClassificationReasonName(status.classificationReason);
-    data["rawSongState"] = lightwaveos::synqmatrix::songAwareStateName(status.rawSongState);
-    data["previousSongState"] = lightwaveos::synqmatrix::songAwareStateName(status.previousSongState);
-    data["currentSongState"] = lightwaveos::synqmatrix::songAwareStateName(status.currentSongState);
-    data["candidateSongState"] = lightwaveos::synqmatrix::songAwareStateName(status.candidateSongState);
+    data["rawSongState"] = lightwaveos::synqmatrix::songAwareStateName(status.rawState);
+    data["previousSongState"] = lightwaveos::synqmatrix::songAwareStateName(status.previousState);
+    data["currentSongState"] = lightwaveos::synqmatrix::songAwareStateName(status.currentState);
+    data["candidateSongState"] = lightwaveos::synqmatrix::songAwareStateName(status.candidateState);
     data["intent"] = lightwaveos::synqmatrix::songAwareIntentName(status.intent);
     data["actionPlan"] = lightwaveos::synqmatrix::songAwareActionPlanName(status.actionPlan);
     data["boundaryGate"] = lightwaveos::synqmatrix::songAwareBoundaryGateName(status.boundaryGate);

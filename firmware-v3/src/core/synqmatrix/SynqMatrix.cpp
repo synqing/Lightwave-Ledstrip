@@ -264,13 +264,13 @@ SynqMatrixStatus SynqMatrix::getStatus() const {
         static_cast<SynqMatrixSuppressedReason>(m_previousSuppressedReason.load(std::memory_order_acquire));
     status.classificationReason =
         static_cast<SynqMatrixClassificationReason>(m_classificationReason.load(std::memory_order_acquire));
-    status.rawSongState =
+    status.rawState =
         static_cast<SynqMatrixState>(m_rawState.load(std::memory_order_acquire));
-    status.previousSongState =
+    status.previousState =
         static_cast<SynqMatrixState>(m_previousState.load(std::memory_order_acquire));
-    status.currentSongState =
+    status.currentState =
         static_cast<SynqMatrixState>(m_currentState.load(std::memory_order_acquire));
-    status.candidateSongState =
+    status.candidateState =
         static_cast<SynqMatrixState>(m_candidateState.load(std::memory_order_acquire));
     status.lastAction = static_cast<SynqMatrixLastAction>(m_lastAction.load(std::memory_order_acquire));
     status.intent = static_cast<SynqMatrixIntent>(m_intent.load(std::memory_order_acquire));
@@ -359,10 +359,10 @@ void SynqMatrix::restoreRuntimeState(const SynqMatrixRuntimeState& state) {
     m_suppressedReason.store(static_cast<uint8_t>(state.status.suppressedReason), std::memory_order_release);
     m_previousSuppressedReason.store(static_cast<uint8_t>(state.status.previousSuppressedReason), std::memory_order_release);
     m_classificationReason.store(static_cast<uint8_t>(state.status.classificationReason), std::memory_order_release);
-    m_rawState.store(static_cast<uint8_t>(state.status.rawSongState), std::memory_order_release);
-    m_previousState.store(static_cast<uint8_t>(state.status.previousSongState), std::memory_order_release);
-    m_currentState.store(static_cast<uint8_t>(state.status.currentSongState), std::memory_order_release);
-    m_candidateState.store(static_cast<uint8_t>(state.status.candidateSongState), std::memory_order_release);
+    m_rawState.store(static_cast<uint8_t>(state.status.rawState), std::memory_order_release);
+    m_previousState.store(static_cast<uint8_t>(state.status.previousState), std::memory_order_release);
+    m_currentState.store(static_cast<uint8_t>(state.status.currentState), std::memory_order_release);
+    m_candidateState.store(static_cast<uint8_t>(state.status.candidateState), std::memory_order_release);
     m_lastAction.store(static_cast<uint8_t>(state.status.lastAction), std::memory_order_release);
     m_intent.store(static_cast<uint8_t>(state.status.intent), std::memory_order_release);
     m_actionPlan.store(static_cast<uint8_t>(state.status.actionPlan), std::memory_order_release);

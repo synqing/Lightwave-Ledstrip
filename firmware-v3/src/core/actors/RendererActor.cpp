@@ -1686,7 +1686,7 @@ bool RendererActor::processSynqMatrixTransition(uint32_t nowMs)
     }
 
     LW_LOGI("SynqMatrix Director transition state=%s confidence=%.3f prev=0x%04X target=0x%04X family=%s language=%s reason=%s",
-            synqmatrix::songAwareStateName(director.getStatus().currentSongState),
+            synqmatrix::songAwareStateName(director.getStatus().currentState),
             director.getStatus().confidence,
             previousEffect,
             targetEffect,

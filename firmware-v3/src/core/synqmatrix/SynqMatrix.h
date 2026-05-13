@@ -160,10 +160,10 @@ struct SynqMatrixStatus {
     SynqMatrixSuppressedReason suppressedReason = SynqMatrixSuppressedReason::Disabled;
     SynqMatrixSuppressedReason previousSuppressedReason = SynqMatrixSuppressedReason::Disabled;
     SynqMatrixClassificationReason classificationReason = SynqMatrixClassificationReason::None;
-    SynqMatrixState rawSongState = SynqMatrixState::Unknown;
-    SynqMatrixState previousSongState = SynqMatrixState::Unknown;
-    SynqMatrixState currentSongState = SynqMatrixState::Unknown;
-    SynqMatrixState candidateSongState = SynqMatrixState::Unknown;
+    SynqMatrixState rawState = SynqMatrixState::Unknown;
+    SynqMatrixState previousState = SynqMatrixState::Unknown;
+    SynqMatrixState currentState = SynqMatrixState::Unknown;
+    SynqMatrixState candidateState = SynqMatrixState::Unknown;
     SynqMatrixLastAction lastAction = SynqMatrixLastAction::None;
     SynqMatrixIntent intent = SynqMatrixIntent::QuietHold;
     SynqMatrixActionPlan actionPlan = SynqMatrixActionPlan::None;

@@ -79,10 +79,10 @@ void encodeStatus(JsonObject& data, const synqmatrix::SynqMatrixStatus& status) 
     data["suppressedReason"] = synqmatrix::songAwareSuppressedReasonName(status.suppressedReason);
     data["previousSuppressedReason"] = synqmatrix::songAwareSuppressedReasonName(status.previousSuppressedReason);
     data["classificationReason"] = synqmatrix::songAwareClassificationReasonName(status.classificationReason);
-    data["rawSongState"] = synqmatrix::songAwareStateName(status.rawSongState);
-    data["previousSongState"] = synqmatrix::songAwareStateName(status.previousSongState);
-    data["currentSongState"] = synqmatrix::songAwareStateName(status.currentSongState);
-    data["candidateSongState"] = synqmatrix::songAwareStateName(status.candidateSongState);
+    data["rawSongState"] = synqmatrix::songAwareStateName(status.rawState);
+    data["previousSongState"] = synqmatrix::songAwareStateName(status.previousState);
+    data["currentSongState"] = synqmatrix::songAwareStateName(status.currentState);
+    data["candidateSongState"] = synqmatrix::songAwareStateName(status.candidateState);
     data["intent"] = synqmatrix::songAwareIntentName(status.intent);
     data["actionPlan"] = synqmatrix::songAwareActionPlanName(status.actionPlan);
     data["boundaryGate"] = synqmatrix::songAwareBoundaryGateName(status.boundaryGate);

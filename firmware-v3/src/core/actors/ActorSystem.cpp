@@ -9,7 +9,6 @@
 #include "ActorSystem.h"
 #include "../../config/effect_ids.h"
 #include <math.h>
-#include <cstdio>
 
 #ifndef NATIVE_BUILD
 #include <Arduino.h>
@@ -429,41 +428,11 @@ bool ActorSystem::setSpeed(uint8_t speed)
 bool ActorSystem::setPalette(uint8_t paletteIndex)
 {
     if (!m_renderer || !m_renderer->isRunning()) {
-        // #region agent log
-        {
-            FILE* f = fopen("/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/.cursor/debug.log", "a");
-            if (f) {
-                fprintf(f,
-                        "{\"sessionId\":\"debug-session\",\"runId\":\"palette-loop-1\",\"hypothesisId\":\"H2\","
-                        "\"location\":\"ActorSystem.cpp:setPalette\",\"message\":\"setPalette rejected (renderer not running)\","
-                        "\"data\":{\"paletteIndex\":%u,\"rendererReady\":false},\"timestamp\":%lu}\n",
-                        static_cast<unsigned>(paletteIndex),
-                        static_cast<unsigned long>(millis()));
-                fclose(f);
-            }
-        }
-        // #endregion
         return false;
     }
 
     Message msg(MessageType::SET_PALETTE, paletteIndex);
     bool success = m_renderer->send(msg, pdMS_TO_TICKS(10));
-    // #region agent log
-    {
-        FILE* f = fopen("/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/.cursor/debug.log", "a");
-        if (f) {
-            fprintf(f,
-                    "{\"sessionId\":\"debug-session\",\"runId\":\"palette-loop-1\",\"hypothesisId\":\"H2\","
-                    "\"location\":\"ActorSystem.cpp:setPalette\",\"message\":\"setPalette dispatched\","
-                    "\"data\":{\"paletteIndex\":%u,\"success\":%s,\"queueUtil\":%u},\"timestamp\":%lu}\n",
-                    static_cast<unsigned>(paletteIndex),
-                    success ? "true" : "false",
-                    static_cast<unsigned>(m_renderer->getQueueUtilization()),
-                    static_cast<unsigned long>(millis()));
-            fclose(f);
-        }
-    }
-    // #endregion
     return success;
 }
 

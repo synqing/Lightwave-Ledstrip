@@ -38,7 +38,7 @@ enum class CaptureResult : uint8_t {
 };
 
 struct CaptureStats {
-    uint32_t hopsCapured;
+    uint32_t hopsCaptured;
     uint32_t dmaTimeouts;
     uint32_t readErrors;
     uint32_t maxReadTimeUs;
@@ -46,7 +46,7 @@ struct CaptureStats {
     int16_t  peakSample;
 
     void reset() {
-        hopsCapured = 0;
+        hopsCaptured = 0;
         dmaTimeouts = 0;
         readErrors = 0;
         maxReadTimeUs = 0;

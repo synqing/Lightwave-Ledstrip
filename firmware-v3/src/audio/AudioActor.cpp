@@ -1311,7 +1311,7 @@ void AudioActor::printStatus()
                   frame.tempoLocked ? "YES" : "no");
 
     const CaptureStats& cstats = m_capture.getStats();
-    Serial.printf("  Captures: %lu (failed: %lu)\n", cstats.hopsCapured, m_stats.captureFailCount);
+    Serial.printf("  Captures: %lu (failed: %lu)\n", cstats.hopsCaptured, m_stats.captureFailCount);
     Serial.printf("  Hops: %lu\n", (unsigned long)m_hopCount);
 
     // Spike stats
@@ -2517,7 +2517,7 @@ void AudioActor::printStatus()
     Serial.printf("  DC Estimate: %.1f\n", m_lastDcEstimate);
     Serial.printf("  Noise Floor: %.5f\n", m_noiseFloor);
     Serial.printf("  Clips: %u\n", (unsigned)m_lastClipCount);
-    Serial.printf("  Captures: %lu (failed: %lu)\n", cstats.hopsCapured, m_stats.captureFailCount);
+    Serial.printf("  Captures: %lu (failed: %lu)\n", cstats.hopsCaptured, m_stats.captureFailCount);
     Serial.printf("  Peak: %d (centered: %d)\n", cstats.peakSample, m_lastPeakCentered);
     Serial.printf("  Onset: in=%.5f floor=%.5f act=%.3f gate[abs=%u act=%u prev=%u warm=%u] flux=%.3f env=%.3f evt=%.3f k/s/h=%u/%u/%u us=%u\n",
                   m_lastOnsetInputRms,

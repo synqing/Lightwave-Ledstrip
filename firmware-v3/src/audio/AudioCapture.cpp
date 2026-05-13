@@ -193,7 +193,7 @@ CaptureResult AudioCapture::captureHop(int16_t* buffer)
         if (absSample > peak) peak = absSample;
     }
 
-    m_stats.hopsCapured++;
+    m_stats.hopsCaptured++;
     m_stats.peakSample = peak;
 
     return CaptureResult::SUCCESS;
@@ -297,7 +297,7 @@ CaptureResult AudioCapture::captureHop(int16_t* buffer)
         if (absSample > peak) peak = absSample;
     }
 
-    m_stats.hopsCapured++;
+    m_stats.hopsCaptured++;
     m_stats.peakSample = peak;
 
     return CaptureResult::SUCCESS;
@@ -344,7 +344,7 @@ CaptureResult AudioCapture::captureHopNonBlocking(int16_t* buffer)
         if (absSample > peak) peak = absSample;
     }
 
-    m_stats.hopsCapured++;
+    m_stats.hopsCaptured++;
     m_stats.peakSample = peak;
     return CaptureResult::SUCCESS;
 
@@ -385,7 +385,7 @@ CaptureResult AudioCapture::captureHopNonBlocking(int16_t* buffer)
         if (absSample > peak) peak = absSample;
     }
 
-    m_stats.hopsCapured++;
+    m_stats.hopsCaptured++;
     m_stats.peakSample = peak;
     return CaptureResult::SUCCESS;
 #endif
@@ -433,7 +433,7 @@ CaptureResult AudioCapture::captureHopWithTimeout(int16_t* buffer, uint32_t time
         if (absSample > peak) peak = absSample;
     }
 
-    m_stats.hopsCapured++;
+    m_stats.hopsCaptured++;
     m_stats.peakSample = peak;
     return CaptureResult::SUCCESS;
 
@@ -476,7 +476,7 @@ CaptureResult AudioCapture::captureHopWithTimeout(int16_t* buffer, uint32_t time
         if (absSample > peak) peak = absSample;
     }
 
-    m_stats.hopsCapured++;
+    m_stats.hopsCaptured++;
     m_stats.peakSample = peak;
     return CaptureResult::SUCCESS;
 #endif

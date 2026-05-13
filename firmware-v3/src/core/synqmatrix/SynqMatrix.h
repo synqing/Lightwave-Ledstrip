@@ -493,17 +493,17 @@ private:
     std::atomic<uint16_t> m_policyAllowMask{0x01FF};
 };
 
-const char* songAwareModeName(SynqMatrixMode mode);
-const char* songAwareProfileName(SynqMatrixProfile profile);
-const char* songAwareOwnerName(SynqMatrixOwner owner);
-const char* songAwareSuppressedReasonName(SynqMatrixSuppressedReason reason);
-const char* songAwareStateName(SynqMatrixState state);
-const char* songAwareLastActionName(SynqMatrixLastAction action);
-const char* songAwareActionPlanName(SynqMatrixActionPlan action);
-const char* songAwareIntentName(SynqMatrixIntent intent);
-const char* songAwareBoundaryGateName(SynqMatrixBoundaryGate gate);
-const char* songAwareSwitchReasonName(SynqMatrixSwitchReason reason);
-const char* songAwareClassificationReasonName(SynqMatrixClassificationReason reason);
+const char* synqMatrixModeName(SynqMatrixMode mode);
+const char* synqMatrixProfileName(SynqMatrixProfile profile);
+const char* synqMatrixOwnerName(SynqMatrixOwner owner);
+const char* synqMatrixSuppressedReasonName(SynqMatrixSuppressedReason reason);
+const char* synqMatrixStateName(SynqMatrixState state);
+const char* synqMatrixLastActionName(SynqMatrixLastAction action);
+const char* synqMatrixActionPlanName(SynqMatrixActionPlan action);
+const char* synqMatrixIntentName(SynqMatrixIntent intent);
+const char* synqMatrixBoundaryGateName(SynqMatrixBoundaryGate gate);
+const char* synqMatrixSwitchReasonName(SynqMatrixSwitchReason reason);
+const char* synqMatrixClassificationReasonName(SynqMatrixClassificationReason reason);
 SynqMatrixMode parseSynqMatrixMode(const char* value, bool* ok = nullptr);
 SynqMatrixProfile parseSynqMatrixProfile(const char* value, bool* ok = nullptr);
 SynqMatrixState parseSynqMatrixState(const char* value, bool* ok = nullptr);

@@ -310,7 +310,7 @@ SynqMatrixStatus SynqMatrix::getStatus() const {
     const DirectorPolicy& policy = policyByIndex(m_selectedPolicyIndex.load(std::memory_order_acquire));
     status.selectedFamily = policy.family;
     status.selectedVisualLanguage = policy.visualLanguage;
-    status.lastSwitchReason = songAwareSwitchReasonName(
+    status.lastSwitchReason = synqMatrixSwitchReasonName(
         static_cast<SynqMatrixSwitchReason>(m_lastSwitchReason.load(std::memory_order_acquire)));
 
     status.transitionActive = m_transitionActive.load(std::memory_order_acquire);
@@ -736,7 +736,7 @@ bool SynqMatrix::tick(const audio::ControlBusFrame& frame,
     request.targetEffectId = policy.effectId;
     request.targetFamily = policy.family;
     request.targetVisualLanguage = policy.visualLanguage;
-    request.reason = songAwareSwitchReasonName(policy.reason);
+    request.reason = synqMatrixSwitchReasonName(policy.reason);
     m_dwellRemainingMs.store(0, std::memory_order_release);
     m_cooldownRemainingMs.store(0, std::memory_order_release);
     m_actionPlan.store(static_cast<uint8_t>(SynqMatrixActionPlan::EffectSwitch), std::memory_order_release);
@@ -1441,7 +1441,7 @@ float SynqMatrix::unscaleFloat(uint16_t value) {
     return static_cast<float>(value) * 0.001f;
 }
 
-const char* songAwareModeName(SynqMatrixMode mode) {
+const char* synqMatrixModeName(SynqMatrixMode mode) {
     switch (mode) {
         case SynqMatrixMode::Off: return "off";
         case SynqMatrixMode::Assist: return "assist";
@@ -1450,7 +1450,7 @@ const char* songAwareModeName(SynqMatrixMode mode) {
     }
 }
 
-const char* songAwareProfileName(SynqMatrixProfile profile) {
+const char* synqMatrixProfileName(SynqMatrixProfile profile) {
     switch (profile) {
         case SynqMatrixProfile::Subtle: return "subtle";
         case SynqMatrixProfile::Balanced: return "balanced";
@@ -1459,7 +1459,7 @@ const char* songAwareProfileName(SynqMatrixProfile profile) {
     }
 }
 
-const char* songAwareOwnerName(SynqMatrixOwner owner) {
+const char* synqMatrixOwnerName(SynqMatrixOwner owner) {
     switch (owner) {
         case SynqMatrixOwner::None: return "none";
         case SynqMatrixOwner::Director: return "director";
@@ -1469,7 +1469,7 @@ const char* songAwareOwnerName(SynqMatrixOwner owner) {
     }
 }
 
-const char* songAwareSuppressedReasonName(SynqMatrixSuppressedReason reason) {
+const char* synqMatrixSuppressedReasonName(SynqMatrixSuppressedReason reason) {
     switch (reason) {
         case SynqMatrixSuppressedReason::None: return "none";
         case SynqMatrixSuppressedReason::Disabled: return "disabled";
@@ -1498,7 +1498,7 @@ const char* songAwareSuppressedReasonName(SynqMatrixSuppressedReason reason) {
     }
 }
 
-const char* songAwareStateName(SynqMatrixState state) {
+const char* synqMatrixStateName(SynqMatrixState state) {
     switch (state) {
         case SynqMatrixState::Unknown: return "unknown";
         case SynqMatrixState::Silence: return "silence";
@@ -1513,7 +1513,7 @@ const char* songAwareStateName(SynqMatrixState state) {
     }
 }
 
-const char* songAwareLastActionName(SynqMatrixLastAction action) {
+const char* synqMatrixLastActionName(SynqMatrixLastAction action) {
     switch (action) {
         case SynqMatrixLastAction::None: return "none";
         case SynqMatrixLastAction::ParameterUpdate: return "parameter_update";
@@ -1523,7 +1523,7 @@ const char* songAwareLastActionName(SynqMatrixLastAction action) {
     }
 }
 
-const char* songAwareActionPlanName(SynqMatrixActionPlan action) {
+const char* synqMatrixActionPlanName(SynqMatrixActionPlan action) {
     switch (action) {
         case SynqMatrixActionPlan::None: return "none";
         case SynqMatrixActionPlan::ParameterModulation: return "parameter_modulation";
@@ -1536,7 +1536,7 @@ const char* songAwareActionPlanName(SynqMatrixActionPlan action) {
     }
 }
 
-const char* songAwareIntentName(SynqMatrixIntent intent) {
+const char* synqMatrixIntentName(SynqMatrixIntent intent) {
     switch (intent) {
         case SynqMatrixIntent::QuietHold: return "quiet_hold";
         case SynqMatrixIntent::CalmHold: return "calm_hold";
@@ -1550,7 +1550,7 @@ const char* songAwareIntentName(SynqMatrixIntent intent) {
     }
 }
 
-const char* songAwareBoundaryGateName(SynqMatrixBoundaryGate gate) {
+const char* synqMatrixBoundaryGateName(SynqMatrixBoundaryGate gate) {
     switch (gate) {
         case SynqMatrixBoundaryGate::NotRequired: return "not_required";
         case SynqMatrixBoundaryGate::WaitingForBoundary: return "waiting_for_boundary";
@@ -1561,7 +1561,7 @@ const char* songAwareBoundaryGateName(SynqMatrixBoundaryGate gate) {
     }
 }
 
-const char* songAwareSwitchReasonName(SynqMatrixSwitchReason reason) {
+const char* synqMatrixSwitchReasonName(SynqMatrixSwitchReason reason) {
     switch (reason) {
         case SynqMatrixSwitchReason::None: return "none";
         case SynqMatrixSwitchReason::AmbientPosture: return "ambient_posture";
@@ -1575,7 +1575,7 @@ const char* songAwareSwitchReasonName(SynqMatrixSwitchReason reason) {
     }
 }
 
-const char* songAwareClassificationReasonName(SynqMatrixClassificationReason reason) {
+const char* synqMatrixClassificationReasonName(SynqMatrixClassificationReason reason) {
     switch (reason) {
         case SynqMatrixClassificationReason::None: return "none";
         case SynqMatrixClassificationReason::NoAudio: return "no_audio";

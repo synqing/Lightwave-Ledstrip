@@ -28,8 +28,8 @@ void captureRestorePoint() {
 
 void encodeConfig(JsonObject& data, const synqmatrix::SynqMatrixConfig& config) {
     data["enabled"] = config.enabled;
-    data["mode"] = synqmatrix::songAwareModeName(config.mode);
-    data["profile"] = synqmatrix::songAwareProfileName(config.profile);
+    data["mode"] = synqmatrix::synqMatrixModeName(config.mode);
+    data["profile"] = synqmatrix::synqMatrixProfileName(config.profile);
     data["switchingEnabled"] = config.switchingEnabled;
     data["familyMorphing"] = config.familyMorphing;
     data["constrainedSwitching"] = config.constrainedSwitching;
@@ -40,11 +40,11 @@ void encodeConfig(JsonObject& data, const synqmatrix::SynqMatrixConfig& config) 
 }
 
 void encodePolicy(JsonObject data, const synqmatrix::SynqMatrixPolicySnapshot& policy) {
-    data["state"] = synqmatrix::songAwareStateName(policy.state);
+    data["state"] = synqmatrix::synqMatrixStateName(policy.state);
     data["effectId"] = policy.effectId;
     data["family"] = policy.family;
     data["visualLanguage"] = policy.visualLanguage;
-    data["reason"] = synqmatrix::songAwareSwitchReasonName(policy.reason);
+    data["reason"] = synqmatrix::synqMatrixSwitchReasonName(policy.reason);
     data["minConfidence"] = policy.minConfidence;
     data["enabled"] = policy.enabled;
 }
@@ -70,26 +70,26 @@ void encodeHealth(JsonObject data, const synqmatrix::SynqMatrixStatus& status) {
 
 void encodeStatus(JsonObject& data, const synqmatrix::SynqMatrixStatus& status) {
     data["enabled"] = status.enabled;
-    data["mode"] = synqmatrix::songAwareModeName(status.effectiveMode);
-    data["effectiveMode"] = synqmatrix::songAwareModeName(status.effectiveMode);
-    data["profile"] = synqmatrix::songAwareProfileName(status.profile);
-    data["owner"] = synqmatrix::songAwareOwnerName(status.owner);
-    data["suppressedReason"] = synqmatrix::songAwareSuppressedReasonName(status.suppressedReason);
-    data["previousSuppressedReason"] = synqmatrix::songAwareSuppressedReasonName(status.previousSuppressedReason);
-    data["classificationReason"] = synqmatrix::songAwareClassificationReasonName(status.classificationReason);
-    data["rawSongState"] = synqmatrix::songAwareStateName(status.rawState);
-    data["previousSongState"] = synqmatrix::songAwareStateName(status.previousState);
-    data["currentSongState"] = synqmatrix::songAwareStateName(status.currentState);
-    data["candidateSongState"] = synqmatrix::songAwareStateName(status.candidateState);
-    data["intent"] = synqmatrix::songAwareIntentName(status.intent);
-    data["actionPlan"] = synqmatrix::songAwareActionPlanName(status.actionPlan);
-    data["boundaryGate"] = synqmatrix::songAwareBoundaryGateName(status.boundaryGate);
+    data["mode"] = synqmatrix::synqMatrixModeName(status.effectiveMode);
+    data["effectiveMode"] = synqmatrix::synqMatrixModeName(status.effectiveMode);
+    data["profile"] = synqmatrix::synqMatrixProfileName(status.profile);
+    data["owner"] = synqmatrix::synqMatrixOwnerName(status.owner);
+    data["suppressedReason"] = synqmatrix::synqMatrixSuppressedReasonName(status.suppressedReason);
+    data["previousSuppressedReason"] = synqmatrix::synqMatrixSuppressedReasonName(status.previousSuppressedReason);
+    data["classificationReason"] = synqmatrix::synqMatrixClassificationReasonName(status.classificationReason);
+    data["rawSongState"] = synqmatrix::synqMatrixStateName(status.rawState);
+    data["previousSongState"] = synqmatrix::synqMatrixStateName(status.previousState);
+    data["currentSongState"] = synqmatrix::synqMatrixStateName(status.currentState);
+    data["candidateSongState"] = synqmatrix::synqMatrixStateName(status.candidateState);
+    data["intent"] = synqmatrix::synqMatrixIntentName(status.intent);
+    data["actionPlan"] = synqmatrix::synqMatrixActionPlanName(status.actionPlan);
+    data["boundaryGate"] = synqmatrix::synqMatrixBoundaryGateName(status.boundaryGate);
     data["boundaryReady"] = status.boundaryReady;
     data["waitingForBoundary"] = status.waitingForBoundary;
     data["boundaryConfidence"] = status.boundaryConfidence;
     data["confidence"] = status.confidence;
     data["selectionScore"] = status.selectionScore;
-    data["lastAction"] = synqmatrix::songAwareLastActionName(status.lastAction);
+    data["lastAction"] = synqmatrix::synqMatrixLastActionName(status.lastAction);
     data["activeEffectId"] = status.activeEffectId;
     data["previousEffectId"] = status.previousEffectId;
     data["selectedEffectId"] = status.selectedEffectId;

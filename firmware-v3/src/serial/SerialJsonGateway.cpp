@@ -117,19 +117,19 @@ static void appendColorCorrectionConfig(JsonObject data,
     data["saturationBoostAmount"] = cfg.saturationBoostAmount;
 }
 
-static lightwaveos::synqmatrix::SynqMatrixRuntimeState g_songAwareRestorePoint;
-static bool g_songAwareRestorePointValid = false;
+static lightwaveos::synqmatrix::SynqMatrixRuntimeState g_synqMatrixRestorePoint;
+static bool g_synqMatrixRestorePointValid = false;
 
 static void captureSynqMatrixRestorePoint() {
-    g_songAwareRestorePoint = lightwaveos::synqmatrix::SynqMatrix::instance().exportRuntimeState();
-    g_songAwareRestorePointValid = true;
+    g_synqMatrixRestorePoint = lightwaveos::synqmatrix::SynqMatrix::instance().exportRuntimeState();
+    g_synqMatrixRestorePointValid = true;
 }
 
 static void appendSynqMatrixConfig(JsonObject data,
                                   const lightwaveos::synqmatrix::SynqMatrixConfig& config) {
     data["enabled"] = config.enabled;
-    data["mode"] = lightwaveos::synqmatrix::songAwareModeName(config.mode);
-    data["profile"] = lightwaveos::synqmatrix::songAwareProfileName(config.profile);
+    data["mode"] = lightwaveos::synqmatrix::synqMatrixModeName(config.mode);
+    data["profile"] = lightwaveos::synqmatrix::synqMatrixProfileName(config.profile);
     data["switchingEnabled"] = config.switchingEnabled;
     data["familyMorphing"] = config.familyMorphing;
     data["constrainedSwitching"] = config.constrainedSwitching;
@@ -141,11 +141,11 @@ static void appendSynqMatrixConfig(JsonObject data,
 
 static void appendSynqMatrixPolicy(JsonObject data,
                                   const lightwaveos::synqmatrix::SynqMatrixPolicySnapshot& policy) {
-    data["state"] = lightwaveos::synqmatrix::songAwareStateName(policy.state);
+    data["state"] = lightwaveos::synqmatrix::synqMatrixStateName(policy.state);
     data["effectId"] = policy.effectId;
     data["family"] = policy.family;
     data["visualLanguage"] = policy.visualLanguage;
-    data["reason"] = lightwaveos::synqmatrix::songAwareSwitchReasonName(policy.reason);
+    data["reason"] = lightwaveos::synqmatrix::synqMatrixSwitchReasonName(policy.reason);
     data["minConfidence"] = policy.minConfidence;
     data["enabled"] = policy.enabled;
 }
@@ -174,28 +174,28 @@ static void appendSynqMatrixHealth(JsonObject data,
 static void appendSynqMatrixStatus(JsonObject data,
                                   const lightwaveos::synqmatrix::SynqMatrixStatus& status) {
     data["enabled"] = status.enabled;
-    data["mode"] = lightwaveos::synqmatrix::songAwareModeName(status.effectiveMode);
-    data["effectiveMode"] = lightwaveos::synqmatrix::songAwareModeName(status.effectiveMode);
-    data["profile"] = lightwaveos::synqmatrix::songAwareProfileName(status.profile);
-    data["owner"] = lightwaveos::synqmatrix::songAwareOwnerName(status.owner);
-    data["suppressedReason"] = lightwaveos::synqmatrix::songAwareSuppressedReasonName(status.suppressedReason);
+    data["mode"] = lightwaveos::synqmatrix::synqMatrixModeName(status.effectiveMode);
+    data["effectiveMode"] = lightwaveos::synqmatrix::synqMatrixModeName(status.effectiveMode);
+    data["profile"] = lightwaveos::synqmatrix::synqMatrixProfileName(status.profile);
+    data["owner"] = lightwaveos::synqmatrix::synqMatrixOwnerName(status.owner);
+    data["suppressedReason"] = lightwaveos::synqmatrix::synqMatrixSuppressedReasonName(status.suppressedReason);
     data["previousSuppressedReason"] =
-        lightwaveos::synqmatrix::songAwareSuppressedReasonName(status.previousSuppressedReason);
+        lightwaveos::synqmatrix::synqMatrixSuppressedReasonName(status.previousSuppressedReason);
     data["classificationReason"] =
-        lightwaveos::synqmatrix::songAwareClassificationReasonName(status.classificationReason);
-    data["rawSongState"] = lightwaveos::synqmatrix::songAwareStateName(status.rawState);
-    data["previousSongState"] = lightwaveos::synqmatrix::songAwareStateName(status.previousState);
-    data["currentSongState"] = lightwaveos::synqmatrix::songAwareStateName(status.currentState);
-    data["candidateSongState"] = lightwaveos::synqmatrix::songAwareStateName(status.candidateState);
-    data["intent"] = lightwaveos::synqmatrix::songAwareIntentName(status.intent);
-    data["actionPlan"] = lightwaveos::synqmatrix::songAwareActionPlanName(status.actionPlan);
-    data["boundaryGate"] = lightwaveos::synqmatrix::songAwareBoundaryGateName(status.boundaryGate);
+        lightwaveos::synqmatrix::synqMatrixClassificationReasonName(status.classificationReason);
+    data["rawSongState"] = lightwaveos::synqmatrix::synqMatrixStateName(status.rawState);
+    data["previousSongState"] = lightwaveos::synqmatrix::synqMatrixStateName(status.previousState);
+    data["currentSongState"] = lightwaveos::synqmatrix::synqMatrixStateName(status.currentState);
+    data["candidateSongState"] = lightwaveos::synqmatrix::synqMatrixStateName(status.candidateState);
+    data["intent"] = lightwaveos::synqmatrix::synqMatrixIntentName(status.intent);
+    data["actionPlan"] = lightwaveos::synqmatrix::synqMatrixActionPlanName(status.actionPlan);
+    data["boundaryGate"] = lightwaveos::synqmatrix::synqMatrixBoundaryGateName(status.boundaryGate);
     data["boundaryReady"] = status.boundaryReady;
     data["waitingForBoundary"] = status.waitingForBoundary;
     data["boundaryConfidence"] = status.boundaryConfidence;
     data["confidence"] = status.confidence;
     data["selectionScore"] = status.selectionScore;
-    data["lastAction"] = lightwaveos::synqmatrix::songAwareLastActionName(status.lastAction);
+    data["lastAction"] = lightwaveos::synqmatrix::synqMatrixLastActionName(status.lastAction);
     data["activeEffectId"] = status.activeEffectId;
     data["previousEffectId"] = status.previousEffectId;
     data["selectedEffectId"] = status.selectedEffectId;
@@ -888,11 +888,11 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
         serialJsonDocResponse(type, reqId, respDoc);
     }
     else if (strcmp(type, "songAware.restore") == 0) {
-        if (!g_songAwareRestorePointValid) {
+        if (!g_synqMatrixRestorePointValid) {
             serialJsonError(reqId, "no restore point captured in this serial JSON session");
             return;
         }
-        lightwaveos::synqmatrix::SynqMatrix::instance().restoreRuntimeState(g_songAwareRestorePoint);
+        lightwaveos::synqmatrix::SynqMatrix::instance().restoreRuntimeState(g_synqMatrixRestorePoint);
         const auto status = lightwaveos::synqmatrix::SynqMatrix::instance().getStatus();
         JsonDocument respDoc;
         JsonObject data = respDoc.to<JsonObject>();

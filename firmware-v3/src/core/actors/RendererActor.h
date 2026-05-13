@@ -1018,14 +1018,14 @@ public:
     // ========================================================================
 
 #if FEATURE_AUDIO_SYNC
-    bool m_songAwareDirectorTransitionQueued = false;
-    bool m_songAwareDirectorTransitionPreparing = false;
-    bool m_songAwareDirectorTransitionActiveNotified = false;
-    EffectId m_songAwareDirectorPreviousEffect = INVALID_EFFECT_ID;
-    EffectId m_songAwareDirectorTargetEffect = INVALID_EFFECT_ID;
-    const char* m_songAwareDirectorTargetFamily = "none";
-    const char* m_songAwareDirectorTargetLanguage = "none";
-    const char* m_songAwareDirectorTransitionReason = "none";
+    bool m_synqMatrixDirectorTransitionQueued = false;
+    bool m_synqMatrixDirectorTransitionPreparing = false;
+    bool m_synqMatrixDirectorTransitionActiveNotified = false;
+    EffectId m_synqMatrixDirectorPreviousEffect = INVALID_EFFECT_ID;
+    EffectId m_synqMatrixDirectorTargetEffect = INVALID_EFFECT_ID;
+    const char* m_synqMatrixDirectorTargetFamily = "none";
+    const char* m_synqMatrixDirectorTargetLanguage = "none";
+    const char* m_synqMatrixDirectorTransitionReason = "none";
 
     /**
      * MusicalGrid PLL - owned by renderer for 120 FPS Tick()

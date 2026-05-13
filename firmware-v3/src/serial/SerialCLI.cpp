@@ -90,8 +90,8 @@ namespace serial {
 
 namespace {
 
-lightwaveos::synqmatrix::SynqMatrixRuntimeState g_songAwareRestorePoint;
-bool g_songAwareRestorePointValid = false;
+lightwaveos::synqmatrix::SynqMatrixRuntimeState g_synqMatrixRestorePoint;
+bool g_synqMatrixRestorePointValid = false;
 
 const char* boolName(bool value) {
     return value ? "true" : "false";
@@ -111,8 +111,8 @@ void printSynqMatrixStatus() {
     }
     Serial.printf("songAware: enabled=%s mode=%s profile=%s switchingEnabled=%s familyMorphing=%s sensitivity=%.3f intensityScalar=%.3f motionScalar=%.3f confidenceFloor=%.3f\n",
                   boolName(cfg.enabled),
-                  lightwaveos::synqmatrix::songAwareModeName(cfg.mode),
-                  lightwaveos::synqmatrix::songAwareProfileName(cfg.profile),
+                  lightwaveos::synqmatrix::synqMatrixModeName(cfg.mode),
+                  lightwaveos::synqmatrix::synqMatrixProfileName(cfg.profile),
                   boolName(cfg.switchingEnabled),
                   boolName(cfg.familyMorphing),
                   cfg.sensitivity,
@@ -120,16 +120,16 @@ void printSynqMatrixStatus() {
                   cfg.motionScalar,
                   cfg.confidenceFloor);
     Serial.printf("songAware_status: mode=%s profile=%s owner=%s suppressed=%s state=%s intent=%s confidence=%.3f lastAction=%s actionPlan=%s boundary=%s ready=%s activeEffect=0x%04X activeEffectName=\"%s\" parameterUpdates=%lu automaticEffectSwitches=%lu lastDecisionAtMs=%lu\n",
-                  lightwaveos::synqmatrix::songAwareModeName(st.effectiveMode),
-                  lightwaveos::synqmatrix::songAwareProfileName(st.profile),
-                  lightwaveos::synqmatrix::songAwareOwnerName(st.owner),
-                  lightwaveos::synqmatrix::songAwareSuppressedReasonName(st.suppressedReason),
-                  lightwaveos::synqmatrix::songAwareStateName(st.currentState),
-                  lightwaveos::synqmatrix::songAwareIntentName(st.intent),
+                  lightwaveos::synqmatrix::synqMatrixModeName(st.effectiveMode),
+                  lightwaveos::synqmatrix::synqMatrixProfileName(st.profile),
+                  lightwaveos::synqmatrix::synqMatrixOwnerName(st.owner),
+                  lightwaveos::synqmatrix::synqMatrixSuppressedReasonName(st.suppressedReason),
+                  lightwaveos::synqmatrix::synqMatrixStateName(st.currentState),
+                  lightwaveos::synqmatrix::synqMatrixIntentName(st.intent),
                   st.confidence,
-                  lightwaveos::synqmatrix::songAwareLastActionName(st.lastAction),
-                  lightwaveos::synqmatrix::songAwareActionPlanName(st.actionPlan),
-                  lightwaveos::synqmatrix::songAwareBoundaryGateName(st.boundaryGate),
+                  lightwaveos::synqmatrix::synqMatrixLastActionName(st.lastAction),
+                  lightwaveos::synqmatrix::synqMatrixActionPlanName(st.actionPlan),
+                  lightwaveos::synqmatrix::synqMatrixBoundaryGateName(st.boundaryGate),
                   boolName(st.boundaryReady),
                   static_cast<unsigned>(st.activeEffectId),
                   activeEffectName,
@@ -161,30 +161,30 @@ void printSynqMatrixCompactStatus() {
     const auto st = lightwaveos::synqmatrix::SynqMatrix::instance().getStatus();
     Serial.printf("sa: enabled=%s mode=%s profile=%s switching=%s state=%s intent=%s confidence=%.2f gate=%s boundary=%s action=%s\n",
                   boolName(cfg.enabled),
-                  lightwaveos::synqmatrix::songAwareModeName(cfg.mode),
-                  lightwaveos::synqmatrix::songAwareProfileName(cfg.profile),
+                  lightwaveos::synqmatrix::synqMatrixModeName(cfg.mode),
+                  lightwaveos::synqmatrix::synqMatrixProfileName(cfg.profile),
                   boolName(cfg.switchingEnabled),
-                  lightwaveos::synqmatrix::songAwareStateName(st.currentState),
-                  lightwaveos::synqmatrix::songAwareIntentName(st.intent),
+                  lightwaveos::synqmatrix::synqMatrixStateName(st.currentState),
+                  lightwaveos::synqmatrix::synqMatrixIntentName(st.intent),
                   st.confidence,
-                  lightwaveos::synqmatrix::songAwareSuppressedReasonName(st.suppressedReason),
-                  lightwaveos::synqmatrix::songAwareBoundaryGateName(st.boundaryGate),
-                  lightwaveos::synqmatrix::songAwareActionPlanName(st.actionPlan));
+                  lightwaveos::synqmatrix::synqMatrixSuppressedReasonName(st.suppressedReason),
+                  lightwaveos::synqmatrix::synqMatrixBoundaryGateName(st.boundaryGate),
+                  lightwaveos::synqmatrix::synqMatrixActionPlanName(st.actionPlan));
 }
 
 void captureSynqMatrixRestorePoint() {
-    g_songAwareRestorePoint = lightwaveos::synqmatrix::SynqMatrix::instance().exportRuntimeState();
-    g_songAwareRestorePointValid = true;
+    g_synqMatrixRestorePoint = lightwaveos::synqmatrix::SynqMatrix::instance().exportRuntimeState();
+    g_synqMatrixRestorePointValid = true;
 }
 
 void printSynqMatrixPolicySnapshot(const lightwaveos::synqmatrix::SynqMatrixPolicySnapshot& policy) {
     Serial.printf("  state=%s enabled=%s effect=0x%04X family=%s visualLanguage=%s reason=%s minConfidence=%.3f\n",
-                  lightwaveos::synqmatrix::songAwareStateName(policy.state),
+                  lightwaveos::synqmatrix::synqMatrixStateName(policy.state),
                   boolName(policy.enabled),
                   static_cast<unsigned>(policy.effectId),
                   policy.family,
                   policy.visualLanguage,
-                  lightwaveos::synqmatrix::songAwareSwitchReasonName(policy.reason),
+                  lightwaveos::synqmatrix::synqMatrixSwitchReasonName(policy.reason),
                   policy.minConfidence);
 }
 
@@ -231,11 +231,11 @@ void printSynqMatrixDebug() {
     const auto st = lightwaveos::synqmatrix::SynqMatrix::instance().getStatus();
     printSynqMatrixStatus();
     Serial.printf("songAware_debug: rawState=%s previousState=%s candidateState=%s classificationReason=%s previousSuppressed=%s selectionScore=%.3f\n",
-                  lightwaveos::synqmatrix::songAwareStateName(st.rawState),
-                  lightwaveos::synqmatrix::songAwareStateName(st.previousState),
-                  lightwaveos::synqmatrix::songAwareStateName(st.candidateState),
-                  lightwaveos::synqmatrix::songAwareClassificationReasonName(st.classificationReason),
-                  lightwaveos::synqmatrix::songAwareSuppressedReasonName(st.previousSuppressedReason),
+                  lightwaveos::synqmatrix::synqMatrixStateName(st.rawState),
+                  lightwaveos::synqmatrix::synqMatrixStateName(st.previousState),
+                  lightwaveos::synqmatrix::synqMatrixStateName(st.candidateState),
+                  lightwaveos::synqmatrix::synqMatrixClassificationReasonName(st.classificationReason),
+                  lightwaveos::synqmatrix::synqMatrixSuppressedReasonName(st.previousSuppressedReason),
                   st.selectionScore);
     Serial.printf("songAware_debug_gates: stateAgeMs=%lu candidateAgeMs=%lu candidateHoldRemainingMs=%lu bootGraceRemainingMs=%lu enableGraceRemainingMs=%lu antiThrashRemainingMs=%lu\n",
                   static_cast<unsigned long>(st.stateAgeMs),

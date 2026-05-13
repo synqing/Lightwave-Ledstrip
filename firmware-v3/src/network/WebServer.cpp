@@ -55,7 +55,6 @@
 #include "webserver/ws/WsSynqMatrixCommands.h"
 #include "../effects/enhancement/EdgeMixer.h"
 #include "webserver/ws/WsPaletteCommands.h"
-#include "webserver/ws/WsPresetCommands.h"
 #include "webserver/ws/WsZonePresetCommands.h"
 #include "webserver/ws/WsEffectPresetCommands.h"
 #include "webserver/ws/WsBatchCommands.h"
@@ -1320,7 +1319,6 @@ void WebServer::setupWebSocket() {
     webserver::ws::registerWsRenderCommands(ctx);
     webserver::ws::registerWsSynqMatrixCommands(ctx);
     webserver::ws::registerWsPaletteCommands(ctx);
-    webserver::ws::registerWsPresetCommands(ctx);
     webserver::ws::registerWsZonePresetCommands(ctx);
     webserver::ws::registerWsEffectPresetCommands(ctx);
     webserver::ws::registerWsBatchCommands(ctx);

@@ -1,33 +1,8 @@
-================================================================================
-⚠️  STATUS BANNER — READ THIS BEFORE QUOTING ANY CONTENT BELOW  ⚠️
-================================================================================
-
-THIS DOCUMENT DESCRIBES AN UNIMPLEMENTED API.
-
-Hard facts (verified 2026-05-04):
-- K1 firmware (v3.4) does NOT serve any `/api/v2/` routes.
-- Zero `/api/v2` route registrations exist in the firmware-v3 source tree.
-- Every endpoint described below is SPECIFICATION ONLY — it cannot be called.
-
-If asked "what API does K1 expose?" — the answer is in `firmware-v3_docs_api_api-v1.md`.
-If asked "is `/api/v2/<anything>` available?" — the answer is NO. It has not been implemented.
-
-Why this document is in the corpus:
-- Design-history context for the v2 specification effort.
-- Forward-planning reference for downstream consumers preparing v2 clients.
-- The authoritative protocol surface for the SHIPPING API lives in `_BUNDLE_protocol_contracts.txt` (k1-rest-contract.yaml + k1-ws-contract.yaml).
-
-================================================================================
-
-
 # LightwaveOS API v2 Reference
 
 **Version:** 2.0.0
 **Base URL:** `http://lightwaveos.local/api/v2/` or `http://<device-ip>/api/v2/`
 **Protocol:** HTTP REST + WebSocket
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 ## Table of Contents
 
@@ -49,9 +24,6 @@ Why this document is in the corpus:
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ## Introduction
 
 The LightwaveOS API v2 provides programmatic control over an ESP32-S3 LED control system featuring:
@@ -63,9 +35,6 @@ The LightwaveOS API v2 provides programmatic control over an ESP32-S3 LED contro
 - **CENTER ORIGIN constraint** - all effects originate from LED 79/80
 - **Advanced color engine** - cross-palette blending, diffusion, temporal rotation
 - **Per-effect custom parameters** - semantic control (e.g., "Flame Height")
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 ### What's New in v2
 
@@ -79,15 +48,9 @@ The LightwaveOS API v2 provides programmatic control over an ESP32-S3 LED contro
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ## Response Format
 
 All v2 API responses follow a standardized JSON structure.
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 ### Success Response
 
@@ -101,9 +64,6 @@ All v2 API responses follow a standardized JSON structure.
   "version": "2.0.0"
 }
 ```
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 ### Error Response
 
@@ -127,9 +87,6 @@ All v2 API responses follow a standardized JSON structure.
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ## Error Codes
 
 | Code | HTTP Status | Description |
@@ -146,9 +103,6 @@ All v2 API responses follow a standardized JSON structure.
 | `NOT_IMPLEMENTED` | 501 | Feature not available in current build |
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 ## Rate Limiting
 
@@ -175,18 +129,9 @@ X-RateLimit-Reset: 1640000000
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ## REST API Endpoints
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ### Discovery & Device Endpoints (5)
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 #### `GET /api/v2/`
 
@@ -239,9 +184,6 @@ curl http://lightwaveos.local/api/v2/
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 #### `GET /api/v2/openapi.json`
 
 Get OpenAPI 3.0 specification for the entire API.
@@ -268,9 +210,6 @@ curl http://lightwaveos.local/api/v2/openapi.json
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 #### `GET /api/v2/device`
 
@@ -319,9 +258,6 @@ curl http://lightwaveos.local/api/v2/device
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 #### `GET /api/v2/device/status`
 
 Get device runtime status only.
@@ -359,9 +295,6 @@ curl http://lightwaveos.local/api/v2/device/status
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 #### `GET /api/v2/device/info`
 
 Get device hardware and firmware information only.
@@ -393,13 +326,7 @@ curl http://lightwaveos.local/api/v2/device/info
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ### Effects Endpoints (5)
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 #### `GET /api/v2/effects`
 
@@ -483,9 +410,6 @@ curl "http://lightwaveos.local/api/v2/effects?category=2"
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 #### `GET /api/v2/effects/current`
 
 Get currently active effect with all parameters.
@@ -519,9 +443,6 @@ curl http://lightwaveos.local/api/v2/effects/current
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 #### `PUT /api/v2/effects/current`
 
@@ -572,9 +493,6 @@ curl -X PUT http://lightwaveos.local/api/v2/effects/current \
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 #### `GET /api/v2/effects/{id}`
 
@@ -635,9 +553,6 @@ curl http://lightwaveos.local/api/v2/effects/9
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 #### `GET /api/v2/effects/categories`
 
 Get list of all effect categories with counts.
@@ -680,13 +595,7 @@ curl http://lightwaveos.local/api/v2/effects/categories
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ### Parameters Endpoints (4)
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 #### `GET /api/v2/parameters`
 
@@ -716,9 +625,6 @@ curl http://lightwaveos.local/api/v2/parameters
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 #### `PATCH /api/v2/parameters`
 
@@ -775,9 +681,6 @@ curl -X PATCH http://lightwaveos.local/api/v2/parameters \
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 #### `GET /api/v2/parameters/{name}`
 
 Get a specific parameter value.
@@ -810,9 +713,6 @@ curl http://lightwaveos.local/api/v2/parameters/brightness
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 #### `PUT /api/v2/parameters/{name}`
 
@@ -854,13 +754,7 @@ curl -X PUT http://lightwaveos.local/api/v2/parameters/brightness \
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ### Transitions Endpoints (4)
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 #### `GET /api/v2/transitions`
 
@@ -933,9 +827,6 @@ curl http://lightwaveos.local/api/v2/transitions
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 #### `GET /api/v2/transitions/config`
 
 Get current transition configuration.
@@ -962,9 +853,6 @@ curl http://lightwaveos.local/api/v2/transitions/config
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 #### `PATCH /api/v2/transitions/config`
 
@@ -1005,9 +893,6 @@ curl -X PATCH http://lightwaveos.local/api/v2/transitions/config \
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 #### `POST /api/v2/transitions/trigger`
 
@@ -1060,13 +945,7 @@ curl -X POST http://lightwaveos.local/api/v2/transitions/trigger \
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ### Zones Endpoints (10)
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 #### `GET /api/v2/zones`
 
@@ -1137,9 +1016,6 @@ curl http://lightwaveos.local/api/v2/zones
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 #### `POST /api/v2/zones`
 
 Enable or disable the zone system.
@@ -1171,9 +1047,6 @@ curl -X POST http://lightwaveos.local/api/v2/zones \
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 #### `POST /api/v2/zones/layout`
 
@@ -1276,9 +1149,6 @@ curl -X POST http://lightwaveos.local/api/v2/zones/layout \
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 #### `GET /api/v2/zones/{id}`
 
 Get configuration for a specific zone.
@@ -1315,9 +1185,6 @@ curl http://lightwaveos.local/api/v2/zones/0
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 #### `PATCH /api/v2/zones/{id}`
 
@@ -1365,9 +1232,6 @@ curl -X PATCH http://lightwaveos.local/api/v2/zones/0 \
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 #### `DELETE /api/v2/zones/{id}`
 
 Disable a specific zone.
@@ -1399,9 +1263,6 @@ curl -X DELETE http://lightwaveos.local/api/v2/zones/0
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 #### `GET /api/v2/zones/{id}/effect`
 
 Get effect assigned to a specific zone.
@@ -1426,9 +1287,6 @@ curl http://lightwaveos.local/api/v2/zones/0/effect
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 #### `PUT /api/v2/zones/{id}/effect`
 
@@ -1464,9 +1322,6 @@ curl -X PUT http://lightwaveos.local/api/v2/zones/0/effect \
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 #### `GET /api/v2/zones/{id}/parameters`
 
 Get all parameters for a specific zone.
@@ -1498,9 +1353,6 @@ curl http://lightwaveos.local/api/v2/zones/0/parameters
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 #### `PATCH /api/v2/zones/{id}/parameters`
 
@@ -1540,9 +1392,6 @@ curl -X PATCH http://lightwaveos.local/api/v2/zones/0/parameters \
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 #### `GET /api/v2/zones/presets`
 
 Get available zone presets (built-in + user).
@@ -1570,9 +1419,6 @@ curl http://lightwaveos.local/api/v2/zones/presets
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 #### `POST /api/v2/zones/presets/{id}/load`
 
@@ -1616,15 +1462,9 @@ curl -X POST "http://lightwaveos.local/api/v2/zones/presets/0/load?type=user"
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ### Enhancement Endpoints (8)
 
 These endpoints control advanced enhancement systems (Color Engine, Motion Engine).
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 #### `GET /api/v2/enhancements/color`
 
@@ -1666,9 +1506,6 @@ curl http://lightwaveos.local/api/v2/enhancements/color
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 #### `PATCH /api/v2/enhancements/color`
 
@@ -1714,9 +1551,6 @@ curl -X PATCH http://lightwaveos.local/api/v2/enhancements/color \
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 #### `POST /api/v2/enhancements/color/reset`
 
 Reset color engine to default state.
@@ -1739,9 +1573,6 @@ curl -X POST http://lightwaveos.local/api/v2/enhancements/color/reset
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 #### `GET /api/v2/enhancements/motion`
 
@@ -1766,9 +1597,6 @@ curl http://lightwaveos.local/api/v2/enhancements/motion
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 #### `PATCH /api/v2/enhancements/motion`
 
@@ -1797,9 +1625,6 @@ Update motion engine configuration.
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 #### `GET /api/v2/enhancements`
 
@@ -1830,9 +1655,6 @@ curl http://lightwaveos.local/api/v2/enhancements
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 #### `GET /api/v1/palettes`
 
@@ -1924,9 +1746,6 @@ curl http://lightwaveos.local/api/v2/palettes
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 #### `GET /api/v2/palettes/{id}`
 
 Get specific palette details.
@@ -1955,13 +1774,7 @@ curl http://lightwaveos.local/api/v2/palettes/3
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ### Batch Endpoints (1)
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 #### `POST /api/v2/batch`
 
@@ -2048,17 +1861,11 @@ curl -X POST http://lightwaveos.local/api/v2/batch \
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ## WebSocket Commands
 
 **WebSocket URL:** `ws://lightwaveos.local/ws`
 
 All WebSocket messages use JSON format with a `type` field.
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 ### Connection
 
@@ -2080,9 +1887,6 @@ ws.onerror = (error) => {
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 ### Command: `ledStream.subscribe`
 
@@ -2140,9 +1944,6 @@ Upon successful subscription, the server sends binary WebSocket frames at ~20 FP
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ### Command: `device.getStatus`
 
 Get device status over WebSocket.
@@ -2172,9 +1973,6 @@ Get device status over WebSocket.
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ### Command: `device.getInfo`
 
 Get device hardware info over WebSocket.
@@ -2202,9 +2000,6 @@ Get device hardware info over WebSocket.
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 ### Command: `effects.list`
 
@@ -2240,9 +2035,6 @@ Get effects list over WebSocket.
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ### Command: `effects.getCurrent`
 
 Get current effect over WebSocket.
@@ -2274,9 +2066,6 @@ Get current effect over WebSocket.
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ### Command: `effects.setCurrent`
 
 Set current effect over WebSocket.
@@ -2305,9 +2094,6 @@ Broadcast to all clients:
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 ### Command: `effects.getMetadata`
 
@@ -2339,9 +2125,6 @@ Get effect metadata over WebSocket.
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ### Command: `parameters.get`
 
 Get all parameters over WebSocket.
@@ -2369,9 +2152,6 @@ Get all parameters over WebSocket.
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 ### Command: `parameters.set`
 
@@ -2402,9 +2182,6 @@ Broadcast to all clients:
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ### Command: `transitions.list`
 
 Get transition types over WebSocket.
@@ -2431,9 +2208,6 @@ Get transition types over WebSocket.
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 ### Command: `transitions.trigger`
 
@@ -2463,9 +2237,6 @@ Broadcast to all clients:
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 ### Command: `zones.list`
 
@@ -2534,9 +2305,6 @@ Get all zones over WebSocket.
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ### Command: `zones.get`
 
 Get specific zone over WebSocket.
@@ -2565,9 +2333,6 @@ Get specific zone over WebSocket.
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 ### Command: `zones.update`
 
@@ -2616,9 +2381,6 @@ Broadcast to all clients:
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ### Command: `zones.setEffect`
 
 Set zone effect over WebSocket.
@@ -2645,9 +2407,6 @@ Broadcast to all clients:
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 ### Command: `zones.setLayout`
 
@@ -2719,9 +2478,6 @@ ws.send(JSON.stringify({
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ### Command: `batch`
 
 Execute batch operations over WebSocket.
@@ -2762,9 +2518,6 @@ Execute batch operations over WebSocket.
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ### Command: `enhancements.get`
 
 Get summary of all enhancement engines over WebSocket.
@@ -2797,9 +2550,6 @@ Get summary of all enhancement engines over WebSocket.
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 ### Command: `enhancements.color.get`
 
@@ -2844,9 +2594,6 @@ Get ColorEngine configuration over WebSocket.
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 ### Command: `enhancements.color.set`
 
@@ -2900,9 +2647,6 @@ Update ColorEngine configuration over WebSocket.
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ### Command: `enhancements.color.reset`
 
 Reset ColorEngine to defaults over WebSocket.
@@ -2928,9 +2672,6 @@ Reset ColorEngine to defaults over WebSocket.
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 ### Command: `enhancements.motion.get`
 
@@ -2959,9 +2700,6 @@ Get MotionEngine configuration over WebSocket.
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 ### Command: `enhancements.motion.set`
 
@@ -2996,9 +2734,6 @@ Update MotionEngine configuration over WebSocket.
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 ### Command: `palettes.list`
 
@@ -3046,9 +2781,6 @@ Get list of all available color palettes over WebSocket.
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ### Command: `palettes.get`
 
 Get specific palette details over WebSocket.
@@ -3092,9 +2824,6 @@ Get specific palette details over WebSocket.
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ### Command: `palettes.set`
 
 Set the current color palette over WebSocket.
@@ -3128,13 +2857,7 @@ Set the current color palette over WebSocket.
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ## Examples
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 ### Complete Effect Setup
 
@@ -3163,9 +2886,6 @@ curl -X PATCH http://lightwaveos.local/api/v2/parameters \
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 ### Multi-Zone Configuration
 
@@ -3201,9 +2921,6 @@ curl -X PATCH http://lightwaveos.local/api/v2/zones/1/parameters \
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 ### Batch Operation for Scene Change
 
@@ -3242,9 +2959,6 @@ curl -X POST http://lightwaveos.local/api/v2/batch \
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ### Color Engine Configuration
 
 Enable cross-palette blending:
@@ -3269,9 +2983,6 @@ curl -X PATCH http://lightwaveos.local/api/v2/enhancements/color \
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 ### WebSocket Real-Time Control
 
@@ -3363,9 +3074,6 @@ function loadScene(sceneData) {
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ### Filter Effects by Category
 
 Get all LGP Interference effects:
@@ -3375,9 +3083,6 @@ curl "http://lightwaveos.local/api/v2/effects?category=2&details=true"
 ```
 
 ---
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 ### Get Custom Effect Parameters
 
@@ -3402,13 +3107,7 @@ curl -X PATCH http://lightwaveos.local/api/v2/parameters \
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ## Migration from v1
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 ### URL Changes
 
@@ -3418,9 +3117,6 @@ curl -X PATCH http://lightwaveos.local/api/v2/parameters \
 | `POST /api/v1/effects/set` | `PUT /api/v2/effects/current` |
 | `POST /api/v1/parameters` | `PATCH /api/v2/parameters` |
 | `POST /api/v1/transitions/config` | `PATCH /api/v2/transitions/config` |
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 ### Request Body Changes
 
@@ -3437,15 +3133,9 @@ curl -X PATCH http://lightwaveos.local/api/v2/parameters \
 }
 ```
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ### Response Format
 
 v1 and v2 use the same response wrapper, but v2 includes `version: "2.0.0"`.
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 ### Zone API
 
@@ -3465,9 +3155,6 @@ GET /api/v2/zones/{id}/parameters
 PATCH /api/v2/zones/{id}/parameters
 ```
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ### WebSocket Commands
 
 v2 adds namespaced commands:
@@ -3480,13 +3167,7 @@ v1 commands still work for backward compatibility.
 
 ---
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ## Notes
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 ### CENTER ORIGIN Constraint
 
@@ -3498,9 +3179,6 @@ Effects propagate:
 
 Linear left-to-right or right-to-left patterns are not supported.
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ### Custom Effect Parameters
 
 Effects with `customParams` provide semantic control labels:
@@ -3510,9 +3188,6 @@ Effects with `customParams` provide semantic control labels:
 
 These map to underlying `VisualParams` (intensity, saturation, complexity, variation).
 
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
-
 ### Performance Considerations
 
 - Target frame rate: 120 FPS
@@ -3520,9 +3195,6 @@ These map to underlying `VisualParams` (intensity, saturation, complexity, varia
 - Batch operations reduce HTTP overhead
 - Rate limiting protects device stability
 - Color engine adds ~2ms per frame when enabled
-
-
-> _**Status reminder:** the section that follows describes an UNIMPLEMENTED `/api/v2/` route. K1 does not serve these. For shipping API see `firmware-v3_docs_api_api-v1.md`._
 
 ### Backward Compatibility
 
@@ -3536,14 +3208,3 @@ v2 API coexists with v1:
 **Documentation Version:** 2.0.0
 **Last Updated:** 2025-12-21
 **API Base:** LightwaveOS v2.0.0
-
-================================================================================
-END OF DOCUMENT — STATUS REAFFIRMATION
-================================================================================
-
-This was the LightwaveOS API v2 SPECIFICATION DRAFT, not a reference for callable endpoints. As of curation date 2026-05-04, K1 firmware does NOT implement any `/api/v2/` routes.
-
-For the shipping API, defer to: `firmware-v3_docs_api_api-v1.md`.
-For the authoritative protocol surface, defer to: `_BUNDLE_protocol_contracts.txt` (k1-rest-contract.yaml + k1-ws-contract.yaml).
-For the legacy `/api/*` (non-versioned) endpoints that DO exist on K1, defer to: `firmware-v3_docs_api_api-legacy.md`.
-

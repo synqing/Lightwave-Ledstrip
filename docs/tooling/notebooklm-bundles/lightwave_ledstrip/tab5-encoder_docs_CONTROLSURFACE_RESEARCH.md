@@ -1,20 +1,3 @@
-================================================================================
-⚠️  STATUS BANNER — EXPLORATORY RESEARCH RATIFIED INTO SHIPPED DESIGN  ⚠️
-================================================================================
-
-This document is RESEARCH that was conducted to inform the tab5-encoder design.
-
-Status: the conclusions reached in this research were RATIFIED into the shipped 3-tab tab5-encoder UI layout. Cross-reference against:
-- `tab5-encoder_docs_reference_codebase-map.md` — current architecture
-- `tab5-encoder_docs_reference_lvgl-component-reference.md` — current UI tree
-- `tab5-encoder_docs_ZONE_COMPOSER_V2_SPEC.md` — current locked spec
-
-If this research document conflicts with any of the three references above, the references are canonical. This document captures the reasoning that led to the shipped decisions, not authoritative current behaviour.
-
-Do NOT cite individual recommendations from this research as if they were architectural specifications. Cite the spec docs above.
-
-================================================================================
-
 ---
 abstract: "Complete semantic analysis of ControlSurfaceUI: 8-agent research synthesis covering firmware parameter API (IEffect, Ar16Controls), WS protocol (25 commands, codec gap), semantic contracts (9 mandatory), encoder routing (4 priorities, 6 sites), cross-stack alignment (4 dropped fields), spec gaps (3 critical, 1 contradiction), blank screen diagnosis (2 causes), and shared AR control system (16 params, 27 effects). Read before implementing FX PARAMS tab or modifying encoder routing."
 ---
@@ -553,12 +536,3 @@ Paging accommodates up to 16 params (3 pages), so total addressable params is ma
 | Date | Author | Change |
 |------|--------|--------|
 | 2026-03-22 | agent:research-council (8 specialists) | Created — complete semantic analysis from 8 parallel specialist agents |
-
-================================================================================
-END OF DOCUMENT — STATUS REAFFIRMATION
-================================================================================
-
-This was EXPLORATORY RESEARCH. The conclusions were ratified into the shipped tab5-encoder design. For current canonical architecture, defer to:
-- `tab5-encoder_docs_reference_codebase-map.md`
-- `tab5-encoder_docs_reference_lvgl-component-reference.md`
-- `tab5-encoder_docs_ZONE_COMPOSER_V2_SPEC.md`

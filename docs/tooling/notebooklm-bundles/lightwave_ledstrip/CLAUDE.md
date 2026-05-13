@@ -40,6 +40,24 @@ Every tactical output (recommendation, decision, code change, plan, edit, commit
 
 ---
 
+## Work Blocking Protocol — Mandatory
+
+If critical work is discovered while executing the current mission, do not silently change mission. Follow `instructions/work-blocking-protocol-v1.md`.
+
+A Work Block is a critical task, fix, investigation, or accountability gap that matters to correctness, safety, product quality, governance, or future agent reliability, but is outside the approved scope of the current mission.
+
+Required behaviour:
+
+1. Surface the issue plainly to Captain.
+2. Define scope, non-goals, success conditions, failure conditions, and evidence required to close it.
+3. Record it in `BACKLOG.md` under the Work Blocks section.
+4. Hand it to another agent/team unless Captain explicitly re-scopes the current session.
+5. Return to the original mission once the block is logged, unless continuing would violate an RBDO hard stop.
+
+This protocol exists to prevent rabbit holes while preserving important discoveries as accountable work.
+
+---
+
 ## Context Management
 
 This CLAUDE.md is loaded into every conversation. Keep main context for decisions and outcomes only.
@@ -82,7 +100,8 @@ If the answer is anything other than an unqualified YES, use the tools below to 
 2. `mcp__plugin_claude-mem_mcp-search__search(query, limit=3-5, project="Lightwave-Ledstrip")` — **claude-mem L1 index** — extracted observations (decisions, bugfixes, discoveries) across sessions. Search first; use `type`, `obs_type`, `dateStart`, `dateEnd`, and `orderBy` filters before fetching details.
 3. `mcp__plugin_claude-mem_mcp-search__timeline(anchor=<id>, depth_before=3, depth_after=3, project="Lightwave-Ledstrip")` — **claude-mem L2 timeline** — chronological context around a selected search hit.
 4. `mcp__plugin_claude-mem_mcp-search__get_observations(ids=[...])` — **claude-mem L3 details** — full narratives/facts/files for filtered IDs only. Batch multiple IDs in one call; never fetch all search hits.
-5. Current source truth — C++ symbols use clangd FIRST per the C++ gate below. For non-C++ structural code/doc navigation, prefer claude-mem Smart Explore tools when available: `smart_search` → `smart_outline` → `smart_unfold`; full file reads are the last step for large files.
+4.5. `mcp__notebooklm-mcp__notebook_query(notebook_id="92d45c0b-83c7-4971-aa9a-2c9ee13b06d4", query="...")` — **NotebookLM knowledge oracle** — pre-indexed architectural knowledge across 127 sterilised sources. Returns structured answers in 5 mandatory sections: ANSWER / CONSTRAINTS / KEY FILES / CROSS-REFS / WARNINGS. Use for "what/why" questions about architecture, constraints, design decisions, and subsystem relationships before reading reference docs. Cuts cold-start cost from ~30K tokens (reading 5+ reference docs) to one API call. Prefer `notebook_query_start` + `notebook_query_status` (async) for broad multi-section questions — synchronous calls may exceed the 60 s socket timeout on whole-corpus retrieval. Do NOT use NotebookLM for code symbol navigation (use clangd), current file contents (use Read), git/session history (use Crispy `$RECALL_CLI` or claude-mem), or anything where freshness against today's HEAD matters (the notebook is a periodic snapshot — verify against current source before any code edit).
+5. Current source truth — C++ symbols use clangd FIRST per the C++ gate below. For non-C++ structural code/doc navigation, prefer claude-mem Smart Explore tools only when the MCP transport is live: `smart_search` → `smart_outline` → `smart_unfold`; full file reads are the last step for large files.
 6. `mcp__auggie__codebase-retrieval("[query]")` — semantic codebase search (current source, not history) only if configured; see `docs/WORKFLOW_ROUTING.md` for live status.
 7. `mcp__plugin_episodic-memory_episodic-memory__search` — fallback episodic store if current claude-mem is unavailable or returns no useful observations.
 8. Reference files (see table below) — pre-extracted architecture, dependencies, FSMs.
@@ -91,6 +110,8 @@ If the answer is anything other than an unqualified YES, use the tools below to 
 Crispy returns raw transcripts (what was said). claude-mem returns synthesised observations (what was decided). Source files return current implementation truth. MEMORY.md returns curated rules and state. They are NOT redundant — use `$RECALL_CLI` first when you recall wording; use claude-mem `search → timeline → get_observations` when you only recall the topic.
 
 If claude-mem emits a health/backlog/version warning, treat recent memory as possibly stale until you verify `/api/health`, `/api/version`, worker logs, or direct source/DB state. Do not silently fall back from a missing `mcp-search` tool to older `mem-search` or stale cache paths.
+
+Smart Explore failure protocol: `smart_search`, `smart_outline`, and `smart_unfold` are code-navigation helpers, not the canonical memory-search path. If any Smart Explore tool returns `Transport closed`, unsupported-language, parser, or empty-outline errors, label that Smart Explore surface as degraded for the session and keep moving. For memory questions, use `mcp-search` if attached, direct worker `GET /api/search`, or SQLite FTS against `~/.claude-mem/claude-mem.db`. For current source questions, use clangd, `rg`, and direct file reads. Do not repeatedly restart the claude-mem worker just because Smart Explore failed; first distinguish worker health from the client MCP transport.
 
 **You are not expected to know everything from memory.** You ARE expected to know what you don't know and to look it up before acting.
 
@@ -105,7 +126,8 @@ READBACK:
 - Subsystem: [audio | effects | network | core | ios | tab5 | cross-cutting]
 - Reference files: [list which docs/reference/ files I will read first]
 - Hard constraints: [list applicable constraints — see table below]
-- Tool routing: [which tools I will use FIRST — clangd/QMD/Context7/subagent]
+- Tool routing: [which tools I will use FIRST — clangd/NotebookLM/Read/rg/subagent]
+- NotebookLM: [will I query the knowledge base before reading reference docs? If yes, the exact question I will ask. If no (e.g. trivial single-file edit), why not.]
 ```
 
 **Constraint readback table — read back ALL that apply to your task:**
@@ -114,10 +136,10 @@ READBACK:
 |---|---|
 | Any C++ source | clangd FIRST for symbols, grep for text only |
 | Audio / effects | Centre origin 79/80 outward, no heap in render(), 2.0ms ceiling, no rainbows |
-| Network / WiFi | Current dev: AP-only via `WIFI_AP_ONLY` build flag. Goal: dual-mode (AP OR STA, never together — concurrent AP+STA has known ESP-IDF bug). Pure-STA work via `_sta_validation` env needs Captain coordination. See `docs/tooling/notebooklm-bundles/lightwave_ledstrip/_FORENSIC_WIFI_REPORT.md`. |
+| Network / WiFi | K1 current shipping mode is AP-only via `WIFI_AP_ONLY`. Goal-state is dual-mode AP OR STA, never concurrent AP+STA. Do not enable pure-STA validation, WiFi-mode rewrites, or `WIFI_AP_ONLY` / `m_forceApOnly` default changes without explicit Captain approval. |
 | Multi-file exploration | Delegate to subagent, 30K token budget per agent |
-| Documentation | QMD FIRST, Read as fallback |
-| External library APIs | Context7 FIRST, not training data |
+| Documentation | NotebookLM for architecture; targeted `rg`/Read for current files |
+| External library APIs | Current vendor docs or local headers; Context7 only when explicitly available for the task |
 | Any code changes | British English in comments/docs/logs/UI |
 
 **Reference files — read BEFORE exploring source code:**
@@ -156,32 +178,64 @@ These contain pre-extracted codebase structure, frameworks, dependencies, entryp
 
 **Prerequisite:** `compile_commands.json` must exist in `firmware-v3/`. If missing: `pio run -e esp32dev_audio_esv11_k1v2_32khz --target compiledb`
 
+**Codex CLI compatibility:** Codex does not load Claude Code's `clangd-lsp` plugin. For Codex sessions on this machine, `~/.codex/config.toml` must expose a global `clangd` MCP server backed by `/Users/spectrasynq/.local/bin/mcp-language-server-lightwave`, `firmware-v3/compile_commands.json`, Homebrew clangd, `--enable-config`, and an Xtensa query-driver glob matching `toolchain-xtensa-esp32s3*/bin/xtensa-esp32s3-elf-*`. The local `firmware-v3/.clangd` file is required for Codex semantic tooling because it removes Xtensa GCC-only flags and adapts ESP-IDF headers for Homebrew clangd parsing. If generic MCP tool names such as `definition`, `references`, `diagnostics`, and `hover` are exposed instead of the Claude-style names in the table, use those semantic tools. If the specific clangd capability needed for the claim is absent, STOP per the Tool Failure Protocol; do not use text search to make C++ symbol/reference/call-hierarchy claims.
+
+`codex mcp get clangd` proves only the current config file, not the MCP child already attached to a live Codex session. If live children show `/Users/spectrasynq/.local/bin/mcp-language-server`, missing `--enable-config`, `--background-index`, or the non-wildcard `toolchain-xtensa-esp32s3/bin` query-driver, the session is stale and must be restarted.
+
+Use MCP `diagnostics` as the Codex semantic smoke. Raw `clangd --check` can report internal `ExtractFunction` tweak failures even when pushed diagnostics are clean.
+
+In a newly restarted Codex session that has not yet called clangd, running `tools/codex-clangd-mcp-reset.sh` from that session is valid pre-smoke hygiene; proceed immediately to exactly one MCP `diagnostics` smoke. The poisoned-session rule applies only after a clangd MCP call in that same session has already returned `Transport closed`.
+
+**Codex `Transport closed` recovery:** If the registered `clangd` MCP is visible but a semantic call returns `Transport closed`, treat the live Codex session as poisoned. Do not retry clangd in that same session and do not proceed with whole-codebase C++ symbol/reference claims. Run `tools/codex-clangd-mcp-reset.sh` from a separate shell or orchestrator context to clear child processes, then restart the Codex session before the next semantic clangd call.
+
 **When grep IS appropriate:** string literals, log messages, comments, config values, or non-C++ files. grep is for TEXT. clangd is for CODE SYMBOLS.
 
-### Documentation Search — QMD FIRST, file reading LAST
+### Documentation Search — NotebookLM, rg, and Read
 
-**Gate rule:** When you need to find information in project documentation, query QMD before reading files. QMD searches across all indexed collections (firmware docs, War Room, landing page docs) with semantic matching.
-
-| I need to... | Call this | NOT this |
-|---|---|---|
-| Find docs about a topic | `mcp__qmd__qmd_search` or `mcp__qmd__qmd_vector_search` | ~~reading files one by one~~ |
-| Deep multi-step doc retrieval | `mcp__qmd__qmd_deep_search` | ~~loading 200+ line docs into context~~ |
-| Get a specific known doc | `mcp__qmd__qmd_get` | ~~Read tool (acceptable fallback)~~ |
-| Check what's indexed | `mcp__qmd__qmd_status` | ~~guessing~~ |
-
-**Fallback:** If QMD returns nothing or `qmd_status` shows zero collections, STOP and report: `[TOOL FAIL: QMD — not indexed]`. Ask the user whether to index it now or fall back to grep/Read. Do NOT silently switch.
-
-### Library APIs — Context7, not training data
-
-**Gate rule:** When referencing external library APIs (FastLED, ArduinoJSON, ESPAsyncWebServer, FreeRTOS, etc.), DSP formulae (FFT windowing, spectral centroid, onset detection, beat tracking), signal processing algorithms, or any domain-specific computation where parameter correctness matters — query Context7 for authoritative docs. Do NOT rely on training data.
+**Gate rule:** QMD is no longer a mandatory or default-loaded repo MCP. For architecture and cross-subsystem questions, query NotebookLM first, then verify against current source or docs. For current documentation lookup, use targeted `rg` to locate the relevant file and Read only the needed section. Do not trawl large doc trees sequentially.
 
 | I need to... | Call this | NOT this |
 |---|---|---|
-| Check a FastLED/ArduinoJSON/FreeRTOS API | `mcp__Context7__resolve-library-id` then `mcp__Context7__get-library-docs` | ~~reciting from training data~~ |
-| Verify function signatures for an ESP-IDF call | `mcp__Context7__get-library-docs` with topic filter | ~~assuming parameter order~~ |
-| Look up a PlatformIO library method | Context7 first, then `mcp__clangd__get_hover` on the call site | ~~reading .pio/libdeps headers~~ |
+| Understand architecture or design rationale | `mcp__notebooklm-mcp__notebook_query` | ~~Reading 5+ reference docs first~~ |
+| Find current docs about a topic | `rg -n "<term>" docs firmware-v3/docs` then Read the relevant section | ~~manual doc trawling~~ |
+| Get a specific known doc | Read the file directly | ~~loading unrelated docs~~ |
+| Search indexed docs with QMD | Only if QMD has been explicitly restored and verified in the current session | ~~assuming QMD exists~~ |
 
-**When training data IS acceptable:** Standard C/C++ library calls (`memcpy`, `printf`, `std::vector`), basic FreeRTOS primitives (`xTaskCreate`, `xQueueSend`) stable for 10+ years. If in doubt, check Context7.
+**QMD status:** `qmd` is not currently installed on PATH and is not a protected gate. If a future session restores QMD, verify `which qmd`, `qmd --version`, and MCP health before using it.
+
+### Architectural Knowledge — NotebookLM FIRST, reference docs LAST
+
+**Gate rule:** When you need to understand a subsystem's architecture, why a decision was made, what constraints apply across multiple files, or how two subsystems interact — query NotebookLM before reading any `docs/reference/*.md`, `EFFECT_DEVELOPMENT_STANDARD.md`, or cross-project docs. The notebook returns the structured answer in one call; reading the equivalent docs costs ~30K tokens.
+
+| I need to understand... | Call this | NOT this |
+|---|---|---|
+| A subsystem's architecture before touching code | `mcp__notebooklm-mcp__notebook_query` | ~~Reading 5+ reference docs~~ |
+| What constraints apply to a planned change | `mcp__notebooklm-mcp__notebook_query` | ~~Scanning CLAUDE.md sections~~ |
+| Why a design decision was made | `mcp__notebooklm-mcp__notebook_query` | ~~Grepping commit history~~ |
+| Cross-subsystem interactions (iOS↔firmware↔Tab5) | `mcp__notebooklm-mcp__notebook_query` or `cross_notebook_query` | ~~Spawning 3 subagents to read 3 codebase-maps~~ |
+| Where a C++ symbol is defined | `mcp__clangd__find_definition` | ~~notebook_query~~ |
+| Current file contents | `Read` | ~~notebook_query~~ |
+| What changed since last session | Crispy `$RECALL_CLI` / claude-mem | ~~notebook_query~~ |
+| Whole-corpus broad question (likely >60 s) | `notebook_query_start` + `notebook_query_status` | ~~`notebook_query` (will time out)~~ |
+
+**When NotebookLM is NOT acceptable:**
+- Any code edit that depends on today's HEAD state — the notebook is a snapshot, not a live mirror. After NotebookLM gives you the architectural answer, verify with clangd / Read before writing code.
+- Symbol navigation in C++ — clangd is canonical, NotebookLM is conceptual.
+- Git history forensics — use `git log` / `git blame`, not NotebookLM.
+
+**Tool failure:** If `notebook_query` times out or errors and the async fallback also fails, STOP per the Tool Failure Protocol — do NOT silently fall back to reading reference docs without flagging the degradation. The doc-read fallback is acceptable only after explicit Captain approval.
+
+### Library APIs — Current Source First
+
+**Gate rule:** Context7 is no longer default-loaded or mandatory. When referencing external library APIs (FastLED, ArduinoJSON, ESPAsyncWebServer, FreeRTOS, etc.), DSP formulae, signal processing algorithms, or any domain-specific computation where parameter correctness matters, verify against current vendor documentation, local installed headers, or official source. Use Context7 only if it is explicitly enabled and verified for the task.
+
+| I need to... | Call this | NOT this |
+|---|---|---|
+| Check a FastLED/ArduinoJSON/FreeRTOS API | Official docs or local installed headers, then cite the file/source | ~~reciting from training data~~ |
+| Verify function signatures for an ESP-IDF call | Local ESP-IDF headers/docs or official Espressif docs | ~~assuming parameter order~~ |
+| Look up a PlatformIO library method | `mcp__clangd__get_hover` on the call site plus local `.pio/libdeps` headers when needed | ~~guessing from memory~~ |
+
+**When training data IS acceptable:** Standard C/C++ library calls (`memcpy`, `printf`, `std::vector`) and basic FreeRTOS primitives (`xTaskCreate`, `xQueueSend`) that have been stable for 10+ years. If parameter correctness matters, verify from a current source.
 
 ### Development Lifecycle
 
@@ -224,7 +278,7 @@ Before running `git add` or `git commit`, answer honestly:
 
 If you cannot answer YES with specific evidence, do NOT commit. Instead:
 
-1. **Check constraints** — re-read Hard Constraints below. Does your change touch render()? Verify no heap alloc. Timing? Measure against 2.0ms ceiling. WiFi? Confirm AP-only preserved.
+1. **Check constraints** — re-read Hard Constraints below. Does your change touch render()? Verify no heap alloc. Timing? Measure against 2.0ms ceiling. WiFi? Confirm current shipping AP-only behaviour is preserved unless Captain explicitly approved STA validation work.
 2. **Check tests** — did you run the relevant tests? Do they pass? If none exist, write one first.
 3. **Check scope** — are you committing only the files you intended? No accidental inclusions?
 4. **Check British English** — comments, logs, UI strings all use centre/colour/initialise/behaviour.
@@ -233,7 +287,7 @@ Only after satisfying all four checks: proceed with commit.
 
 ## Hard Constraints
 
-- **K1 WiFi mode — current state vs goal state.** Current shipping firmware is AP-only via build flag `WIFI_AP_ONLY` (defined in canonical envs `esp32dev_audio_esv11_k1v2_32khz` and `esp32dev_audio_esv11_32khz`). Tab5 and iOS connect TO K1's AP at `192.168.4.1`. **The goal-state is dual-mode: K1 must support functioning in EITHER AP-only OR STA-only mode — never both concurrently.** Concurrent AP+STA corrupts auth state at the ESP-IDF 802.11 driver level (a known ESP32 bug; recent IDF 5.x may have a fix but K1 is currently pinned at IDF 4.4.7). The previous "AP-ONLY EVER, STA never worked, 6+ failures" doctrine was an over-correction from the Era 5 Portable Mode AP+STA-concurrent failure (2026-02-05 → 2026-02-16) — STA-alone DID work in Era 1 (Light Crystals 2025-06-24) and Era 3 (v2 STA-primary 2025-12-16). ~3,418 LOC of STA infrastructure is PRESENT-DISABLED in `firmware-v3/` (gated by `WIFI_AP_ONLY` build flag + `m_forceApOnly` runtime lock). The `_sta_validation` build env (added 2026-05-03 in commit `11e040d6`) is the entry point for re-validating STA paths. **Doctrine guardrails:** (a) Do NOT add concurrent-AP+STA logic — this is the genuine bug surface. (b) Do NOT change `WIFI_AP_ONLY` / `m_forceApOnly` defaults in canonical envs without explicit Captain approval. (c) Pure-`WIFI_MODE_STA`-only path work IS authorised but requires Captain coordination — current STA paths use APSTA concurrent and must be rewired. For the canonical historical reconstruction see `docs/tooling/notebooklm-bundles/lightwave_ledstrip/_FORENSIC_WIFI_REPORT.md`.
+- **K1 WiFi mode.** Current shipping firmware uses `WIFI_AP_ONLY` in canonical ESV11 K1 build environments, and Tab5/iOS connect to K1's AP at `192.168.4.1`. Goal-state is dual-mode AP OR STA, never concurrent AP+STA. Never enable pure-STA validation, WiFi-mode rewrites, or default changes to `WIFI_AP_ONLY` / `m_forceApOnly` without explicit Captain approval.
 - **Audio playback safety**: Never generate, select, or play audio through speakers/headphones unless Captain has explicitly approved that exact source. Approval for one audio file does not authorise other files, synthetic fixtures, white/pink noise, hats, cymbals, speech, generated tones, or any agent-chosen sound. For AFS/runtime audio capture, the approved reference corpus is `/Users/spectrasynq/Workspace_Management/Software/hybrid-beat-tracker/tests/benchmark` unless Captain explicitly names a different source. Before any playback, state the exact file/source, output path/device if known, volume assumption, duration, and stop command. If a capture matrix needs noise or synthetic fixtures, ask first and wait.
 - **Centre origin**: All effects originate from LED 79/80 outward (or inward to 79/80). No linear sweeps. Applies to all render modes including zone-specific renders. Exception: zone ID `0xFF` (global render) where the physical centre is still 79/80.
 - **No rainbows**: No rainbow cycling or full hue-wheel sweeps.
@@ -249,9 +303,9 @@ Violations will be flagged and reverted.
 
 Only these entries are permitted at the project root (enforced by CI — see `.github/workflows/repo_hygiene_check.yml`):
 
-**Root files (12):** `README.md`, `LICENSE`, `NOTICE`, `CHANGELOG.md`, `CONTRIBUTING.md`, `TRADEMARK.md`, `CLAUDE.md`, `AGENTS.md`, `BACKLOG.md`, `.gitignore`, `.pre-commit-config.yaml`, `.mcp.json`, `.worktreeinclude`
+**Root files (13):** `README.md`, `LICENSE`, `NOTICE`, `CHANGELOG.md`, `CONTRIBUTING.md`, `TRADEMARK.md`, `CLAUDE.md`, `AGENTS.md`, `BACKLOG.md`, `.gitignore`, `.pre-commit-config.yaml`, `.mcp.json`, `.worktreeinclude`
 
-**Root directories (10+3 hidden):** `.git`, `.github`, `.claude`, `.codex`, `_archive`, `docs`, `firmware-v3`, `harness`, `instructions`, `k1-composer`, `lightwave-dashboard`, `lightwave-ios-v2`, `scripts`, `tab5-encoder`, `tools`
+**Root directories (11+4 hidden):** `.git`, `.github`, `.claude`, `.codex`, `_archive`, `docs`, `firmware-v3`, `harness`, `instructions`, `k1-composer`, `lightwave-dashboard`, `lightwave-ios-v2`, `scripts`, `tab5-encoder`, `tools`
 
 **Nothing else goes at root.** Governance docs → `instructions/`. Decision registers → `k1-launch-research/`. Launch materials → `~/SpectraSynq_K1_Launch_Planning/` (separate repo). Temp notes → `.claude/`. If you need a new root file, get explicit Captain approval first.
 
@@ -427,14 +481,14 @@ RTK (Rust Token Killer) v0.34.2 is a CLI proxy that compresses Bash command outp
 
 **What it does NOT affect:**
 - Built-in tools: Read, Grep, Glob (these bypass Bash entirely)
-- MCP tools: clangd, QMD, Context7, autocontext, devkg, episodic memory
+- MCP tools: clangd, NotebookLM, claude-mem, GitHub, Playwright, and explicitly enabled per-task tools
 - Serial monitor: `pio device monitor` (excluded — needs raw stream)
 
 **Configuration:** `~/.config/rtk/config.toml`. Excluded commands (pass through unmodified): `esptool.py`, `pio device monitor`, `capture`. Meta commands: `rtk gain` (savings report), `rtk verify` (config check), `rtk discover` (missed compression opportunities).
 
-### Cross-Session Handoff Protocol
+### Cross-Session Continuity Protocol
 
-Two handoff mechanisms — they serve different purposes and BOTH may apply to the same incomplete work:
+Two continuity mechanisms serve different purposes. Neither may create `.claude/handoff*.md` forward task lists.
 
 **1. Crispy `/handoff` — IN-SESSION ROTATION** (when context bloat is degrading quality NOW):
 
@@ -442,17 +496,15 @@ Two handoff mechanisms — they serve different purposes and BOTH may apply to t
 /crispy:handoff <next-task-summary>
 ```
 
-Runs three steps automatically: `handoff-prompt-to` (distill into self-contained prompt), `reflect` (verify completeness against codebase), `clear-and-execute` (rotate into a fresh Crispy-managed session with context handed across IPC). Carries the prompt but does NOT capture failed approaches, blockers, or "do not retry" knowledge.
+Runs three steps automatically: `handoff-prompt-to` (distill into self-contained prompt), `reflect` (verify completeness against codebase), `clear-and-execute` (rotate into a fresh Crispy-managed session with context handed across IPC). Carries the prompt for in-session rotation only.
 
-**2. `.claude/handoff.md` — CROSS-SESSION PAPER TRAIL** (when you stop work for the day, hit a hardware blocker, or wait on the user):
+**2. `BACKLOG.md` — CROSS-SESSION FORWARD WORK**
 
-> **Does the next agent have everything it needs to continue this work without re-discovering anything I already learned?**
+`BACKLOG.md` is the single source of truth for forward work. Do NOT write `.claude/handoff*.md` files containing next steps, task lists, or future prescriptions. If work is incomplete, update the appropriate `BACKLOG.md` row with current state, blocker, evidence, and next action.
 
-If NO, create `.claude/handoff.md` (overwrite any existing one) with these sections: Current state | Decisions made (and why) | Failed approaches (do NOT retry) | Blocked on | Next steps (in order) | Files modified | Constraints encountered.
+Completed-work postmortems are allowed when they describe what shipped, cite commit hashes or artefact paths, and do not prescribe forward tasks. Failure notes belong in `BACKLOG.md` unless Captain explicitly asks for a separate postmortem document.
 
-**If running long AND work is incomplete, use both:** rotate via `/crispy:handoff` AND write `.claude/handoff.md` so the next session inherits failure history.
-
-**When to write:** Always if work is incomplete. Optional but appreciated for completed complex multi-session tasks. The next session's agent should delete `.claude/handoff.md` after reading it to prevent stale handoffs persisting.
+**If running long AND work is incomplete:** rotate via `/crispy:handoff` if available, then update `BACKLOG.md` rather than writing a forward handoff file.
 
 ## Further Docs
 
@@ -465,21 +517,47 @@ Read **only** when the task requires it — do not load eagerly. Exception: WORK
 | Timing & memory budgets | [firmware-v3/CONSTRAINTS.md](firmware-v3/CONSTRAINTS.md) | 170 | Performance work, memory optimisation |
 | Audio-reactive protocol | [firmware-v3/docs/audio-visual/audio-visual-semantic-mapping.md](firmware-v3/docs/audio-visual/audio-visual-semantic-mapping.md) | 467 | Writing/debugging audio-reactive effects |
 | Effect development standard | [firmware-v3/docs/EFFECT_DEVELOPMENT_STANDARD.md](firmware-v3/docs/EFFECT_DEVELOPMENT_STANDARD.md) | 500 | Creating or modifying effects |
-| Full REST API reference | [firmware-v3/docs/api/api-v1.md](firmware-v3/docs/api/api-v1.md) | 2,124 | API endpoint work — use QMD to search, do NOT read in full |
+| Full REST API reference | [firmware-v3/docs/api/api-v1.md](firmware-v3/docs/api/api-v1.md) | 2,124 | API endpoint work — use targeted `rg`/Read; protocol YAML remains canonical |
 | CQRS state architecture | [firmware-v3/docs/CQRS_STATE_ARCHITECTURE.md](firmware-v3/docs/CQRS_STATE_ARCHITECTURE.md) | 652 | State management, command dispatch |
 | MabuTrace tracing & Perfetto | [firmware-v3/docs/debugging/MABUTRACE_GUIDE.md](firmware-v3/docs/debugging/MABUTRACE_GUIDE.md) | ~200 | Capturing on-chip timeline traces; only when telemetry is needed |
 | Harness worker mode | [.claude/harness/HARNESS_RULES.md](.claude/harness/HARNESS_RULES.md) | 364 | Harness/test infrastructure |
 
-## autocontext — Evolved Strategy Scenarios
+## NotebookLM Knowledge Base
 
-autocontext MCP (`uv run autoctx mcp-serve`). Two scenarios seeded with LightwaveOS history:
+| Notebook | ID | Sources | Use when... |
+|---|---|---|---|
+| Lightwave-Ledstrip | `92d45c0b-83c7-4971-aa9a-2c9ee13b06d4` | 127 | Architecture, constraints, design decisions, cross-subsystem questions for firmware-v3, lightwave-ios-v2, tab5-encoder, protocol contracts, audio pipeline, WiFi, governance |
 
-| Scenario | When to use |
-|----------|-------------|
-| `embedded_effect_design` | New LED effect — iterates against centre-origin, no-heap, dt-correction, audio-reactivity rubric (max 3 rounds, threshold 0.80) |
-| `ios_feature_implementation` | New SwiftUI feature — iterates against @Observable, debounce, 44pt, Codable, architecture rubric (max 3 rounds, threshold 0.82) |
+Full SpectraSynq notebook registry (7 notebooks, IDs, source counts, bundle paths): [`docs/tooling/notebooklm-bundles/NOTEBOOK_REGISTRY.md`](docs/tooling/notebooklm-bundles/NOTEBOOK_REGISTRY.md).
 
-Use via `autocontext_run_improvement_loop(scenario_name="...", initial_output="<implementation>", max_rounds=3, quality_threshold=0.80)`. Playbooks accumulate in `knowledge/<scenario>/`.
+Custom system prompt (configured 2026-05-04, polished 2026-05-04 with WS contract-first gate) mandates a 5-section response format: ANSWER / CONSTRAINTS / KEY FILES / CROSS-REFS / WARNINGS. The prompt enforces British English, current-shipping AP-only WiFi plus dual-mode-goal precision, no-heap-in-render warnings, centre-origin guidance on every effect-related answer, and the contract-first gate (`docs/protocol/k1-ws-contract.yaml` updated BEFORE implementation; the "regeneratable artefact" framing is reconciliation-only). If a response loses the structure or breaches WiFi-mode precision, re-run `chat_configure` per `docs/tooling/notebooklm-bundles/CC_CLI_NOTEBOOKLM_INTEGRATION_PROMPT.md`.
+
+### Cross-notebook queries
+
+For questions spanning multiple SpectraSynq projects (e.g. "how does the marketing positioning of K1 align with the technical AP-only constraint?", "where does PRISM.studio reference K1 protocol contracts?"), use:
+
+```
+mcp__notebooklm-mcp__cross_notebook_query(
+    query="...",
+    notebook_names="Lightwave-Ledstrip, SpectraSynq.LandingPage"
+)
+```
+
+Available notebooks (see `docs/tooling/notebooklm-bundles/NOTEBOOK_REGISTRY.md` for IDs, sources, last-sync dates):
+
+- **Lightwave-Ledstrip** — firmware/iOS/Tab5 codebase + protocol + governance (127 sources)
+- **K1 Testbed** — testbed/dev hardware + capture rigs (37 sources)
+- **War Room** — governance, doctrine, decision history (93 sources)
+- **K1 Launch Planning** — launch checklist, demo plans, gating (47 sources)
+- **K1 Marketing** — positioning, copy, banned language, audience (91 sources)
+- **SpectraSynq.LandingPage** — landing-page Next.js + R3F site (89 sources)
+- **PRISM.studio** — PRISM compositor/studio app (66 sources)
+
+Cross-notebook is rate-limited — prefer single-notebook queries when one notebook clearly owns the answer.
+
+## Removed Default MCP Surfaces
+
+The following MCPs are not default-loaded for this repo unless Captain explicitly restores them for a task: QMD, Context7, autocontext, devkg, mcp-agent-mail, code-context, Blender, EasyEDA, Nogic, Stitch, DetailsPro, Twitter, Pathmode, Puppeteer, Stripe, Linear, Swift/iOS, and Vercel. NotebookLM remains preserved for architecture/reference routing.
 
 ## gstack
 
@@ -559,9 +637,9 @@ Do NOT silently work around a Crispy warning. Surface it per the Tool Failure Pr
 
 If `$CRISPY_SOCK` is unset and `$RECALL_CLI` is absent (raw `claude` from a terminal, or inside Codex/Warp/another harness), Crispy is OFF. Do NOT call any `crispy:*` skill. Fall back to:
 
-- Memory search: `mcp__plugin_claude-mem_mcp-search__search` → `mcp__plugin_claude-mem_mcp-search__timeline` → `mcp__plugin_claude-mem_mcp-search__get_observations`; use `episodic-memory` only as fallback (skip the recall layer)
+- Memory search: `mcp__plugin_claude-mem_mcp-search__search` → `mcp__plugin_claude-mem_mcp-search__timeline` → `mcp__plugin_claude-mem_mcp-search__get_observations`; if the MCP client transport is closed but worker health is OK, use direct worker `GET /api/search` or SQLite FTS before falling back to `episodic-memory` (skip the recall layer)
 - Planning: Superpowers (`/brainstorming` → `/writing-plans`) or GSD (`/gsd:plan-phase`) — both work without Crispy
 - Adversarial review: `/review` alone (no superthink multi-vendor parallel pass)
-- Handoff: `.claude/handoff.md` only (no in-session rotation)
+- Forward work: update `BACKLOG.md`; do not create `.claude/handoff*.md` forward task lists
 
 Note Crispy unavailability in your output so the user can decide whether to relaunch in Cursor.

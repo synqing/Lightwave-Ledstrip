@@ -1,20 +1,3 @@
-================================================================================
-⚠️  STATUS BANNER — EXPLORATORY RESEARCH RATIFIED INTO SHIPPED DESIGN  ⚠️
-================================================================================
-
-This document is RESEARCH that was conducted to inform the tab5-encoder design.
-
-Status: the conclusions reached in this research were RATIFIED into the shipped 3-tab tab5-encoder UI layout. Cross-reference against:
-- `tab5-encoder_docs_reference_codebase-map.md` — current architecture
-- `tab5-encoder_docs_reference_lvgl-component-reference.md` — current UI tree
-- `tab5-encoder_docs_ZONE_COMPOSER_V2_SPEC.md` — current locked spec
-
-If this research document conflicts with any of the three references above, the references are canonical. This document captures the reasoning that led to the shipped decisions, not authoritative current behaviour.
-
-Do NOT cite individual recommendations from this research as if they were architectural specifications. Cite the spec docs above.
-
-================================================================================
-
 ---
 abstract: "Navigation architecture research for Tab5 parameter access: how Elektron, Ableton Push, grandMA3, ETC Eos, and Resolume handle deep parameter sets on limited physical encoders. Concludes with a concrete menu system proposal mapping 50+ K1 parameters onto 16 encoders using page groups, context switching, and a persistent global row. Read when designing Tab5 encoder-to-parameter navigation."
 ---
@@ -550,12 +533,3 @@ Maximum depth: 2 actions. No parameter requires more than tab switch + page. Thi
 | Date | Author | Change |
 |------|--------|--------|
 | 2026-03-21 | agent:ux-researcher | Created. Research across 5 systems + Tab5 navigation architecture proposal. |
-
-================================================================================
-END OF DOCUMENT — STATUS REAFFIRMATION
-================================================================================
-
-This was EXPLORATORY RESEARCH. The conclusions were ratified into the shipped tab5-encoder design. For current canonical architecture, defer to:
-- `tab5-encoder_docs_reference_codebase-map.md`
-- `tab5-encoder_docs_reference_lvgl-component-reference.md`
-- `tab5-encoder_docs_ZONE_COMPOSER_V2_SPEC.md`

@@ -1,17 +1,17 @@
 ---
-abstract: "Mandatory session-start routing table: maps tasks to specific MCP tools, skills, and agents. Covers C++ intelligence (clangd 9 tools), memory, browser testing, feature planning lifecycle, anti-patterns, and decision tree."
+abstract: "Mandatory session-start routing table: maps tasks to specific MCP tools, skills, and agents. Covers C++ intelligence, memory, NotebookLM architecture lookup, browser testing, feature planning lifecycle, anti-patterns, and decision tree."
 ---
 
 # Workflow Routing — Tool & Skill Dispatch Guide
 
 > **This document is loaded via CLAUDE.md. Every CC session must follow these routing rules.**
-> Last updated: 02 May 2026
+> Last updated: 05 May 2026
 
 ---
 
 ## WHY THIS EXISTS
 
-This project has 29 skills, 13 MCP server groups (47 individual tools), and multiple orchestration protocols. Despite this, CC sessions routinely ignore available tools and reinvent from scratch. This document fixes that by providing explicit routing: **when you encounter X, use Y, in this way.**
+This project has a broad skill, MCP, hook, and plugin surface. Despite this, CC sessions routinely ignore required tools and reinvent from scratch. This document fixes that by providing explicit routing: **when you encounter X, use Y, in this way.**
 
 **The rule is simple: check this routing table BEFORE writing code or executing tasks.** If a skill or tool exists for the job, USE IT. Do not freestyle.
 
@@ -22,19 +22,25 @@ This project has 29 skills, 13 MCP server groups (47 individual tools), and mult
 Before doing anything:
 
 1. **Read this file** (you're doing it now — good)
-2. **Check Claude-mem for recent context using progressive disclosure:**
+2. **Use `$RECALL_CLI` first when you need exact raw transcript wording:**
+   ```
+   $RECALL_CLI "[exact phrase, file, symptom, or decision]"
+   $RECALL_CLI <session> <message-id>
+   ```
+   Crispy recall returns raw transcript matches. Use it only when `$RECALL_CLI` is available; otherwise proceed to claude-mem.
+3. **Check claude-mem for synthesised context using progressive disclosure:**
    ```
    mcp__plugin_claude-mem_mcp-search__search(query="recent activity on [topic]", limit=3-5, project="<project>")
    mcp__plugin_claude-mem_mcp-search__timeline(anchor=<selected_id>, depth_before=3, depth_after=3, project="<project>")
    mcp__plugin_claude-mem_mcp-search__get_observations(ids=[<filtered_ids>])
    ```
    Search is the L1 index, timeline is L2 context, and `get_observations` is L3 detail. Batch selected IDs and never fetch all hits just because they exist.
-3. **If the task touches code, query Auggie first:**
+   If the MCP client says `Transport closed` while `/api/health` is OK, treat the MCP client transport as degraded, not claude-mem memory as down. Use direct worker `GET /api/search`, SQLite FTS in `~/.claude-mem/claude-mem.db`, or `$RECALL_CLI` depending on the question.
+4. **For architecture questions, query NotebookLM before loading reference-doc bundles:**
    ```
-   mcp__auggie__codebase-retrieval("[what you're looking for]")
+   mcp__notebooklm-mcp__notebook_query(notebook_id="92d45c0b-83c7-4971-aa9a-2c9ee13b06d4", query="...")
    ```
-   Auggie understands code structure. Use it before grep/glob fishing expeditions.
-   **[NOT CONFIGURED — requires setup]** Auggie is not in project `.mcp.json` or global settings. Skip until configured.
+   NotebookLM is a snapshot architecture oracle. Verify against current source before edits.
 
 ---
 
@@ -54,30 +60,50 @@ Before doing anything:
 | Get hover info (type, docs) | `mcp__clangd__get_hover` | Quick type lookup |
 | Find interface implementations | `mcp__clangd__find_implementations` | Virtual method overrides |
 
-**clangd Status:** Run `mcp__clangd__get_diagnostics` on any source file to verify clangd is operational. If compile_commands.json is stale after adding new files: `pio run -e esp32dev_audio_pipelinecore --target compiledb`
+**clangd Status:** Run `mcp__clangd__get_diagnostics` on any source file to verify clangd is operational. If `compile_commands.json` is stale after adding new files: `pio run -e esp32dev_audio_esv11_k1v2_32khz --target compiledb`
+
+**Codex CLI note:** Codex does not load Claude Code's `clangd-lsp` plugin surface. On this machine, Codex must expose the global `clangd` MCP server from `~/.codex/config.toml`, backed by `/Users/spectrasynq/.local/bin/mcp-language-server-lightwave`, Homebrew clangd, `firmware-v3/compile_commands.json`, `--enable-config`, and an Xtensa query-driver glob matching `toolchain-xtensa-esp32s3*/bin/xtensa-esp32s3-elf-*`. `firmware-v3/.clangd` is part of that route and must remain in place for Codex semantic tooling. A new Codex session may show generic MCP tool names such as `definition`, `references`, `diagnostics`, and `hover` instead of the Claude-style names above. Those are still the required semantic route. Use MCP `diagnostics` as the smoke; raw `clangd --check` can report internal `ExtractFunction` tweak failures even when pushed diagnostics are clean. If a needed clangd capability is not exposed in the current Codex session, report the tool failure; do not switch to text search for C++ symbol claims. If the registered Codex `clangd` MCP returns `Transport closed`, treat that live Codex session as poisoned: stop C++ symbol work, run `tools/codex-clangd-mcp-reset.sh` from a separate shell or orchestrator context, then restart Codex before the next semantic clangd call.
+
+Pre-smoke reset in a freshly restarted Codex session is allowed before the first clangd MCP call in that session. After that reset, proceed to exactly one MCP `diagnostics` smoke. Do not ask Captain for another restart unless a clangd MCP call in the restarted session itself returns `Transport closed`.
+
+`codex mcp get clangd` is config inspection only. To verify the live route after a transport failure, inspect child processes; stale sessions may still run the old `/Users/spectrasynq/.local/bin/mcp-language-server` command even while `codex mcp get clangd` shows the repaired `mcp-language-server-lightwave` config.
 
 ### Code Intelligence (General / Cross-Language)
 
 | I need to... | Use this | How |
 |---|---|---|
-| Understand code structure semantically | `mcp__auggie__codebase-retrieval` **[NOT CONFIGURED — requires setup]** | Natural language query, understands code not just text |
-| Search project documentation | `mcp__qmd__qmd_search` or `mcp__qmd__qmd_vector_search` | Keyword or semantic search across indexed docs |
-| Deep search with context | `mcp__qmd__qmd_deep_search` | Multi-step retrieval with reranking |
-| Get specific doc by path | `mcp__qmd__qmd_get` | Exact retrieval when you know the doc |
-| Check QMD index health | `mcp__qmd__qmd_status` | Verify collections are populated |
+| Search project documentation | `rg -n "<term>" docs firmware-v3/docs` then Read the relevant section | Current default; QMD is not default-loaded |
+| Deep architecture search | NotebookLM query first, then current-source verification | Use for cross-subsystem rationale and constraints |
+| Get specific doc by path | Read the file directly | Exact retrieval when you know the doc |
+| Use Smart Explore code navigation | claude-mem `smart_search` -> `smart_outline` -> `smart_unfold` only when the transport is live | Optional helper for non-C++ structural navigation. If it returns `Transport closed`, parser, unsupported-language, or empty-outline errors, fall back to `rg`/Read or clangd instead of blocking |
+| Check QMD index health | `which qmd && qmd --version` plus MCP health, only if Captain restores QMD | QMD is removed from repo defaults |
+| Look up library API docs | Official vendor docs, local installed headers, or explicitly enabled Context7 | Context7 is optional/per-task, not mandatory |
 
-**QMD Status:** Run `mcp__qmd__qmd_status` to verify QMD is operational and check collection health. Re-index if needed: `scripts/setup-qmd.sh`
-| Look up library API docs (step 1) | `mcp__Context7__resolve-library-id` | Resolve library name to Context7 ID — call this FIRST |
-| Look up library API docs (step 2) | `mcp__Context7__get-library-docs` | Fetch version-specific docs using ID from step 1 |
+**QMD Status:** QMD is not currently a protected or default-loaded route. It failed live smoke because `qmd` is not on PATH. Re-add it only after a future install/health proof.
+
+**Context7 Status:** Context7 is not default-loaded. Use it only after an explicit per-task enablement and a live availability check.
+
+**Auggie Status:** Auggie is not configured in this workspace. Do not route tasks to it until a future config change explicitly enables it.
+
+### Architectural Knowledge
+
+| I need to... | Use this | How |
+|---|---|---|
+| Understand subsystem architecture | `mcp__notebooklm-mcp__notebook_query` | Ask for ANSWER / CONSTRAINTS / KEY FILES / CROSS-REFS / WARNINGS |
+| Ask a broad whole-corpus architecture question | `mcp__notebooklm-mcp__notebook_query_start` then `mcp__notebooklm-mcp__notebook_query_status` | Use async mode when synchronous calls may exceed 60 s |
+| Verify current implementation before editing | Current source via clangd or file read | NotebookLM is a snapshot, not current-source truth |
 
 ### Memory & Context
 
 | I need to... | Use this | How |
 |---|---|---|
-| Recall what happened in past sessions | `mcp__plugin_claude-mem_mcp-search__search` | Start with `limit=3-5`; use `project`, `type`, `obs_type`, date, and `orderBy` filters before fetching details |
+| Recall exact raw transcript wording | `$RECALL_CLI` | Use for phrases, file names, symptoms, and message-level recall when Crispy is available |
+| Recall synthesised prior decisions | `mcp__plugin_claude-mem_mcp-search__search` | Start with `limit=3-5`; use `project`, `type`, `obs_type`, date, and `orderBy` filters before fetching details |
 | View session timeline | `mcp__plugin_claude-mem_mcp-search__timeline` | Chronological context around a selected result; use when narrative order matters |
 | Get observations from memory | `mcp__plugin_claude-mem_mcp-search__get_observations` | Full structured facts/narratives/files for filtered IDs only; batch IDs in one call |
 | Search MCP-specific memory | `mcp__plugin_claude-mem_mcp-search__search` | Tool usage history and prior work patterns |
+| Search memory when MCP transport is closed | `curl 'http://127.0.0.1:37777/api/search?query=...&project=Lightwave-Ledstrip&limit=3'` | Use only after worker `/api/health` verifies OK; this bypasses the client stdio transport |
+| Search memory by exact phrase/file when MCP transport is closed | SQLite FTS in `~/.claude-mem/claude-mem.db` | Use `observations_fts`, `session_summaries_fts`, or `user_prompts_fts` for precise local lookup |
 | Read episodic memory | `mcp__plugin_episodic-memory_episodic-memory__read` | Fallback detailed episode recall if current claude-mem tools are unavailable or insufficient |
 | Get current task list | `mcp__taskmaster-ai__get_tasks` **[NOT CONFIGURED — requires setup]** | Taskmaster project state |
 
@@ -163,7 +189,7 @@ IDEA → BRAINSTORM → DESIGN → PLAN → TEST-FIRST → IMPLEMENT → REVIEW 
 
 ### CLI Output Compression
 
-**RTK v0.34.2** operates at the Bash output compression layer (PreToolUse hook). It rewrites Bash commands before execution and compresses output — it does NOT replace or affect MCP tools (clangd, QMD, Context7), built-in tools (Read, Grep, Glob), or any skill. Configuration: `~/.config/rtk/config.toml`. Analytics: `rtk gain`. Hook integrity: `rtk verify`.
+**RTK v0.34.2** operates at the Bash output compression layer (PreToolUse hook). It rewrites Bash commands before execution and compresses output — it does NOT replace or affect MCP tools (clangd, NotebookLM, claude-mem), built-in tools (Read, Grep, Glob), or any skill. Configuration: `~/.config/rtk/config.toml`. Analytics: `rtk gain`. Hook integrity: `rtk verify`.
 
 ### Formatting & Output
 
@@ -178,15 +204,7 @@ IDEA → BRAINSTORM → DESIGN → PLAN → TEST-FIRST → IMPLEMENT → REVIEW 
 
 ## ORCHESTRATION: Ralph
 
-**Ralph** (snarktank) **[NOT ACTIVE -- no configuration found]** (`ralph-wiggum` plugin is disabled in global settings; no MCP server configured). It's an autonomous iteration loop that:
-- Breaks features into discrete user stories
-- Spawns fresh CC instances per iteration with clean context
-- Uses git history + AGENTS.md for cross-iteration persistence
-- Already delivered: `ralph/api-authentication` branch (8 user stories)
-
-**When to use Ralph:** Features that exceed a single context window. Multi-story features. Anything where "do it all in one session" would result in context exhaustion.
-
-**How to invoke:** Ralph is branch-based. Create a `ralph/<feature-name>` branch and follow the AGENTS.md protocol.
+**Ralph** (snarktank) is **not active** in this workspace: no MCP server is configured and the plugin is disabled. Do not invoke Ralph or create `ralph/<feature-name>` branches from this routing doc. If Captain re-enables Ralph later, add a fresh configuration note and verification command before restoring invocation guidance.
 
 ---
 
@@ -194,13 +212,13 @@ IDEA → BRAINSTORM → DESIGN → PLAN → TEST-FIRST → IMPLEMENT → REVIEW 
 
 1. **Do NOT grep for code when clangd can find it.** `find_definition`, `find_references`, and `get_call_hierarchy` are faster and more accurate than text search for C++ symbols.
 
-2. **Do NOT search docs by reading files when QMD can search them.** `qmd_search` and `qmd_vector_search` cover indexed collections. Check `qmd_status` first — if collections show zero, QMD needs indexing (run `scripts/setup-qmd.sh` on host Mac with Node 22).
+2. **Do NOT trawl docs manually.** Use NotebookLM for architecture and targeted `rg`/Read for current files. QMD is not default-loaded; do not assume it exists.
 
 3. **Do NOT start coding without checking brainstorming + TDD skills.** The brainstorming skill refines ideas BEFORE you commit to an approach. The TDD skill ensures tests exist BEFORE implementation.
 
 4. **Do NOT run 3+ independent tasks sequentially.** The parallel agents skill is marked MANDATORY. Use it.
 
-5. **Do NOT ignore Auggie (when configured).** Before writing "let me search the codebase..." -- query Auggie first. It understands code structure, not just text patterns. **[NOT CONFIGURED -- requires setup]**
+5. **Do NOT route work to inactive tools.** Auggie, Ralph, Taskmaster, Nimbalyst, and Figma are documented as not configured or inactive here. Use configured current-source tools instead.
 
 6. **Do NOT forget Claude-mem.** Start sessions by checking recent memory. End sessions knowing the memory system captures what happened.
 
@@ -214,8 +232,9 @@ IDEA → BRAINSTORM → DESIGN → PLAN → TEST-FIRST → IMPLEMENT → REVIEW 
 
 ```
 Is this about C++ firmware code?
-├── YES → clangd (9 tools) for navigation, Auggie for semantic queries [NOT CONFIGURED]
-│         QMD for documentation, Context7 for library APIs
+├── YES → clangd for navigation
+│         targeted rg/Read for documentation, NotebookLM for architecture,
+│         current vendor/local headers for library APIs
 │
 Is this about iOS / Swift?
 ├── YES → /iOS Expert skill + /ios-simulator-skill-main
@@ -232,8 +251,8 @@ Is this about testing a web UI?
 ├── YES → Playwright MCP tools + /webapp-testing or /playwright-skill
 │
 Is this a research task?
-├── YES → Auggie [NOT CONFIGURED] (code), QMD (docs), Claude-mem (history),
-│         /x-research (Twitter), /Content Research Writer (general)
+├── YES → targeted rg/Read (docs), NotebookLM (architecture), $RECALL_CLI (raw history),
+│         claude-mem (synthesised history), current source for implementation truth
 │
 Am I about to write code?
 ├── YES → Did you brainstorm? Did you write the test first?
@@ -254,3 +273,6 @@ Am I finishing a branch?
 | 7 Mar 2026 | Added operational status blocks for clangd (510 entries) and QMD (330 files, 2,421 vectors). Updated QMD anti-pattern to reference `scripts/setup-qmd.sh` and `qmd_status` check. |
 | 14 Mar 2026 | Dead reference cleanup. Marked 3 deleted skills (`supabase-expert`, `toon-formatter`, `theme-factory`) as REMOVED. Marked 4 unconfigured MCP servers (`auggie`, `nimbalyst-mcp`, `taskmaster-ai`, `figma`) as NOT CONFIGURED. Fixed `claude-mem` tool prefix (`mem-search` -> `mcp-search`). Replaced static status assertions with live-check instructions. Marked Ralph as NOT ACTIVE. |
 | 31 Mar 2026 | Added RTK v0.34.2 entry under Infrastructure & Tooling (CLI Output Compression subsection). |
+| 05 May 2026 | Aligned Phase 0 with `$RECALL_CLI` then claude-mem routing, added NotebookLM architecture routing, updated clangd compiledb env to ESV11 K1v2 32 kHz, and demoted inactive Auggie/Ralph guidance. |
+| 05 May 2026 | Removed QMD and Context7 as protected/default routes after live smoke failure/unproven health; retained NotebookLM for architecture and current-source verification for implementation truth. |
+| 05 May 2026 | Added claude-mem Smart Explore failure protocol: `smart_search`/`smart_outline` transport failures no longer imply memory search is down; route agents to worker `/api/search`, SQLite FTS, `$RECALL_CLI`, `rg`, or clangd as appropriate. |

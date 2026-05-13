@@ -17,6 +17,8 @@ in the Perfetto UI.
    | Canonical build env | Trace-enabled counterpart |
    |---|---|
    | `esp32dev_audio_esv11_k1v2_32khz` (K1 V2 production) | `esp32dev_audio_esv11_k1v2_32khz_trace` |
+   | K1 V2 Core 0 audio DSP decomposition | `esp32dev_audio_esv11_k1v2_32khz_trace_dsp` |
+   | K1 V2 audio-render handoff decomposition | `esp32dev_audio_esv11_k1v2_32khz_trace_handoff` |
    | `esp32dev_audio_esv11_32khz` (V1 dev boards) | `esp32dev_audio_esv11_32khz_trace` |
    | `esp32dev_audio_pipelinecore` | `esp32dev_audio_pipelinecore_trace` |
    | `esp32dev_audio_base` | `esp32dev_audio_trace` |
@@ -78,6 +80,8 @@ for interactive exploration.
 > ### Update -- 2026-04-27
 >
 > The canonical K1 build path is the `_32khz` envs (see project CLAUDE.md). For K1 V2 production work, use `esp32dev_audio_esv11_k1v2_32khz_trace` as the default trace env, NOT `esp32dev_audio_trace`. The `esp32dev_audio_trace` env extends `esp32dev_audio_base` and is suitable for non-K1 dev boards or audio-base smoke tests only. See the TL;DR table at the top of this document for the full mapping.
+>
+> Use `esp32dev_audio_esv11_k1v2_32khz_trace_dsp` when you need Surface 3 Core 0 decomposition spans such as `i2s_dma_read`, `stm_rfft_256`, `onset_detect_span`, `band_ratio_detect`, and `controlbus_publish`. The base K1v2 trace env keeps those high-rate spans off so long captures do not saturate the trace ring with DSP internals.
 
 ### Step 1 -- Build with tracing enabled
 

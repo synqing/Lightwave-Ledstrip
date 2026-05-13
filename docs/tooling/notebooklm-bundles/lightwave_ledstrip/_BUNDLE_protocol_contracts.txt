@@ -1,11 +1,12 @@
-# Bundle: K1 protocol contracts (WS + REST)
-# Purpose: Authoritative API surface for K1 LightwaveOS firmware. Single source of truth for what K1 exposes and what Tab5/iOS consumes.
-# Files included: 2
-# Generated: 2026-05-04 (refreshed after Captain Approval #1 doctrine corrections)
+================================================================================
+BUNDLE: K1 protocol contracts (WebSocket + REST)
+DESCRIPTION: Wire-level contracts for iOS, Tab5, and lab clients. Single source of truth for the v1 API surface; gate rule: update contract FIRST, then implement. SongAware/SynqMatrix routes appear here while the rename is in flight (see SynqMatrix naming review). K1 WiFi mode framed per forensic report: current dev AP-only via WIFI_AP_ONLY build flag, goal dual-mode (AP OR STA, never together — concurrent AP+STA has known ESP-IDF bug).
+GENERATED: 2026-05-13
+================================================================================
+
 
 ================================================================================
 FILE: docs/protocol/k1-ws-contract.yaml
-DESCRIPTION: WebSocket command contract — full K1 WS surface (commands, broadcasts, payloads). Source of truth for tab5/iOS WS clients.
 ================================================================================
 
 # LightwaveOS WebSocket Protocol Contract v1
@@ -95,6 +96,31 @@ commands:
       paletteId: { type: uint8, required: true }
     response: "none (triggers broadcastStatus)"
     consumers: [tab5]
+
+  # ── Render output commands ────────────────────────────────────────────
+  render.dithering.get:
+    direction: "client -> K1"
+    description: "Get LED output temporal dithering state"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "render.dithering.get"
+      data:
+        enabled: bool
+    consumers: [tab5, ios]
+
+  render.dithering.set:
+    direction: "client -> K1"
+    description: "Enable or disable LED output temporal dithering"
+    request:
+      enabled: { type: bool, required: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "render.dithering.set"
+      data:
+        enabled: bool
+    broadcast: "broadcastStatus (all clients)"
+    consumers: [tab5, ios]
 
   # ── Structured effect commands ─────────────────────────────────────────
   effects.setCurrent:
@@ -276,6 +302,258 @@ commands:
         variation: uint8
     broadcast: "broadcastStatus"
     consumers: [tab5, ios]
+
+  # ── SynqMatrix Director ──────────────────────────────────────────────────
+  songAware.config.get:
+    direction: "client -> K1"
+    description: "Get runtime-only SynqMatrix configuration. Mode is the authority boundary; profile is aggression. No NVS persistence."
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "songAware.config"
+      data:
+        enabled: bool
+        mode: { type: string, enum: [off, assist, director] }
+        profile: { type: string, enum: [subtle, balanced, high] }
+        switchingEnabled: bool
+        familyMorphing: { type: bool, deprecated: true }
+        constrainedSwitching: { type: bool, deprecated: true, note: "Alias of switchingEnabled for one release." }
+        sensitivity: { type: float, range: "0.0-1.0" }
+        intensityScalar: { type: float, range: "0.0-1.0" }
+        motionScalar: { type: float, range: "0.0-1.0" }
+        confidenceFloor: { type: float, range: "0.0-1.0" }
+    consumers: [tab5, ios, lab]
+
+  songAware.config.set:
+    direction: "client -> K1"
+    description: "Set runtime-only SynqMatrix configuration."
+    request:
+      enabled: { type: bool, optional: true }
+      mode: { type: string, optional: true, enum: [off, assist, director], compatibility: "on and parameter map to assist; subtle/balanced/high set profile and map mode to assist for one release." }
+      profile: { type: string, optional: true, enum: [subtle, balanced, high] }
+      switchingEnabled: { type: bool, optional: true }
+      familyMorphing: { type: bool, optional: true, deprecated: true }
+      constrainedSwitching: { type: bool, optional: true, deprecated: true, note: "Alias of switchingEnabled for one release." }
+      sensitivity: { type: float, optional: true, range: "0.0-1.0" }
+      intensityScalar: { type: float, optional: true, range: "0.0-1.0" }
+      motionScalar: { type: float, optional: true, range: "0.0-1.0" }
+      confidenceFloor: { type: float, optional: true, range: "0.0-1.0" }
+      requestId: { type: string, optional: true }
+    response:
+      type: "songAware.config"
+      data:
+        enabled: bool
+        mode: string
+        profile: string
+        switchingEnabled: bool
+        familyMorphing: bool
+        constrainedSwitching: bool
+        sensitivity: float
+        intensityScalar: float
+        motionScalar: float
+        confidenceFloor: float
+    consumers: [tab5, ios, lab]
+
+  songAware.status:
+    direction: "client -> K1"
+    description: "Get runtime SynqMatrix readback including state, intent, action plan, gates, transition, and health."
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "songAware.status"
+      data:
+        enabled: bool
+        mode: string
+        effectiveMode: string
+        profile: string
+        owner: string
+        suppressedReason: string
+        previousSuppressedReason: string
+        classificationReason: string
+        rawSongState: string
+        previousSongState: string
+        currentSongState: string
+        candidateSongState: string
+        intent: string
+        actionPlan: string
+        boundaryGate: string
+        boundaryReady: bool
+        waitingForBoundary: bool
+        boundaryConfidence: float
+        confidence: float
+        selectionScore: float
+        lastAction: string
+        activeEffectId: uint16
+        previousEffectId: uint16
+        selectedEffectId: uint16
+        selectedFamily: string
+        selectedVisualLanguage: string
+        lastSwitchReason: string
+        parameterUpdates: uint32
+        automaticEffectSwitches: uint32
+        lastDecisionAtMs: uint32
+        lastSwitchAtMs: uint32
+        stateAgeMs: uint32
+        candidateAgeMs: uint32
+        candidateHoldRemainingMs: uint32
+        dwellRemainingMs: uint32
+        cooldownRemainingMs: uint32
+        bootGraceRemainingMs: uint32
+        enableGraceRemainingMs: uint32
+        switchWindowRemainingMs: uint32
+        switchesInWindow: uint8
+        maxSwitchesPerWindow: uint8
+        antiThrashRemainingMs: uint32
+        lastSwitchFromEffectId: uint16
+        lastSwitchToEffectId: uint16
+        transitionActive: bool
+        transitionPreviousEffectId: uint16
+        transitionTargetEffectId: uint16
+        transitionStartedAtMs: uint32
+        transitionDurationMs: uint32
+        transitionRemainingMs: uint32
+        transitionProgress: float
+        rms: float
+        flux: float
+        bpm: float
+        audioConfidence: float
+        health:
+          healthDegraded: bool
+          showSkips: uint32
+          failures: uint32
+          rmtErrors: uint32
+          underruns: uint32
+          healthCleanForMs: uint32
+          healthCleanWindowRemainingMs: uint32
+    consumers: [tab5, ios, lab]
+
+  songAware.reset:
+    direction: "client -> K1"
+    description: "Reset runtime-only SynqMatrix Director state to defaults. Captures a WebSocket-local restore point before reset."
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "songAware.reset"
+      data:
+        reset: bool
+        status: "songAware.status payload"
+    consumers: [tab5, ios, lab]
+
+  songAware.restore:
+    direction: "client -> K1"
+    description: "Restore the last WebSocket-captured SynqMatrix runtime state. No NVS persistence."
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "songAware.restore"
+      data:
+        restored: bool
+        status: "songAware.status payload"
+    consumers: [tab5, ios, lab]
+
+  songAware.debug:
+    direction: "client -> K1"
+    description: "Get full SynqMatrix debug snapshot: config, status, policy timing, and allowlist."
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "songAware.debug"
+      data:
+        config: "songAware.config payload"
+        status: "songAware.status payload"
+        policy: "SynqMatrix timing/gate constants"
+        allowlist: "SynqMatrix runtime mutable state policy allowlist"
+    consumers: [tab5, ios, lab]
+
+  songAware.policy:
+    direction: "client -> K1"
+    description: "Get SynqMatrix policy timing/gate constants and allowlist count."
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "songAware.policy"
+      data:
+        bootGraceMs: uint32
+        postEnableGraceMs: uint32
+        stableStateHoldMs: uint32
+        dropStateHoldMs: uint32
+        minimumDwellMs: uint32
+        switchCooldownMs: uint32
+        switchWindowMs: uint32
+        maxSwitchesPerWindow: uint8
+        antiThrashWindowMs: uint32
+        healthCleanWindowMs: uint32
+        allowlistCount: uint8
+    consumers: [tab5, ios, lab]
+
+  songAware.allowlist:
+    direction: "client -> K1"
+    description: "Get the runtime mutable SynqMatrix state/effect/family policy allowlist."
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "songAware.allowlist"
+      data:
+        count: uint8
+        policies: "array of {state, effectId, family, visualLanguage, reason, minConfidence, enabled}"
+    consumers: [tab5, ios, lab]
+
+  songAware.allowlist.set:
+    direction: "client -> K1"
+    description: "Enable or disable one SynqMatrix state policy row at runtime."
+    request:
+      state: { type: string, required: true, enum: [unknown, silence, ambient, steady, build, drop, breakdown, dense, transition] }
+      enabled: { type: bool, required: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "songAware.allowlist"
+      data:
+        count: uint8
+        policies: "array of {state, effectId, family, visualLanguage, reason, minConfidence, enabled}"
+    consumers: [tab5, ios, lab]
+
+  songAware.allowlist.reset:
+    direction: "client -> K1"
+    description: "Reset runtime allowlist so all policy rows are enabled."
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "songAware.allowlist"
+      data:
+        count: uint8
+        policies: "array of {state, effectId, family, visualLanguage, reason, minConfidence, enabled}"
+    consumers: [tab5, ios, lab]
+
+  songAware.health:
+    direction: "client -> K1"
+    description: "Get SynqMatrix health counters and clean-window state."
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "songAware.health"
+      data:
+        healthDegraded: bool
+        showSkips: uint32
+        failures: uint32
+        rmtErrors: uint32
+        underruns: uint32
+        healthCleanForMs: uint32
+        healthCleanWindowRemainingMs: uint32
+    consumers: [tab5, ios, lab]
+
+  songAware.counters.reset:
+    direction: "client -> K1"
+    description: "Reset SynqMatrix runtime counters and health-gate counters. Captures a WebSocket-local restore point before reset."
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "songAware.counters.reset"
+      data:
+        reset: bool
+        parameterUpdates: uint32
+        automaticEffectSwitches: uint32
+        health: "songAware.health payload"
+    consumers: [tab5, ios, lab]
 
   # ── Camera Mode ────────────────────────────────────────────────────────
   cameraMode.set:
@@ -950,6 +1228,16 @@ commands:
         autoExposureTarget: uint8
         gammaEnabled: bool
         gammaValue: float
+        lutGenerationId: uint32
+        gammaLut:
+          type: object
+          fields:
+            "0": uint8
+            "32": uint8
+            "64": uint8
+            "128": uint8
+            "192": uint8
+            "255": uint8
         brownGuardrailEnabled: bool
         maxGreenPercentOfRed: uint8
         maxBluePercentOfRed: uint8
@@ -983,6 +1271,20 @@ commands:
       requestId: { type: string, optional: true }
     response:
       type: "colorCorrection.setConfig"
+      data:
+        updated: bool
+        gammaEnabled: bool
+        gammaValue: float
+        lutGenerationId: uint32
+        gammaLut:
+          type: object
+          fields:
+            "0": uint8
+            "32": uint8
+            "64": uint8
+            "128": uint8
+            "192": uint8
+            "255": uint8
     consumers: [tab5]
 
   colorCorrection.save:
@@ -1909,6 +2211,7 @@ broadcasts:
       variation: uint8
       fps: float
       cpuPercent: float
+      ledDitheringEnabled: bool
       freeHeap: uint32
       uptime: uint32
       edgeMixerMode: uint8
@@ -2094,10 +2397,8 @@ known_issues:
     severity: "low"
     fix: "Standardise show responses to use buildWsResponse()"
 
-
 ================================================================================
 FILE: docs/protocol/k1-rest-contract.yaml
-DESCRIPTION: REST endpoint contract — full K1 REST surface. The /api/v1/network/* endpoints are gated in current shipping (AP-only via WIFI_AP_ONLY build flag); pure-STA path under re-validation.
 ================================================================================
 
 # LightwaveOS REST API Contract v1
@@ -2159,6 +2460,23 @@ endpoints:
   /api/v1/device/ota-token:
     method: POST
     description: "Generate or rotate OTA token"
+
+  # ── Render Output ──────────────────────────────────────────────────────
+  /api/v1/render/dithering:
+    method: GET
+    description: "Get LED output temporal dithering state"
+    response:
+      enabled: bool
+    consumers: [ios, tab5]
+
+  /api/v1/render/dithering:
+    method: POST
+    description: "Enable or disable LED output temporal dithering"
+    body:
+      enabled: { type: bool, required: true }
+    response:
+      enabled: bool
+    consumers: [ios, tab5]
 
   # ── Effects ────────────────────────────────────────────────────────────
   /api/v1/effects:
@@ -2249,6 +2567,146 @@ endpoints:
       mood: { type: uint8, optional: true, range: "0-255", description: "REST only" }
       fadeAmount: { type: uint8, optional: true, description: "REST only" }
     consumers: [ios]
+
+  # ── SynqMatrix Director ──────────────────────────────────────────────────
+  /api/v1/songAware/config:
+    method: GET
+    description: "Get runtime-only SynqMatrix configuration. Mode is the authority boundary; profile is aggression. No NVS persistence."
+    response:
+      enabled: bool
+      mode: { type: string, enum: [off, assist, director] }
+      profile: { type: string, enum: [subtle, balanced, high] }
+      switchingEnabled: bool
+      familyMorphing: { type: bool, deprecated: true, note: "Accepted for compatibility; unsupported." }
+      constrainedSwitching: { type: bool, deprecated: true, note: "Alias of switchingEnabled for one release." }
+      sensitivity: { type: float, range: "0.0-1.0" }
+      intensityScalar: { type: float, range: "0.0-1.0" }
+      motionScalar: { type: float, range: "0.0-1.0" }
+      confidenceFloor: { type: float, range: "0.0-1.0" }
+    consumers: [ios, tab5, lab]
+
+  /api/v1/songAware/config:
+    method: [POST, PATCH]
+    description: "Set runtime-only synq-matrix director configuration, or run a bounded runtime action through the existing config route. No NVS persistence."
+    body:
+      action: { type: string, optional: true, enum: [reset, wipe, restore, countersReset, counters_reset], note: "When present, runs the action instead of applying config fields. reset is a compatibility alias for wipe." }
+      enabled: { type: bool, optional: true }
+      mode: { type: string, optional: true, enum: [off, assist, director], compatibility: "on and parameter map to assist; subtle/balanced/high set profile and map mode to assist for one release." }
+      profile: { type: string, optional: true, enum: [subtle, balanced, high] }
+      switchingEnabled: { type: bool, optional: true }
+      familyMorphing: { type: bool, optional: true, deprecated: true, note: "Accepted for compatibility; unsupported." }
+      constrainedSwitching: { type: bool, optional: true, deprecated: true, note: "Alias of switchingEnabled for one release." }
+      sensitivity: { type: float, optional: true, range: "0.0-1.0" }
+      intensityScalar: { type: float, optional: true, range: "0.0-1.0" }
+      motionScalar: { type: float, optional: true, range: "0.0-1.0" }
+      confidenceFloor: { type: float, optional: true, range: "0.0-1.0" }
+    response:
+      enabled: bool
+      mode: string
+      profile: string
+      switchingEnabled: bool
+      familyMorphing: bool
+      constrainedSwitching: bool
+      sensitivity: float
+      intensityScalar: float
+      motionScalar: float
+      confidenceFloor: float
+    consumers: [ios, tab5, lab]
+
+  /api/v1/songAware/status:
+    method: GET
+    description: "Get runtime synq-matrix director readback for validation. Optional view exposes health/debug/policy/allowlist readbacks without adding extra REST routes."
+    query_params:
+      view: { type: string, optional: true, enum: [status, health, debug, policy, allowlist], default: status }
+    response:
+      enabled: bool
+      mode: string
+      effectiveMode: string
+      profile: string
+      owner: string
+      suppressedReason: string
+      previousSuppressedReason: string
+      classificationReason: string
+      rawSongState: string
+      previousSongState: string
+      currentSongState: string
+      candidateSongState: string
+      intent: string
+      actionPlan: string
+      boundaryGate: string
+      boundaryReady: bool
+      waitingForBoundary: bool
+      boundaryConfidence: float
+      confidence: float
+      selectionScore: float
+      lastAction: string
+      activeEffectId: uint16
+      previousEffectId: uint16
+      selectedEffectId: uint16
+      selectedFamily: string
+      selectedVisualLanguage: string
+      lastSwitchReason: string
+      parameterUpdates: uint32
+      automaticEffectSwitches: uint32
+      lastDecisionAtMs: uint32
+      lastSwitchAtMs: uint32
+      stateAgeMs: uint32
+      candidateAgeMs: uint32
+      candidateHoldRemainingMs: uint32
+      dwellRemainingMs: uint32
+      cooldownRemainingMs: uint32
+      bootGraceRemainingMs: uint32
+      enableGraceRemainingMs: uint32
+      switchWindowRemainingMs: uint32
+      switchesInWindow: uint8
+      maxSwitchesPerWindow: uint8
+      antiThrashRemainingMs: uint32
+      lastSwitchFromEffectId: uint16
+      lastSwitchToEffectId: uint16
+      transitionActive: bool
+      transitionPreviousEffectId: uint16
+      transitionTargetEffectId: uint16
+      transitionStartedAtMs: uint32
+      transitionDurationMs: uint32
+      transitionRemainingMs: uint32
+      transitionProgress: float
+      rms: float
+      flux: float
+      bpm: float
+      audioConfidence: float
+      health:
+        healthDegraded: bool
+        showSkips: uint32
+        failures: uint32
+        rmtErrors: uint32
+        underruns: uint32
+        healthCleanForMs: uint32
+        healthCleanWindowRemainingMs: uint32
+    consumers: [ios, tab5, lab]
+
+  /api/v1/songAware/allowlist:
+    method: GET
+    description: "Get the runtime mutable state policy allowlist."
+    response:
+      count: uint8
+      policies: "array of {state,effectId,family,visualLanguage,reason,minConfidence,enabled}"
+    consumers: [ios, tab5, lab]
+
+  /api/v1/songAware/allowlist:
+    method: PATCH
+    description: "Enable or disable a SynqMatrix state policy row at runtime."
+    body:
+      state: { type: string, required: true, enum: [unknown, silence, ambient, steady, build, drop, breakdown, dense, transition] }
+      enabled: { type: bool, required: true }
+    response:
+      count: uint8
+      policies: "array of {state,effectId,family,visualLanguage,reason,minConfidence,enabled}"
+    consumers: [ios, tab5, lab]
+
+  /api/v1/songAware/allowlist/reset:
+    method: POST
+    description: "Reset the runtime allowlist so all policy rows are enabled."
+    consumers: [ios, tab5, lab]
 
   # ── Factory Presets ────────────────────────────────────────────────────
   /api/v1/factoryPresets:
@@ -2375,7 +2833,7 @@ endpoints:
 
   /api/v1/audio/mappings/sources:
     method: GET
-    description: "List available audio mapping sources"
+    description: "List available audio mapping sources, including Phase 1.5 render-side ControlBus reuse scalars"
 
   /api/v1/audio/mappings/targets:
     method: GET
@@ -2860,6 +3318,19 @@ endpoints:
   /api/v1/colorCorrection/config:
     method: GET
     description: "Get colour correction config"
+    response:
+      gammaEnabled: bool
+      gammaValue: float
+      lutGenerationId: uint32
+      gammaLut:
+        type: object
+        fields:
+          "0": uint8
+          "32": uint8
+          "64": uint8
+          "128": uint8
+          "192": uint8
+          "255": uint8
 
   /api/v1/colorCorrection/mode:
     method: POST
@@ -2868,6 +3339,23 @@ endpoints:
   /api/v1/colorCorrection/config:
     method: POST
     description: "Set colour correction config"
+    params:
+      gammaEnabled: { type: bool, optional: true }
+      gammaValue: { type: float, optional: true, range: "1.0-3.0" }
+    response:
+      updated: bool
+      gammaEnabled: bool
+      gammaValue: float
+      lutGenerationId: uint32
+      gammaLut:
+        type: object
+        fields:
+          "0": uint8
+          "32": uint8
+          "64": uint8
+          "128": uint8
+          "192": uint8
+          "255": uint8
 
   /api/v1/colorCorrection/save:
     method: POST

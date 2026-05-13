@@ -1,37 +1,8 @@
-================================================================================
-⚠️  STATUS BANNER — STRATEGIC ROADMAP, NOT API REFERENCE  ⚠️
-================================================================================
-
-THIS DOCUMENT IS A FORWARD-LOOKING ROADMAP, NOT A SPECIFICATION OF SHIPPING BEHAVIOUR.
-
-What this document IS:
-- Sections 1-4: an INVENTORY of the CURRENT K1 API surface (factual, as-shipped 2026-05-04).
-- Sections 5-8: a PHASED PLAN for FUTURE integrations — DMX, MIDI, OSC, multi-K1 sync. **NOT IMPLEMENTED.**
-- Section 9: a list of OPEN DESIGN QUESTIONS — explicitly unresolved, not direction.
-
-What this document is NOT:
-- An API reference.
-- A description of features that exist.
-- A statement of K1 behaviour an agent or user can rely on.
-
-THREE HARD FACTS TO EXTRACT FROM THIS DOCUMENT (do not let them get lost):
-
-1. **K1 WiFi mode — current state vs goal state (FORENSICALLY CORRECTED 2026-05-04).** Current shipping firmware is AP-only via build flag `WIFI_AP_ONLY` in canonical envs. The GOAL-STATE is dual-mode: K1 must support functioning in EITHER AP-only OR STA-only mode — NEVER concurrent. Concurrent AP+STA corrupts auth state at the ESP-IDF 802.11 driver level (the genuine ESP32 bug). Pure-STA mode WORKED in earlier eras (2025-06 Light Crystals; 2025-12 v2 STA-primary) — the previous "AP-only-EVER, STA never worked" doctrine was an over-correction from a single concurrent-mode failure event in 2026-02. Walk-back env `_sta_validation` added 2026-05-03 (commit 11e040d6). For full reconstruction: `docs/tooling/notebooklm-bundles/lightwave_ledstrip/_FORENSIC_WIFI_REPORT.md`.
-
-2. **DMX/ArtNet bridge, MIDI integration, OSC support, multi-K1 synchronisation, generative-AI effects, remote visualisation, sensor/trigger integration — NONE OF THESE ARE IMPLEMENTED.** They are roadmap items. If asked whether K1 supports any of these today, the answer is NO.
-
-3. **For the SHIPPING API, defer to:** `firmware-v3_docs_api_api-v1.md` and `_BUNDLE_protocol_contracts.txt`.
-
-================================================================================
-
 ---
 abstract: "Strategic API roadmap for K1 LightwaveOS ecosystem expansion. Covers current API inventory (150 WS + 110 REST), consumer gap analysis (zone-mixer/Tab5/iOS), 10 integration opportunities (DMX, MIDI, OSC, multi-K1, etc.), and phased implementation plan. Read before planning any new API work."
 ---
 
 # K1 Ecosystem API Roadmap
-
-
-> _**Status reminder:** this section describes the CURRENT K1 API inventory (factual as-shipped 2026-05-04). For detailed API reference defer to `firmware-v3_docs_api_api-v1.md`._
 
 ## 1. Current API Landscape
 
@@ -46,9 +17,6 @@ K1 LightwaveOS exposes a substantial API surface built up over 3 firmware major 
 
 **Total: ~260 addressable API surfaces across 3 transports.**
 
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
-
 ### Usage Reality
 
 Only **23% of API surfaces are actively consumed** by any client (approximately 60 of 260). The remaining 77% are either:
@@ -56,9 +24,6 @@ Only **23% of API surfaces are actively consumed** by any client (approximately 
 - **Implemented but never wired to a consumer** (show, plugins, motion, narrative, stimulus, trinity, benchmark, filesystem)
 - **Partially consumed** (only GET used, SET/LIST/DELETE unused)
 - **Disabled at compile time** (filesystem commands behind `#ifdef`)
-
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
 
 ### Domains by Activity
 
@@ -70,15 +35,9 @@ Only **23% of API surfaces are actively consumed** by any client (approximately 
 
 ---
 
-
-> _**Status reminder:** this section describes the CURRENT K1 API inventory (factual as-shipped 2026-05-04). For detailed API reference defer to `firmware-v3_docs_api_api-v1.md`._
-
 ## 2. Consumer Capability Matrix
 
 Three consumers exist today: zone-mixer (AtomS3 physical controller), Tab5 (M5Stack touchscreen), and iOS (companion app).
-
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
 
 ### What Each Consumer Can Do
 
@@ -98,9 +57,6 @@ Three consumers exist today: zone-mixer (AtomS3 physical controller), Tab5 (M5St
 | Show playback | No | No | Yes |
 | OTA firmware update | No | No | Yes |
 | System diagnostics | No | No | Yes |
-
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
 
 ### Key Asymmetries
 
@@ -125,9 +81,6 @@ Three consumers exist today: zone-mixer (AtomS3 physical controller), Tab5 (M5St
 - Trinity commands
 - Benchmark commands
 
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
-
 ### Commands K1 Supports but Nobody Uses
 
 | Domain | Command Count | Notes |
@@ -141,9 +94,6 @@ Three consumers exist today: zone-mixer (AtomS3 physical controller), Tab5 (M5St
 | Benchmark | ~3 | Performance profiling — no consumer |
 | Filesystem | ~5 | Disabled behind compile flag |
 
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
-
 ### Commands Consumers Need but K1 Lacks
 
 | Missing Command | Consumer | Status |
@@ -156,77 +106,41 @@ Three consumers exist today: zone-mixer (AtomS3 physical controller), Tab5 (M5St
 
 ---
 
-
-> _**Status reminder:** this section describes the CURRENT K1 API inventory (factual as-shipped 2026-05-04). For detailed API reference defer to `firmware-v3_docs_api_api-v1.md`._
-
 ## 3. Internal Capabilities Not Exposed
 
 Ten firmware subsystems exist with no or minimal API exposure:
 
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
-
 ### 3.1 MusicalSaliency
 Computes harmonic, rhythmic, and timbral saliency scores from audio. Used internally by effects but not queryable or streamable. External visualisers and AI integrations would benefit from these derived metrics.
-
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
 
 ### 3.2 NarrativeEngine
 Maps song structure (intro/build/drop/breakdown) to effect intensity curves. Runs internally but provides no state queries, no override commands, and no progress events. Show sequencing depends on this but cannot coordinate with it.
 
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
-
 ### 3.3 MotionEngine
 Phase rotation, particle physics, and spatial movement computations. Commands exist but no consumer uses them. No state broadcasts for external synchronisation.
-
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
 
 ### 3.4 Effect Parameter Ranges
 Effects define parameters internally (min, max, step, default, display name) but this metadata is not discoverable via API. Consumers must hardcode slider ranges or use generic 0-255 ranges.
 
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
-
 ### 3.5 Full Spectral Data
 K1 computes 256-bin FFT, 64-bin Goertzel, and 12-band chroma internally. Only octave bands (8 values) and basic metrics (RMS, beat, onset) are exposed via broadcast. External visualisers need configurable spectral resolution.
-
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
 
 ### 3.6 STM (Spectral-Temporal Modulation)
 New analysis stage (in uncommitted changes) that extracts spectral-temporal modulation features. Not yet exposed via any API. Potential high-value stream for advanced audio-visual mapping.
 
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
-
 ### 3.7 Show System
 10 shows stored in PROGMEM. Play command exists but no runtime creation, editing, deletion, or import. Shows cannot be uploaded from clients. No playback progress events.
-
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
 
 ### 3.8 Plugin System
 LittleFS-based plugin manifests exist in firmware. No remote plugin management (install, remove, list, enable/disable). Plugins must be compiled into firmware.
 
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
-
 ### 3.9 Zone Composition
 Advanced blend modes exist internally for compositing zone renders. Only basic zone parameters (brightness, speed, effect) are exposed. Blend mode, opacity, and composition order are not API-controllable.
-
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
 
 ### 3.10 Colour Correction Presets
 Individual colour correction parameters are adjustable, but preset management (save/load/name named correction profiles) is not exposed.
 
 ---
-
-
-> _**Status reminder:** this section describes the CURRENT K1 API inventory (factual as-shipped 2026-05-04). For detailed API reference defer to `firmware-v3_docs_api_api-v1.md`._
 
 ## 4. Missing Broadcasts (Ecosystem Blockers)
 
@@ -244,21 +158,12 @@ These are not feature requests — they are infrastructure gaps that block multi
 
 ---
 
-
-> _**Status reminder:** this section describes FUTURE/UNIMPLEMENTED roadmap work (DMX/MIDI/OSC/multi-K1/etc.). NONE of the items below are implemented in K1 v3.4. Do not present them as available features._
-
 ## 5. CRUD Completeness Gaps
-
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
 
 ### Complete Domains (13)
 Full GET/SET/LIST/DELETE + event coverage:
 
 Effects, Parameters, Palettes, Zones, Presets, Audio (basic), EdgeMixer, Colour Correction, System Status, WiFi Config, Brightness, Speed, Global Controls.
-
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
 
 ### Partial Domains (10)
 
@@ -275,9 +180,6 @@ Effects, Parameters, Palettes, Zones, Presets, Audio (basic), EdgeMixer, Colour 
 | Stimulus | INJECT | Mode change events |
 | Colour Presets | Individual params | Named preset CRUD |
 
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
-
 ### Write-Only Domains (3)
 
 | Domain | State |
@@ -288,13 +190,7 @@ Effects, Parameters, Palettes, Zones, Presets, Audio (basic), EdgeMixer, Colour 
 
 ---
 
-
-> _**Status reminder:** this section describes FUTURE/UNIMPLEMENTED roadmap work (DMX/MIDI/OSC/multi-K1/etc.). NONE of the items below are implemented in K1 v3.4. Do not present them as available features._
-
 ## 6. Integration Opportunities
-
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
 
 ### 6.1 Show Sequencing — MUST HAVE
 **Priority: P0 | Estimate: ~80h**
@@ -306,9 +202,6 @@ Effects, Parameters, Palettes, Zones, Presets, Audio (basic), EdgeMixer, Colour 
 | Minimum viable API | `show.create`, `show.update`, `show.delete`, `show.upload`, `show.progress` broadcast |
 | Why it matters | Shows are the primary "set and forget" user experience. Without runtime creation, every show requires a firmware rebuild |
 
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
-
 ### 6.2 Audio Data Streaming — MUST HAVE
 **Priority: P0 | Estimate: ~40h**
 
@@ -318,9 +211,6 @@ Effects, Parameters, Palettes, Zones, Presets, Audio (basic), EdgeMixer, Colour 
 | What is missing | Configurable spectral stream (resolution, rate, feature selection) |
 | Minimum viable API | `audio.stream.configure` (features, resolution, rate), `audio.stream.start/stop`, UDP spectral packets |
 | Why it matters | External visualisers, VJ software, and AI effect generators need raw audio features |
-
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
 
 ### 6.3 DMX/ArtNet Bridge — SHOULD HAVE
 **Priority: P1 | Estimate: ~120h**
@@ -332,9 +222,6 @@ Effects, Parameters, Palettes, Zones, Presets, Audio (basic), EdgeMixer, Colour 
 | Minimum viable API | ArtNet receiver on UDP 6454, DMX→LED mapping config, fixture personality file |
 | Why it matters | Professional stage integration. K1 becomes a controllable fixture in existing lighting rigs |
 
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
-
 ### 6.4 OSC Integration — SHOULD HAVE
 **Priority: P1 | Estimate: ~60h**
 
@@ -344,9 +231,6 @@ Effects, Parameters, Palettes, Zones, Presets, Audio (basic), EdgeMixer, Colour 
 | What is missing | OSC UDP listener, address-to-command mapping, OSC output for state feedback |
 | Minimum viable API | OSC listener on configurable port, `/k1/effect/select`, `/k1/zone/brightness`, `/k1/audio/beat` output |
 | Why it matters | VJ industry standard (Resolume, TouchDesigner, Pure Data, Max/MSP). Opens K1 to the creative coding community |
-
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
 
 ### 6.5 MIDI Control — SHOULD HAVE
 **Priority: P1 | Estimate: ~80h**
@@ -358,9 +242,6 @@ Effects, Parameters, Palettes, Zones, Presets, Audio (basic), EdgeMixer, Colour 
 | Minimum viable API | USB MIDI device (ESP32-S3 native USB), CC mapping table, `midi.learn` command, note trigger config |
 | Why it matters | DAW integration (Ableton, Reaper, Logic). Musicians control lights directly from their session |
 
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
-
 ### 6.6 Multi-K1 Synchronisation — SHOULD HAVE
 **Priority: P1 | Estimate: ~100h**
 
@@ -370,9 +251,6 @@ Effects, Parameters, Palettes, Zones, Presets, Audio (basic), EdgeMixer, Colour 
 | What is missing | Leader/follower protocol, beat sync packets, effect coordination, shared show playback |
 | Minimum viable API | `sync.discover` (find other K1s), `sync.setRole` (leader/follower), beat sync UDP broadcast, shared effect state |
 | Why it matters | Multi-fixture installations. Bars, stages, and installations with 2-10 K1 units need coordinated behaviour |
-
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
 
 ### 6.7 Cross-Platform Discovery — SHOULD HAVE
 **Priority: P1 | Estimate: ~40h**
@@ -384,9 +262,6 @@ Effects, Parameters, Palettes, Zones, Presets, Audio (basic), EdgeMixer, Colour 
 | Minimum viable API | SSDP responder, UPnP device description at `/description.xml`, discovery response with capabilities |
 | Why it matters | Windows and Android clients cannot reliably discover K1 via mDNS. UPnP is the fallback standard |
 
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
-
 ### 6.8 Generative/AI Effects — COULD HAVE
 **Priority: P2 | Estimate: ~60h**
 
@@ -397,9 +272,6 @@ Effects, Parameters, Palettes, Zones, Presets, Audio (basic), EdgeMixer, Colour 
 | Minimum viable API | `stimulus.register` (declare external source), documented UDP frame format, frame rate negotiation |
 | Why it matters | External ML models (running on phone/laptop) can generate LED patterns and inject them into K1 |
 
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
-
 ### 6.9 Remote Visualisation — COULD HAVE
 **Priority: P2 | Estimate: ~50h**
 
@@ -409,9 +281,6 @@ Effects, Parameters, Palettes, Zones, Presets, Audio (basic), EdgeMixer, Colour 
 | What is missing | HTML5 Canvas LED preview endpoint, diagnostics dashboard, performance graphs |
 | Minimum viable API | WebSocket LED frame relay (lower bandwidth than UDP), `/dashboard` static page, real-time heap/FPS/show-time charts |
 | Why it matters | Debug and demo without physical hardware. Remote monitoring for installed units |
-
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
 
 ### 6.10 Sensor/Trigger Integration — COULD HAVE
 **Priority: P2 | Estimate: ~70h**
@@ -425,13 +294,7 @@ Effects, Parameters, Palettes, Zones, Presets, Audio (basic), EdgeMixer, Colour 
 
 ---
 
-
-> _**Status reminder:** this section describes FUTURE/UNIMPLEMENTED roadmap work (DMX/MIDI/OSC/multi-K1/etc.). NONE of the items below are implemented in K1 v3.4. Do not present them as available features._
-
 ## 7. API Design Principles
-
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
 
 ### Transport Selection
 
@@ -442,9 +305,6 @@ Effects, Parameters, Palettes, Zones, Presets, Audio (basic), EdgeMixer, Colour 
 | **UDP** | High-bandwidth streaming (LED frames, audio spectral, stimulus) | <5ms | High |
 
 **No BLE.** K1 hardware has no BLE radio. Do not design APIs that assume BLE availability.
-
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
 
 ### Command Format (WebSocket)
 
@@ -467,17 +327,11 @@ Response:
 }
 ```
 
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
-
 ### Versioning
 
 - **v1** is the current and only version. All endpoints live under `/api/v1/`.
 - **v2** will only be introduced for breaking changes. Additive changes (new commands, new fields) do not require a version bump.
 - Both versions will coexist for at least 2 firmware releases after v2 introduction.
-
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
 
 ### Broadcast Subscription Model
 
@@ -492,9 +346,6 @@ Currently, all connected clients receive all broadcasts. Future broadcasts shoul
 
 Unsubscribed events are not sent, reducing WiFi bandwidth for limited clients (zone-mixer, Tab5).
 
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
-
 ### Authentication
 
 - **Current:** Optional API key in header (`X-API-Key`) — disabled by default.
@@ -505,13 +356,7 @@ Unsubscribed events are not sent, reducing WiFi bandwidth for limited clients (z
 
 ---
 
-
-> _**Status reminder:** this section describes FUTURE/UNIMPLEMENTED roadmap work (DMX/MIDI/OSC/multi-K1/etc.). NONE of the items below are implemented in K1 v3.4. Do not present them as available features._
-
 ## 8. Implementation Roadmap
-
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
 
 ### Phase 1: v3.3.0 — Foundation
 **Focus:** Show sequencing + audio streaming + infrastructure
@@ -527,9 +372,6 @@ Unsubscribed events are not sent, reducing WiFi bandwidth for limited clients (z
 | Contract YAML updates + consumer SDK notes | 10h | All above |
 | **Phase total** | **~125h** | |
 
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
-
 ### Phase 2: v3.4.0 — Professional Integration
 **Focus:** DMX + OSC + MIDI + discovery
 
@@ -541,9 +383,6 @@ Unsubscribed events are not sent, reducing WiFi bandwidth for limited clients (z
 | SSDP/UPnP discovery responder | 25h | None |
 | Cross-platform discovery documentation | 10h | SSDP |
 | **Phase total** | **~215h** | |
-
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
 
 ### Phase 3: v3.5.0 — Multi-Device + Intelligence
 **Focus:** Multi-K1 sync + generative effects + remote viz
@@ -557,9 +396,6 @@ Unsubscribed events are not sent, reducing WiFi bandwidth for limited clients (z
 | Role-based authentication | 30h | None |
 | **Phase total** | **~200h** | |
 
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
-
 ### Phase 4: v3.6.0+ — Ecosystem Maturity
 **Focus:** Sensors + plugins + show editor
 
@@ -570,9 +406,6 @@ Unsubscribed events are not sent, reducing WiFi bandwidth for limited clients (z
 | Show editor UI (web-based) | 60h | Show CRUD (Phase 1) |
 | Custom effect upload (WASM or scripted) | 80h | Plugin system |
 | **Phase total** | **~230h** | |
-
-
-> _Reminder: K1 STRATEGIC ROADMAP — see governing top-banner for what is current vs future. Current shipping AP-only via `WIFI_AP_ONLY` flag; goal dual-mode (AP OR STA, never together)._
 
 ### Total Estimated Effort
 
@@ -585,9 +418,6 @@ Unsubscribed events are not sent, reducing WiFi bandwidth for limited clients (z
 | **Total** | | **770h** | |
 
 ---
-
-
-> _**Status reminder:** this section lists OPEN DESIGN QUESTIONS — explicitly unresolved. Item #2 references the K1 WiFi mode transition: current shipping is AP-only via `WIFI_AP_ONLY` build flag; goal-state is dual-mode (AP OR STA, never together). Concurrent AP+STA is the genuine ESP-IDF 802.11 bug. See `_FORENSIC_WIFI_REPORT.md`._
 
 ## 9. Open Questions
 
@@ -613,14 +443,3 @@ Unsubscribed events are not sent, reducing WiFi bandwidth for limited clients (z
 | Date | Author | Change |
 |------|--------|--------|
 | 2026-04-01 | agent:research-synthesis | Created from 7-SSA parallel research (API surface, consumer matrix, ecosystem vision) |
-
-================================================================================
-END OF DOCUMENT — STATUS REAFFIRMATION
-================================================================================
-
-This was the K1 Ecosystem API Roadmap — a strategic forward-looking document, NOT an API reference. As of curation date 2026-05-04:
-- Only Sections 1-4 (current API inventory) describe shipping behaviour.
-- Sections 5-8 describe FUTURE work that has not been implemented.
-- Section 9 lists OPEN QUESTIONS, including the K1 WiFi mode transition (current shipping AP-only via `WIFI_AP_ONLY` build flag → goal-state dual-mode AP-or-STA never together; see `docs/tooling/notebooklm-bundles/lightwave_ledstrip/_FORENSIC_WIFI_REPORT.md` for forensic reconstruction).
-
-For shipping K1 behaviour, defer to: `firmware-v3_docs_api_api-v1.md`, `_BUNDLE_protocol_contracts.txt` (k1-rest-contract.yaml + k1-ws-contract.yaml), and `CLAUDE.md` (Hard Constraints section, forensically updated 2026-05-04).

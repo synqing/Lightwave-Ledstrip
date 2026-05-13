@@ -1,20 +1,3 @@
-================================================================================
-⚠️  STATUS BANNER — EXPLORATORY RESEARCH RATIFIED INTO SHIPPED DESIGN  ⚠️
-================================================================================
-
-This document is RESEARCH that was conducted to inform the tab5-encoder design.
-
-Status: the conclusions reached in this research were RATIFIED into the shipped 3-tab tab5-encoder UI layout. Cross-reference against:
-- `tab5-encoder_docs_reference_codebase-map.md` — current architecture
-- `tab5-encoder_docs_reference_lvgl-component-reference.md` — current UI tree
-- `tab5-encoder_docs_ZONE_COMPOSER_V2_SPEC.md` — current locked spec
-
-If this research document conflicts with any of the three references above, the references are canonical. This document captures the reasoning that led to the shipped decisions, not authoritative current behaviour.
-
-Do NOT cite individual recommendations from this research as if they were architectural specifications. Cite the spec docs above.
-
-================================================================================
-
 ---
 abstract: "Competitive UI research across 13 music/lighting/creative controllers, synthesised into 4 design directions for Tab5 1280x720 touchscreen redesign. Covers information hierarchy, encoder-screen mapping, colour palettes, typography, and aesthetic DNA. Read when planning Tab5 UI redesign or selecting a visual direction."
 ---
@@ -565,12 +548,3 @@ A hybrid approach is also viable: Direction D's grid layout as the foundation, w
 | Date | Author | Change |
 |------|--------|--------|
 | 2026-03-21 | agent:ui-designer | Created -- competitive UI research across 13 controllers, synthesised into 4 design directions for Tab5 redesign |
-
-================================================================================
-END OF DOCUMENT — STATUS REAFFIRMATION
-================================================================================
-
-This was EXPLORATORY RESEARCH. The conclusions were ratified into the shipped tab5-encoder design. For current canonical architecture, defer to:
-- `tab5-encoder_docs_reference_codebase-map.md`
-- `tab5-encoder_docs_reference_lvgl-component-reference.md`
-- `tab5-encoder_docs_ZONE_COMPOSER_V2_SPEC.md`

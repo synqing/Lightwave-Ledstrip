@@ -1,20 +1,3 @@
-================================================================================
-⚠️  STATUS BANNER — DESIGN-RATIONALE DOCUMENT  ⚠️
-================================================================================
-
-This document captures the DESIGN RATIONALE for an effect-pack decomposition / refactor blueprint. It is NOT a source of current effect parameter values.
-
-The values, thresholds, and tuning constants discussed below were design proposals at the time of writing. Some were adopted as written; some were tuned post-implementation; some were revised entirely. For CURRENT effect behaviour and parameter values, ALWAYS defer to:
-
-- The runtime firmware source (`firmware-v3/src/effects/...`)
-- `firmware-v3_docs_EFFECT_DEVELOPMENT_STANDARD.md` — current effect doctrine
-- `firmware-v3_docs_audio-visual_audio-visual-semantic-mapping.md` — current audio-reactive contract
-- The effects-catalog files (`firmware-v3_docs_effects-catalog_*.md`)
-
-Use this document to understand WHY effects were structured the way they are, not WHAT their current parameter values are.
-
-================================================================================
-
 # Non-Audio Effects Pack 132-151 Audio-Reactive Refactor Blueprint
 
 ## 0. Purpose
@@ -703,9 +686,3 @@ If implemented with the shared control schema and contract-safe timing policy, t
 - bounded runtime cost,
 - stable behaviour under real audio conditions.
 
-
-================================================================================
-END OF DOCUMENT — STATUS REAFFIRMATION
-================================================================================
-
-This was DESIGN RATIONALE, not a parameter reference. For current effect behaviour, defer to firmware source and `firmware-v3_docs_EFFECT_DEVELOPMENT_STANDARD.md`.

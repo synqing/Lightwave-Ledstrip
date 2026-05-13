@@ -1,18 +1,3 @@
-================================================================================
-⚠️  STATUS BANNER — LEGACY-COMPATIBILITY API SURFACE  ⚠️
-================================================================================
-
-This document describes K1's LEGACY `/api/*` (non-versioned) endpoints. As of 2026-05-04, these endpoints DO still function on K1 firmware v3.4 — they are retained as a compatibility shim for older clients. Verified by source: `firmware-v3/src/network/webserver/V1ApiRoutes.cpp`.
-
-Status hierarchy for K1 REST API documentation:
-1. **`firmware-v3_docs_api_api-v1.md`** — the CANONICAL shipping API. New clients should use this.
-2. **THIS DOCUMENT (api-legacy.md)** — older non-versioned endpoints, still functional but DEPRECATED. Existing clients still work; new clients should NOT target these.
-3. **`firmware-v3_docs_api_api-v2.md`** — SPECIFICATION DRAFT only. Not implemented. Do NOT use.
-
-If asked "is `/api/<endpoint>` on K1?", check this document first; cross-reference against `_BUNDLE_protocol_contracts.txt` (k1-rest-contract.yaml) for current authoritative behaviour.
-
-================================================================================
-
 # LightwaveOS Web API Reference
 
 Complete reference for REST and WebSocket APIs.
@@ -604,9 +589,3 @@ ws.onmessage = (event) => {
   console.log('Status update:', data);
 };
 ```
-
-================================================================================
-END OF DOCUMENT — STATUS REAFFIRMATION
-================================================================================
-
-The endpoints documented above are LEGACY compatibility-shim routes on K1 firmware v3.4. They function but should NOT be the target for new client integrations. The canonical shipping API is `firmware-v3_docs_api_api-v1.md`. The authoritative protocol surface is `_BUNDLE_protocol_contracts.txt`.

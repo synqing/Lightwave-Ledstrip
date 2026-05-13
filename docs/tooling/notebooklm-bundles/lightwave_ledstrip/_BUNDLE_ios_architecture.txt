@@ -1,76 +1,12 @@
-# Bundle: lightwave-ios-v2 architecture (Swift)
-# Purpose: Show NotebookLM the iOS architecture: actor-isolated network services, MainActor Observable VMs, debounce policy, AP-only connection model.
-# Files included: 5
-# Generated: 2026-05-04 (lightwave-ledstrip notebooklm curation, SSA4)
-
 ================================================================================
-FILE: lightwave-ios-v2/LightwaveOS/App/LightwaveOSApp.swift
-DESCRIPTION: App entry point — @main App struct wiring root environment + AppViewModel.
+BUNDLE: lightwave-ios-v2 architecture key files
+DESCRIPTION: Top-level app state, network clients (REST + WebSocket + Discovery), key ViewModels
+GENERATED: 2026-05-13
 ================================================================================
-
-//
-//  LightwaveOSApp.swift
-//  LightwaveOS
-//
-//  App entry point for LightwaveOS v2.
-//  Creates AppViewModel and injects it via environment.
-//
-
-import SwiftUI
-
-@main
-struct LightwaveOSApp: App {
-    @State private var appVM = AppViewModel()
-    @Environment(\.scenePhase) private var scenePhase
-
-    var body: some Scene {
-        WindowGroup {
-#if DEBUG
-            let env = ProcessInfo.processInfo.environment
-            if env["LW_EXPORT_DESIGN_PNGS"] == "1"
-                || ProcessInfo.processInfo.arguments.contains("LW_EXPORT_DESIGN_PNGS") {
-                DesignReferenceExportView()
-                    .environment(appVM)
-                    .environment(appVM.audio)
-                    .preferredColorScheme(.dark)
-            } else if env["LW_SHOW_RIVE_GALLERY"] == "1"
-                || ProcessInfo.processInfo.arguments.contains("LW_SHOW_RIVE_GALLERY") {
-                RiveReferenceGallery()
-                    .environment(appVM)
-                    .environment(appVM.audio)
-                    .preferredColorScheme(.dark)
-            } else {
-                ContentView()
-                    .environment(appVM)
-                    .environment(appVM.audio)
-                    .preferredColorScheme(.dark)
-            }
-#else
-            ContentView()
-                .environment(appVM)
-                .environment(appVM.audio)
-                .preferredColorScheme(.dark)
-#endif
-        }
-        .onChange(of: scenePhase) { _, newPhase in
-            switch newPhase {
-            case .background:
-                appVM.handleBackgrounding()
-            case .active:
-                Task { await appVM.handleForegrounding() }
-            case .inactive:
-                break
-            @unknown default:
-                break
-            }
-        }
-    }
-}
 
 
 ================================================================================
 FILE: lightwave-ios-v2/LightwaveOS/Network/RESTClient.swift
-DESCRIPTION: Actor-isolated REST client — single canonical path for K1 HTTP API; 150ms slider debounce; AP-only base URL.
 ================================================================================
 
 //
@@ -1249,10 +1185,8 @@ actor RESTClient {
 
 
 
-
 ================================================================================
 FILE: lightwave-ios-v2/LightwaveOS/Network/WebSocketService.swift
-DESCRIPTION: Actor-isolated WebSocket service — bidirectional control + telemetry channel to K1; reconnection state machine.
 ================================================================================
 
 //
@@ -2105,164 +2039,8 @@ extension WebSocketService: PresetWebSocketCommanding {
 }
 
 
-
-================================================================================
-FILE: lightwave-ios-v2/LightwaveOS/Network/UDPStreamReceiver.swift
-DESCRIPTION: Actor-isolated UDP receiver — high-frequency LED stream ingest from K1 (telemetry mirror).
-================================================================================
-
-//
-//  UDPStreamReceiver.swift
-//  LightwaveOS
-//
-//  UDP datagram receiver for LED and audio binary frames from LightwaveOS firmware.
-//  Demultiplexes LED (966 bytes, magic 0xFE) and audio (464 bytes, magic 0x00445541) frames.
-//  iOS 17+, Swift 6 with @Observable @MainActor. British English comments.
-//
-
-import Foundation
-import Network
-import Observation
-
-@MainActor
-@Observable
-class UDPStreamReceiver {
-    // MARK: - State
-
-    var isListening = false
-    private(set) var ledFrameCount: Int = 0
-    private(set) var audioFrameCount: Int = 0
-
-    // MARK: - Callbacks
-
-    var onLedFrame: (([UInt8]) -> Void)?
-    var onAudioFrame: ((Data) -> Void)?
-
-    // MARK: - Private
-
-    private var listener: NWListener?
-    private let port: NWEndpoint.Port = 41234
-    private let queue = DispatchQueue(label: "com.lightwaveos.udp-receiver", qos: .userInteractive)
-
-    // MARK: - Lifecycle
-
-    func start() {
-        guard listener == nil else { return }
-
-        do {
-            let params = NWParameters.udp
-            params.allowLocalEndpointReuse = true
-            listener = try NWListener(using: params, on: port)
-        } catch {
-            print("[UDP] Failed to create listener: \(error)")
-            return
-        }
-
-        listener?.stateUpdateHandler = { [weak self] state in
-            Task { @MainActor [weak self] in
-                switch state {
-                case .ready:
-                    self?.isListening = true
-                    print("[UDP] Listening on port \(self?.port.rawValue ?? 0)")
-                case .failed(let error):
-                    print("[UDP] Listener failed: \(error)")
-                    self?.isListening = false
-                case .cancelled:
-                    self?.isListening = false
-                default:
-                    break
-                }
-            }
-        }
-
-        listener?.newConnectionHandler = { [weak self] connection in
-            self?.handleConnection(connection)
-        }
-
-        listener?.start(queue: queue)
-    }
-
-    func stop() {
-        listener?.cancel()
-        listener = nil
-        isListening = false
-        ledFrameCount = 0
-        audioFrameCount = 0
-    }
-
-    func reset() {
-        ledFrameCount = 0
-        audioFrameCount = 0
-    }
-
-    /// Wait until the UDP listener is ready (or time out).
-    func waitUntilReady(timeout: TimeInterval = 2.0, pollInterval: TimeInterval = 0.05) async -> Bool {
-        if isListening { return true }
-
-        let deadline = Date().addingTimeInterval(timeout)
-        while !isListening && Date() < deadline {
-            let sleepMs = UInt64(max(1.0, pollInterval * 1000.0))
-            try? await Task.sleep(for: .milliseconds(Int(sleepMs)))
-        }
-
-        return isListening
-    }
-
-    // MARK: - Connection Handling (nonisolated — runs on background queue)
-
-    nonisolated private func handleConnection(_ connection: NWConnection) {
-        connection.start(queue: queue)
-        receiveLoop(connection)
-    }
-
-    nonisolated private func receiveLoop(_ connection: NWConnection) {
-        connection.receiveMessage { [weak self] content, _, isComplete, error in
-            guard let self = self else { return }
-
-            if let data = content, !data.isEmpty {
-                self.processFrame(data)
-            }
-
-            if error == nil {
-                self.receiveLoop(connection)
-            }
-        }
-    }
-
-    nonisolated private func processFrame(_ data: Data) {
-        guard data.count >= 4 else { return }
-
-        // Check magic bytes to identify frame type
-        let firstByte = data[data.startIndex]
-
-        if firstByte == 0xFE && data.count >= 966 {
-            // LED frame (magic 0xFE, 966 bytes v1 format)
-            let bytes = [UInt8](data)
-            Task { @MainActor [weak self] in
-                self?.ledFrameCount += 1
-                self?.onLedFrame?(bytes)
-            }
-        } else if data.count >= 464 {
-            // Check for audio magic: 0x00445541 at offset 0 (little-endian)
-            // In memory: bytes are [0x41, 0x55, 0x44, 0x00]
-            let magic: UInt32 = data.withUnsafeBytes { ptr in
-                ptr.load(as: UInt32.self)
-            }
-            if magic == 0x00445541 {
-                let capturedData = data
-                Task { @MainActor [weak self] in
-                    self?.audioFrameCount += 1
-                    self?.onAudioFrame?(capturedData)
-                }
-            }
-        }
-    }
-}
-
-
 ================================================================================
 FILE: lightwave-ios-v2/LightwaveOS/Network/DeviceDiscoveryService.swift
-DESCRIPTION: K1 discovery on the local AP network — Bonjour/mDNS browsing + connection state surface.
 ================================================================================
 
 //
@@ -2584,3 +2362,1253 @@ actor DeviceDiscoveryService {
     }
 }
 
+================================================================================
+FILE: lightwave-ios-v2/LightwaveOS/ViewModels/AppViewModel.swift
+================================================================================
+
+//
+//  AppViewModel.swift
+//  LightwaveOS
+//
+//  Root ViewModel managing connection lifecycle and child ViewModels.
+//  iOS 17+, Swift 6 with @Observable @MainActor.
+//
+
+import Foundation
+import Observation
+
+/// App mode enum tracking the active tab
+enum AppMode: String, Sendable {
+    case play
+    case zones
+    case audio
+    case device
+}
+
+@MainActor
+@Observable
+class AppViewModel {
+    // MARK: - Connection State
+
+    enum ConnectionState: Equatable {
+        case disconnected
+        case discovering
+        case connecting
+        case connected
+        case error(String)
+    }
+
+    var connectionState: ConnectionState = .disconnected
+    var currentDevice: DeviceInfo?
+    var currentMode: AppMode = .play
+
+    // MARK: - LED Stream State
+
+    var ledData: [UInt8] = Array(repeating: 0, count: 960) // 320 LEDs × 3 bytes (RGB)
+    var isLEDStreamActive: Bool = false
+
+    // MARK: - Device Discovery State
+
+    var discoveredDevices: [DeviceInfo] = []
+    var isDiscoverySearching: Bool = false
+
+    // MARK: - Child ViewModels
+
+    var effects: EffectViewModel
+    var palettes: PaletteViewModel
+    var parameters: ParametersViewModel
+    var zones: ZoneViewModel
+    var audio: AudioViewModel
+    var transition: TransitionViewModel
+    var colourCorrection: ColourCorrectionViewModel
+    var edgeMixer: EdgeMixerViewModel
+    var deviceStatus: DeviceStatusResponse.DeviceStatus?
+    var deviceInfo: DeviceInfoResponse.DeviceInfo?
+    var wsConnected: Bool = false
+
+    /// Phase 1 — capability discovery. Populated after a successful connect via
+    /// `RESTClient.getCapabilities()`. `nil` indicates either pre-connect or that
+    /// capability discovery degraded gracefully (firmware did not expose either probe).
+    var capabilities: DeviceCapabilities?
+
+    // MARK: - Network
+
+    private(set) var rest: RESTClient?
+    let ws: WebSocketService
+    let udpReceiver: UDPStreamReceiver
+    let discovery: DeviceDiscoveryService
+
+    // MARK: - Debug Log
+
+    var debugLog: [DebugEntry] = []
+    private let maxLogEntries = 100
+
+    // MARK: - Zone Refresh Throttling
+
+    private var zoneRefreshTask: Task<Void, Never>?
+    private var lastZoneRefresh: Date = .distantPast
+    private var statusPollTask: Task<Void, Never>?
+    private var streamSubscriptionTask: Task<Void, Never>?
+    private var udpFallbackActive = false
+    private var udpSubscribeStart: Date?
+    private let udpFallbackDelaySeconds: TimeInterval = 3.0
+    private var udpHealthTask: Task<Void, Never>?
+
+    /// Timestamp recorded when the app enters the background, used to detect stale connections on foreground.
+    private var lastBackgroundedAt: Date?
+
+    // MARK: - Initialization
+
+    init() {
+        self.effects = EffectViewModel()
+        self.palettes = PaletteViewModel()
+        self.parameters = ParametersViewModel()
+        self.zones = ZoneViewModel()
+        self.audio = AudioViewModel()
+        self.transition = TransitionViewModel()
+        self.colourCorrection = ColourCorrectionViewModel()
+        self.edgeMixer = EdgeMixerViewModel()
+        self.ws = WebSocketService()
+        self.udpReceiver = UDPStreamReceiver()
+        self.discovery = DeviceDiscoveryService()
+
+        // Wire weak parent references so child VMs can route diagnostic logs
+        // through `log(_:category:)` — surfaces in DebugLogView + TestFlight
+        // instead of disappearing into stdout. Must happen after `self`
+        // initialisation completes.
+        self.effects.appVM = self
+        self.palettes.appVM = self
+        self.colourCorrection.appVM = self
+    }
+
+    // MARK: - Connection Management
+
+    func connect(to device: DeviceInfo) async {
+        log("Connecting to \(device.displayName) at \(device.cleanIP)...", category: "CONN")
+        connectionState = .connecting
+        currentDevice = device
+
+        await connectManual(ip: device.cleanIP, port: device.port)
+    }
+
+    func connectManual(ip: String, port: Int = 80) async {
+        // Strip interface scope suffix if present
+        let cleanIP = ip.components(separatedBy: "%").first ?? ip
+        connectionState = .connecting
+        log("Manual connection to \(cleanIP):\(port)", category: "CONN")
+
+        // Start UDP listener before subscribing (firmware will send to our port)
+        udpReceiver.start()
+
+        // Wire UDP frame handlers
+        // Phase 3 disabled — heap-stability mitigation. WS subscribe calls are
+        // suppressed in WebSocketService, so the firmware never sends UDP
+        // frames. Closures are still registered but bodies are no-op'd
+        // defensively in case a stale broadcast arrives during a reconnect
+        // race. Re-enable by uncommenting the parse blocks below once the
+        // broadcaster fix lands.
+        // See docs/superpowers/ios-firmware-parity-phase-3-scoping.md.
+        udpReceiver.onLedFrame = { [weak self] bytes in
+            guard self != nil else { return }
+            _ = bytes
+            // guard bytes.count >= 966 else { return }
+            // var ledData = [UInt8](repeating: 0, count: 960)
+            // for i in 0..<480 { ledData[i] = bytes[5 + i] }
+            // for i in 0..<480 { ledData[480 + i] = bytes[486 + i] }
+            // self.ledData = ledData
+            // if !self.isLEDStreamActive {
+            //     self.isLEDStreamActive = true
+            //     self.log("LED stream started (UDP)", category: "UDP")
+            // }
+        }
+
+        udpReceiver.onAudioFrame = { [weak self] data in
+            guard self != nil else { return }
+            _ = data
+            // if let frame = AudioMetricsFrame(data: data) {
+            //     self.audio.handleMetricsFrame(frame)
+            // }
+        }
+
+        // Create REST client
+        let client = RESTClient(host: cleanIP, port: port)
+        self.rest = client
+
+        do {
+            // Test connectivity with device info endpoint
+            log("Testing connectivity...", category: "CONN")
+            let response = try await client.getDeviceInfo()
+
+            guard response.success else {
+                throw NSError(domain: "LightwaveOS", code: -1, userInfo: [NSLocalizedDescriptionKey: "Device returned failure response"])
+            }
+
+            log("Device info received: \(response.data.firmware)", category: "CONN")
+            self.deviceInfo = response.data
+
+            // Connect WebSocket
+            log("Connecting WebSocket...", category: "WS")
+            guard let wsURL = URL(string: "ws://\(cleanIP):\(port)/ws") else {
+                throw NSError(domain: "LightwaveOS", code: -2, userInfo: [NSLocalizedDescriptionKey: "Invalid WebSocket URL"])
+            }
+            let stream = await ws.connect(to: wsURL)
+            consumeWebSocketEvents(stream)
+
+            // Inject REST client into child ViewModels
+            effects.restClient = client
+            palettes.restClient = client
+            parameters.restClient = client
+            zones.restClient = client
+            zones.ws = ws
+            audio.restClient = client
+            transition.restClient = client
+            // ColourCorrection: WS-only. REST `/api/v1/colorCorrection/*` is a
+            // 404 stub on the firmware; the working surface is
+            // `colorCorrection.{getConfig,setConfig}` over WS.
+            colourCorrection.ws = ws
+            edgeMixer.ws = ws
+
+            // Load initial state.
+            //
+            // The iOS app is the user's interface to K1 — every effect, every
+            // palette must be available the moment the user opens a picker.
+            // Firmware-side streaming responses (β — `firmware/heap-stability-day1`
+            // commit 56110887) handle the heap impact of large list responses
+            // by streaming the JSON to the TCP buffer instead of materialising
+            // it in a single contiguous String. iOS therefore fetches the full
+            // catalogue on connect; the firmware-side fix is what enables this
+            // to be heap-safe.
+            log("Loading effects list...", category: "INIT")
+            await effects.loadEffects()
+
+            log("Loading palettes list...", category: "INIT")
+            await palettes.loadPalettes()
+
+            log("Loading parameters...", category: "INIT")
+            await parameters.loadParameters()
+
+            log("Loading zones...", category: "INIT")
+            await zones.loadZones()
+
+            log("Loading colour correction...", category: "INIT")
+            await colourCorrection.loadConfig()
+
+            log("Loading audio tuning...", category: "INIT")
+            await audio.loadAudioTuning()
+
+            log("Loading edge mixer config...", category: "INIT")
+            edgeMixer.loadConfig()
+
+            startDeviceStatusPolling()
+
+            // Connection successful
+            connectionState = .connected
+            log("Connected successfully", category: "CONN")
+
+            // MARK: Phase 1 — capability discovery
+            // Fire capability discovery off the connect path. This is best-effort:
+            // RESTClient.getCapabilities() never throws, so on firmware builds that
+            // do not expose openapi.json or firmware/version we silently degrade.
+            startCapabilityDiscovery(client: client)
+
+        } catch {
+            log("Connection failed: \(error.localizedDescription)", category: "ERROR")
+            connectionState = .error(error.localizedDescription)
+            rest = nil
+        }
+    }
+
+    // MARK: Phase 1 — capability discovery
+
+    /// Probe the connected device for advertised capabilities and store the result.
+    /// Fully best-effort: a `nil` result is logged as a single-line degradation
+    /// notice and does not affect the connection state. Uses `[weak self]` to
+    /// avoid retain cycles per the iOS hard constraints.
+    private func startCapabilityDiscovery(client: RESTClient) {
+        Task { [weak self] in
+            let result = await client.getCapabilities()
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.capabilities = result
+                if let result {
+                    let version = result.firmwareVersion ?? "unknown"
+                    let pathCount = result.availablePaths?.count ?? 0
+                    self.log(
+                        "Capability discovery: firmware=\(version), advertised paths=\(pathCount)",
+                        category: "CAPS"
+                    )
+                } else {
+                    self.log("Capability discovery degraded — proceeding without", category: "CAPS")
+                }
+            }
+        }
+    }
+
+    func disconnect() async {
+        log("Disconnecting...", category: "CONN")
+        await ws.disconnect()
+        rest = nil
+        currentDevice = nil
+        connectionState = .disconnected
+        statusPollTask?.cancel()
+        statusPollTask = nil
+        streamSubscriptionTask?.cancel()
+        streamSubscriptionTask = nil
+        udpReceiver.stop()
+        deviceStatus = nil
+        deviceInfo = nil
+        wsConnected = false
+
+        // Reset state
+        effects.currentEffectId = 0
+        effects.currentEffectName = ""
+        palettes.currentPaletteId = 0
+        audio.reset()
+        edgeMixer.reset()
+        ledData = Array(repeating: 0, count: 960)
+        isLEDStreamActive = false
+    }
+
+    // MARK: - Scene Phase Lifecycle
+
+    /// Pauses background-wasteful polling when the app is backgrounded.
+    /// Does not tear down the WebSocket — it handles its own reconnection.
+    func handleBackgrounding() {
+        statusPollTask?.cancel()
+        statusPollTask = nil
+        udpHealthTask?.cancel()
+        udpHealthTask = nil
+        lastBackgroundedAt = Date()
+        log("Backgrounded — paused polling", category: "LIFECYCLE")
+        print("[AppViewModel] Backgrounded — paused polling")
+    }
+
+    /// Resumes polling when the app returns to the foreground.
+    /// If the connection has gone stale (backgrounded >30s and WebSocket dropped),
+    /// triggers a full reconnect to the last-known device.
+    func handleForegrounding() async {
+        guard connectionState == .connected else { return }
+
+        // Detect stale connections after extended background periods
+        if let backgroundedAt = lastBackgroundedAt,
+           Date().timeIntervalSince(backgroundedAt) > 30 {
+            let wsUp = await ws.isConnected
+            if !wsUp, let device = currentDevice {
+                log("Stale connection detected after background — reconnecting", category: "LIFECYCLE")
+                print("[AppViewModel] Foregrounded — stale connection, reconnecting")
+                await connect(to: device)
+                return
+            }
+        }
+
+        // Connection still healthy — just restart the polling tasks
+        startDeviceStatusPolling()
+        startUdpHealthMonitor()
+        log("Foregrounded — resumed polling", category: "LIFECYCLE")
+        print("[AppViewModel] Foregrounded — resumed polling")
+    }
+
+    // MARK: - Device Discovery
+
+    /// Start device discovery and consume updates.
+    /// Updates discoveredDevices and isDiscoverySearching from the actor stream.
+    func startDeviceDiscovery() async {
+        let stream = await discovery.startDiscovery()
+
+        Task { @MainActor [weak self] in
+            for await devices in stream {
+                guard let self = self else { break }
+                self.discoveredDevices = devices
+                self.isDiscoverySearching = await self.discovery.isSearching
+            }
+        }
+    }
+
+    /// Stop device discovery.
+    func stopDeviceDiscovery() async {
+        await discovery.stopDiscovery()
+        discoveredDevices = []
+        isDiscoverySearching = false
+    }
+
+    // MARK: - WebSocket Event Stream
+
+    private func consumeWebSocketEvents(_ stream: AsyncStream<WebSocketService.Event>) {
+        Task { @MainActor [weak self] in
+            for await event in stream {
+                guard let self = self else { break }
+                switch event {
+                case .status(let payload):
+                    // Update current effect
+                    if let effectId = payload.data["currentEffect"] as? Int {
+                        self.effects.currentEffectId = effectId
+                        if let effect = self.effects.allEffects.first(where: { $0.id == effectId }) {
+                            self.effects.currentEffectName = effect.name
+                        }
+                    }
+
+                    // Update current palette
+                    if let paletteId = payload.data["currentPalette"] as? Int {
+                        self.palettes.currentPaletteId = paletteId
+                    }
+
+                    // Update parameters
+                    self.parameters.updateFromStatus(payload.data)
+
+                    // Update audio
+                    if let bpm = payload.data["bpm"] as? Double,
+                       let confidence = payload.data["bpmConfidence"] as? Double {
+                        self.audio.updateFromStatus(bpm: bpm, confidence: confidence)
+                    }
+
+                    // Update EdgeMixer from status broadcast
+                    self.edgeMixer.updateFromStatus(payload.data)
+
+                    // Refresh device-telemetry fields from the WS status push.
+                    // Firmware emits fps, freeHeap, uptime, cpuPercent,
+                    // framesRendered, wsClients on every periodic status
+                    // broadcast (5 s cadence). Without this binding the
+                    // DeviceTab telemetry is artificially stuck on the 30 s
+                    // REST poll. We rebuild DeviceStatus from the WS payload,
+                    // falling back to the existing value for fields the
+                    // broadcast does not carry (network info, heapSize,
+                    // cpuFreq) so the REST safety-net stays intact.
+                    let prior = self.deviceStatus
+                    let uptime = (payload.data["uptime"] as? Int)
+                        ?? (payload.data["uptime"] as? Double).map { Int($0) }
+                        ?? prior?.uptime
+                        ?? 0
+                    let freeHeap = (payload.data["freeHeap"] as? Int)
+                        ?? (payload.data["freeHeap"] as? Double).map { Int($0) }
+                        ?? prior?.freeHeap
+                        ?? 0
+                    let fps: Float? = (payload.data["fps"] as? Double).map { Float($0) }
+                        ?? (payload.data["fps"] as? Int).map { Float($0) }
+                        ?? prior?.fps
+                    let cpuPercent: Float? = (payload.data["cpuPercent"] as? Double).map { Float($0) }
+                        ?? (payload.data["cpuPercent"] as? Int).map { Float($0) }
+                        ?? prior?.cpuPercent
+                    let framesRendered = (payload.data["framesRendered"] as? Int)
+                        ?? (payload.data["framesRendered"] as? Double).map { Int($0) }
+                        ?? prior?.framesRendered
+                    let wsClients = (payload.data["wsClients"] as? Int)
+                        ?? (payload.data["wsClients"] as? Double).map { Int($0) }
+                        ?? prior?.wsClients
+                    self.deviceStatus = DeviceStatusResponse.DeviceStatus(
+                        uptime: uptime,
+                        freeHeap: freeHeap,
+                        heapSize: prior?.heapSize,
+                        cpuFreq: prior?.cpuFreq,
+                        fps: fps,
+                        cpuPercent: cpuPercent,
+                        framesRendered: framesRendered,
+                        network: prior?.network,
+                        wsClients: wsClients
+                    )
+
+                    self.log("Status update received", category: "WS")
+
+                case .edgeMixerUpdate(let payload):
+                    self.edgeMixer.handleResponse(payload.data)
+
+                case .beat(let payload):
+                    self.audio.handleBeatEvent(payload.data)
+
+                case .audioMetrics:
+                    // Phase 3 disabled — heap-stability mitigation. Stream
+                    // subscription is suppressed upstream in WebSocketService
+                    // so firmware should not emit; defensive no-op covers any
+                    // stale broadcast during reconnect.
+                    break
+
+                case .zoneUpdate(let payload):
+                    self.zones.handleZoneUpdate(payload.data)
+                    self.log("Zone update received", category: "WS")
+                    self.throttledZoneRefresh()
+
+                case .parameterUpdate(let payload):
+                    self.parameters.updateFromStatus(payload.data)
+                    self.log("Parameter update received", category: "WS")
+
+                case .ledData:
+                    // Phase 3 disabled — see .audioMetrics above. Defensive no-op.
+                    break
+
+                case .connected:
+                    self.log("WebSocket connected", category: "WS")
+                    self.wsConnected = true
+                    self.udpFallbackActive = false
+                    self.udpSubscribeStart = nil
+                    // Heap-stability mitigation: K1 V2 gates the periodic
+                    // 5-second `status` broadcast behind `status.subscribe`.
+                    // Without this send, the iOS app receives no `.status`
+                    // events from the firmware. See WebSocketService.swift
+                    // `subscribeStatus()` for the wire-level details.
+                    Task { [weak self] in
+                        await self?.ws.subscribeStatus()
+                    }
+                    self.startStreamSubscriptions()
+                    self.startUdpHealthMonitor()
+
+                case .disconnected(let error):
+                    self.log("WebSocket disconnected: \(error?.localizedDescription ?? "clean")", category: "WS")
+                    self.wsConnected = false
+                    self.streamSubscriptionTask?.cancel()
+                    self.streamSubscriptionTask = nil
+                    self.udpHealthTask?.cancel()
+                    self.udpHealthTask = nil
+                    self.isLEDStreamActive = false
+                    self.audio.audioFrameCount = 0
+                    self.udpReceiver.reset()
+                    self.udpFallbackActive = false
+                    self.udpSubscribeStart = nil
+
+                // MARK: Phase 1 — broadcast handlers
+                // Stubbed for Phase 1: the cases exist so Swift's exhaustiveness check
+                // catches future drift. Phase 2 will wire each broadcast to the
+                // appropriate child ViewModel update path.
+                case .cameraModeChanged:
+                    self.log("Phase 1: received cameraMode.changed — handler stubbed", category: "WS")
+
+                case .factoryPresetsChanged:
+                    self.log("Phase 1: received factoryPresets.changed — handler stubbed", category: "WS")
+
+                case .effectPresetsSaved:
+                    self.log("Phase 1: received effectPresets.saved — handler stubbed", category: "WS")
+
+                case .effectPresetsDeleted:
+                    self.log("Phase 1: received effectPresets.deleted — handler stubbed", category: "WS")
+
+                case .colourCorrectionSetGamma:
+                    self.log("Phase 1: received colorCorrection.setGamma — handler stubbed", category: "WS")
+
+                case .colourCorrectionSetAutoExposure:
+                    self.log("Phase 1: received colorCorrection.setAutoExposure — handler stubbed", category: "WS")
+
+                case .colourCorrectionSetBrownGuardrail:
+                    self.log("Phase 1: received colorCorrection.setBrownGuardrail — handler stubbed", category: "WS")
+
+                // MARK: Phase 2 — STM and VRMS streams
+                // Added 2026-05-01 (Task P2-2). Required only because Swift's
+                // exhaustiveness check refuses to compile a partial Event
+                // switch — wiring is to AudioViewModel handlers, no new
+                // ViewModel needed.
+                case .stmFrame(let frame):
+                    self.audio.handleSTMFrame(frame)
+
+                case .vrmsFrame(let frame, let timestamp):
+                    self.audio.handleVRMSFrame(frame, timestamp: timestamp)
+
+                case .stmSubscriptionAck(let payload):
+                    let ok = (payload.data["status"] as? String == "ok") || (payload.data["success"] as? Bool == true)
+                    self.log("STM subscription ack received (ok=\(ok))", category: "WS")
+
+                case .vrmsSubscriptionAck(let payload):
+                    let ok = (payload.data["status"] as? String == "ok") || (payload.data["success"] as? Bool == true)
+                    self.log("VRMS subscription ack received (ok=\(ok))", category: "WS")
+
+                // MARK: Phase 2 — show transport
+                // P2-4 introduced two new event cases (showStatus, showAck).
+                // ShowsView holds its own ShowViewModel and consumes these
+                // events directly via WebSocketService when foregrounded;
+                // these stubs exist to preserve the exhaustive switch and
+                // log incoming traffic for debugging.
+                case .showStatus:
+                    self.log("Phase 2: received show.status — forwarded to ShowsView", category: "WS")
+
+                case .showAck:
+                    self.log("Phase 2: received show.* ack — forwarded to ShowsView", category: "WS")
+
+                // MARK: Phase 2 — colour correction (WS-only path).
+                // Replaces the previously-dead REST `/api/v1/colorCorrection/*`
+                // stubs. `WsColorCommands.cpp:247-352` unicasts the full state
+                // in reply to both `getConfig` and `setConfig`; the VM applies
+                // it to local state.
+                case .colourCorrectionConfigUpdated(let payload):
+                    self.colourCorrection.handleConfigUpdate(payload.data)
+                }
+            }
+        }
+    }
+
+    // MARK: - UDP Health Monitor
+
+    /// If UDP dies mid-session (common under weak WiFi), fall back to WS streaming without spamming re-subscribes.
+    private func startUdpHealthMonitor() {
+        udpHealthTask?.cancel()
+        udpHealthTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            var lastLed = self.udpReceiver.ledFrameCount
+            var lastAudio = self.udpReceiver.audioFrameCount
+            var lastProgress = Date()
+
+            while !Task.isCancelled && self.wsConnected {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { break }
+
+                if self.udpFallbackActive {
+                    continue
+                }
+
+                let ledNow = self.udpReceiver.ledFrameCount
+                let audioNow = self.udpReceiver.audioFrameCount
+
+                if ledNow != lastLed || audioNow != lastAudio {
+                    lastLed = ledNow
+                    lastAudio = audioNow
+                    lastProgress = Date()
+                    continue
+                }
+
+                // No progress for a while -> fallback.
+                if Date().timeIntervalSince(lastProgress) >= self.udpFallbackDelaySeconds {
+                    self.udpFallbackActive = true
+                    await self.ws.subscribeLEDStreamWS()
+                    await self.ws.subscribeAudioStreamWS()
+                    self.log("UDP stalled mid-session, falling back to WS streaming", category: "UDP")
+                }
+            }
+        }
+    }
+
+    // MARK: - Stream Subscription Retry
+
+    private func startStreamSubscriptions() {
+        streamSubscriptionTask?.cancel()
+        streamSubscriptionTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            var attempt = 0
+            let maxAttempts = 8
+            let udpReady = await self.udpReceiver.waitUntilReady(timeout: 2.0)
+
+            if !udpReady {
+                self.log("UDP listener not ready, falling back to WS streaming", category: "UDP")
+                self.udpFallbackActive = true
+                await self.ws.subscribeLEDStreamWS()
+                await self.ws.subscribeAudioStreamWS()
+                return
+            }
+
+            while !Task.isCancelled && attempt < maxAttempts {
+                if self.udpFallbackActive {
+                    break
+                }
+
+                let udpLedActive = self.udpReceiver.ledFrameCount > 0
+                let udpAudioActive = self.udpReceiver.audioFrameCount > 0
+
+                // Always subscribe on first attempt — firmware is idempotent for re-subscribes
+                let needsAudio = attempt == 0 || !udpAudioActive
+                let needsLED = attempt == 0 || !udpLedActive
+
+                if !needsAudio && !needsLED {
+                    break
+                }
+
+                attempt += 1
+
+                if needsLED {
+                    await self.ws.subscribeLEDStream()
+                }
+                if needsAudio {
+                    await self.ws.subscribeAudioStream()
+                }
+
+                if self.udpSubscribeStart == nil {
+                    self.udpSubscribeStart = Date()
+                }
+
+                self.log("UDP stream subscribe attempt \(attempt)", category: "UDP")
+
+                if let startedAt = self.udpSubscribeStart,
+                   Date().timeIntervalSince(startedAt) >= self.udpFallbackDelaySeconds {
+                    let ledIdle = self.udpReceiver.ledFrameCount == 0
+                    let audioIdle = self.udpReceiver.audioFrameCount == 0
+                    if ledIdle || audioIdle {
+                        self.udpFallbackActive = true
+                        if ledIdle {
+                            await self.ws.subscribeLEDStreamWS()
+                        }
+                        if audioIdle {
+                            await self.ws.subscribeAudioStreamWS()
+                        }
+                        self.log("UDP idle after \(Int(self.udpFallbackDelaySeconds))s, falling back to WS streaming", category: "UDP")
+                        break
+                    }
+                }
+
+                try? await Task.sleep(for: .seconds(1))
+            }
+
+            if !Task.isCancelled && !self.udpFallbackActive {
+                if self.udpReceiver.audioFrameCount == 0 {
+                    self.log("UDP audio stream still idle after subscribe attempts", category: "UDP")
+                }
+                if self.udpReceiver.ledFrameCount == 0 {
+                    self.log("UDP LED stream still idle after subscribe attempts", category: "UDP")
+                }
+            }
+        }
+    }
+
+    // MARK: - Zone Refresh Throttling
+
+    /// Throttle zone REST refreshes to at most once every 2 seconds.
+    /// Applies delta from WS immediately; defers full REST reload.
+    private func throttledZoneRefresh() {
+        guard Date().timeIntervalSince(lastZoneRefresh) > 2.0 else { return }
+        zoneRefreshTask?.cancel()
+        zoneRefreshTask = Task { [weak self] in
+            guard let self = self else { return }
+            try? await Task.sleep(for: .seconds(0.5))
+            guard !Task.isCancelled else { return }
+            await self.zones.loadZones()
+            self.lastZoneRefresh = Date()
+        }
+    }
+
+    // MARK: - Device Status Polling
+    //
+    // Heap-stability mitigation: K1 V2 now gates its periodic 5-second `status`
+    // WebSocket broadcast behind `status.subscribe` (see firmware
+    // streaming-and-status-gate). iOS subscribes on WS connect, so the
+    // real-time portion of the status (effect/palette/parameters/audio/edge
+    // mixer) is delivered push-based.
+    //
+    // The REST `getDeviceStatus()` call returns fields that the WS status
+    // handler does NOT consume in `consumeWebSocketEvents` — fps, freeHeap,
+    // heapSize, framesRendered, network.rssi, network.connected, uptime — used
+    // by `DeviceTab` and `PersistentStatusBar` for telemetry. Rather than
+    // remove polling entirely (option a) and lose that telemetry, we drop
+    // the cadence to 30s as a safety-net (option b). Net effect: ~93%
+    // reduction in status REST traffic (was every 2s, now every 30s) while
+    // preserving every UI surface.
+    private static let statusPollInterval: Duration = .seconds(30)
+
+    private func startDeviceStatusPolling() {
+        statusPollTask?.cancel()
+        statusPollTask = Task { [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                await self.loadDeviceStatus()
+                try? await Task.sleep(for: Self.statusPollInterval)
+            }
+        }
+    }
+
+    private func loadDeviceStatus() async {
+        guard let client = rest else { return }
+        do {
+            let response = try await client.getDeviceStatus()
+            self.deviceStatus = response.data
+        } catch {
+            // Keep last known status; avoid spamming logs
+        }
+    }
+
+    // MARK: - Debug Logging
+
+    func log(_ message: String, category: String = "APP") {
+        let entry = DebugEntry(
+            timestamp: Date(),
+            category: category,
+            message: message
+        )
+
+        debugLog.append(entry)
+
+        // Trim old entries
+        if debugLog.count > maxLogEntries {
+            debugLog.removeFirst(debugLog.count - maxLogEntries)
+        }
+
+        // Also print to console in debug builds
+        #if DEBUG
+        print("[\(category)] \(message)")
+        #endif
+    }
+
+    func clearLog() {
+        debugLog.removeAll()
+    }
+}
+
+// MARK: - Debug Entry
+
+struct DebugEntry: Identifiable, Sendable {
+    let id = UUID()
+    let timestamp: Date
+    let category: String
+    let message: String
+}
+
+================================================================================
+FILE: lightwave-ios-v2/LightwaveOS/ViewModels/EffectViewModel.swift
+================================================================================
+
+//
+//  EffectViewModel.swift
+//  LightwaveOS
+//
+//  Effect selection and filtering with categoryId and isAudioReactive decoding.
+//  iOS 17+, Swift 6 with @Observable @MainActor.
+//
+
+import Foundation
+import Observation
+
+@MainActor
+@Observable
+class EffectViewModel {
+    // MARK: - State
+
+    var allEffects: [EffectMetadata] = []
+    var currentEffectId: Int = 0
+    var currentEffectName: String = ""
+    var searchText: String = ""
+    var selectedCategory: String = "All"
+    var showAudioOnlyFilter: Bool = false
+
+    // MARK: - Dependencies
+
+    var restClient: RESTClient?
+
+    /// Weak reference to the parent so VM-level events surface in the in-app
+    /// DebugLogView and TestFlight reports rather than disappearing into stdout.
+    /// Set by `AppViewModel.init` immediately after construction.
+    weak var appVM: AppViewModel?
+
+    // MARK: - Computed Properties
+
+    /// All unique categories from loaded effects
+    var categories: [String] {
+        let cats = Set(allEffects.compactMap { $0.category })
+        return ["All"] + cats.sorted()
+    }
+
+    /// Audio-reactive effects only
+    var audioReactiveEffects: [EffectMetadata] {
+        allEffects.filter { $0.isAudioReactive }
+    }
+
+    /// Filtered effects by category, search text, and audio-only flag.
+    /// Experimental effects are excluded by default; the power-user toggle
+    /// `showExperimental` (see Phase 2 — picker enhancements MARK block at
+    /// the end of this file) reveals them with a visual cue in the picker.
+    func filteredEffects(category: String? = nil, searchText: String? = nil, audioOnly: Bool = false) -> [EffectMetadata] {
+        var effects = allEffects
+
+        // Hide experimental effects unless the power-user toggle is on.
+        if !showExperimental {
+            effects = effects.filter { !$0.isExperimental }
+        }
+
+        // Filter by audio-reactive if requested
+        if audioOnly {
+            effects = effects.filter { $0.isAudioReactive }
+        }
+
+        // Filter by category
+        let cat = category ?? selectedCategory
+        if cat != "All" {
+            effects = effects.filter { $0.displayCategory == cat }
+        }
+
+        // Filter by search text
+        let search = searchText ?? self.searchText
+        if !search.isEmpty {
+            effects = effects.filter {
+                $0.name.localizedCaseInsensitiveContains(search) ||
+                $0.displayCategory.localizedCaseInsensitiveContains(search)
+            }
+        }
+
+        return effects
+    }
+
+    /// Grouped effects by category
+    var groupedEffects: [(String, [EffectMetadata])] {
+        let filtered = filteredEffects()
+        let grouped = Dictionary(grouping: filtered) { $0.displayCategory }
+        return grouped.sorted { $0.key < $1.key }
+            .map { ($0.key, $0.value.sorted { $0.name < $1.name }) }
+    }
+
+    // MARK: - API Methods
+
+    func loadEffects() async {
+        guard let client = restClient else {
+            appVM?.log("loadEffects skipped — restClient is nil", category: "EFFECTS-ERROR")
+            return
+        }
+
+        appVM?.log("GET /api/v1/effects (page=1, limit=200) — sending", category: "EFFECTS")
+        do {
+            let response = try await client.getEffects(page: 1, limit: 200)
+
+            // Decode with categoryId, isAudioReactive (API_AUDIT fix), and
+            // isExperimental (Phase 2 — picker enhancements). Legacy firmware
+            // omits `isExperimental` — Optional decode treats absent as nil →
+            // non-experimental, preserving backward compatibility.
+            self.allEffects = response.data.effects.map { effect in
+                EffectMetadata(
+                    id: effect.id,
+                    name: effect.name,
+                    category: effect.category,
+                    categoryId: effect.categoryId,
+                    isAudioReactive: effect.isAudioReactive ?? false,
+                    isExperimental: effect.isExperimental ?? false,
+                    categoryName: effect.categoryName
+                )
+            }
+            let totalCount = allEffects.count
+            let experimentalCount = allEffects.filter { $0.isExperimental }.count
+            let visibleCount = totalCount - experimentalCount
+            appVM?.log(
+                "Loaded \(totalCount) effects (visible: \(visibleCount), experimental: \(experimentalCount), showExperimental: \(showExperimental))",
+                category: "EFFECTS"
+            )
+            if visibleCount == 0 && totalCount > 0 {
+                appVM?.log(
+                    "WARN: every effect is flagged experimental — picker will appear empty unless showExperimental is enabled",
+                    category: "EFFECTS-WARN"
+                )
+            }
+
+        } catch let DecodingError.keyNotFound(key, context) {
+            appVM?.log("Effects decode failed: missing key '\(key.stringValue)' at \(context.codingPath.map(\.stringValue).joined(separator: "."))", category: "EFFECTS-ERROR")
+        } catch let DecodingError.typeMismatch(type, context) {
+            appVM?.log("Effects decode failed: type mismatch \(type) at \(context.codingPath.map(\.stringValue).joined(separator: "."))", category: "EFFECTS-ERROR")
+        } catch let DecodingError.dataCorrupted(context) {
+            appVM?.log("Effects decode failed: data corrupted at \(context.codingPath.map(\.stringValue).joined(separator: ".")) — \(context.debugDescription)", category: "EFFECTS-ERROR")
+        } catch {
+            appVM?.log("Effects load failed: \(error.localizedDescription)", category: "EFFECTS-ERROR")
+        }
+    }
+
+    func setEffect(id: Int) async {
+        guard let client = restClient else { return }
+
+        do {
+            try await client.setEffect(id)
+
+            // Optimistic update
+            self.currentEffectId = id
+            if let effect = allEffects.first(where: { $0.id == id }) {
+                self.currentEffectName = effect.name
+            }
+            appVM?.log("Set effect to \(id)", category: "EFFECTS")
+
+        } catch {
+            appVM?.log("Set effect failed (\(id)): \(error.localizedDescription)", category: "EFFECTS-ERROR")
+        }
+    }
+
+    func nextEffect() async {
+        guard !allEffects.isEmpty else { return }
+
+        let currentIndex = allEffects.firstIndex(where: { $0.id == currentEffectId }) ?? -1
+        let nextIndex = (currentIndex + 1) % allEffects.count
+        let nextEffect = allEffects[nextIndex]
+
+        await setEffect(id: nextEffect.id)
+    }
+
+    func previousEffect() async {
+        guard !allEffects.isEmpty else { return }
+
+        let currentIndex = allEffects.firstIndex(where: { $0.id == currentEffectId }) ?? 0
+        let prevIndex = currentIndex > 0 ? currentIndex - 1 : allEffects.count - 1
+        let prevEffect = allEffects[prevIndex]
+
+        await setEffect(id: prevEffect.id)
+    }
+
+    // MARK: Phase 2 — runtime parameters
+    //
+    // End-user runtime tuning surface for the currently selected effect. The
+    // sheet view (`EffectParameterSheet`) reads `currentParameters` and writes
+    // back through `setRuntimeParameter`. Slider drags are debounced 150 ms so
+    // a continuous gesture produces at most one REST POST every 150 ms — well
+    // under the firmware's 20 req/s rate limit.
+
+    /// The list of runtime parameters for the most recently loaded effect.
+    /// Empty until `loadEffectParameters(effectId:client:)` populates it.
+    var currentParameters: [EffectParameter] = []
+
+    /// Pending values keyed by parameter name — held until the 150 ms debounce
+    /// window elapses, then flushed to the network in a single round-trip.
+    /// Observation excludes this so SwiftUI does not re-render on every keystroke.
+    @ObservationIgnored
+    private var pendingParameterValues: [String: Double] = [:]
+
+    /// Per-parameter debounce timers. One in-flight task per parameter so a
+    /// drag on `contrast` does not cancel a separate drag on `intensity`.
+    @ObservationIgnored
+    private var debounceTasks: [String: Task<Void, Never>] = [:]
+
+    /// The minimum interval between consecutive POSTs for the same parameter.
+    /// 150 ms is the project-wide slider debounce floor (see CLAUDE.md).
+    private static let parameterDebounceInterval: Duration = .milliseconds(150)
+
+    /// Fetch the tunable runtime parameters for `effectId` and store them in
+    /// `currentParameters`. Replaces any previously loaded list.
+    func loadEffectParameters(effectId: Int, client: RESTClient) async {
+        do {
+            let envelope = try await client.getEffectParameters(effectId: effectId)
+            self.currentParameters = envelope.parameters
+            appVM?.log("Loaded \(envelope.parameters.count) parameters for effect \(effectId)", category: "EFFECTS")
+        } catch {
+            appVM?.log("Effect parameters load failed for \(effectId): \(error.localizedDescription)", category: "EFFECTS-ERROR")
+            self.currentParameters = []
+        }
+    }
+
+    /// Queue a runtime parameter update. Coalesces rapid changes via a 150 ms
+    /// debounce window; only the latest pending value for `name` is sent.
+    /// - Parameters:
+    ///   - name: The programmatic parameter key.
+    ///   - value: The new value.
+    ///   - client: The active REST client. `nil` is tolerated — the call
+    ///     becomes a no-op so callers do not need a guard at every call site.
+    func setRuntimeParameter(name: String, value: Double, client: RESTClient?) {
+        guard let client = client else { return }
+
+        // Optimistic local update — keeps the UI in sync with the dragged value
+        // without waiting for the round-trip. The next reload will reconcile
+        // against firmware truth.
+        if let idx = currentParameters.firstIndex(where: { $0.name == name }) {
+            let p = currentParameters[idx]
+            currentParameters[idx] = EffectParameter.replacingValue(of: p, with: Float(value))
+        }
+
+        // Capture the latest desired value for this name and (re)start a
+        // debounce task. Cancelling any previous task means callers can drag
+        // freely; only the trailing value reaches the network.
+        pendingParameterValues[name] = value
+
+        debounceTasks[name]?.cancel()
+
+        let effectId = self.currentEffectId
+        debounceTasks[name] = Task { [weak self] in
+            try? await Task.sleep(for: Self.parameterDebounceInterval)
+            guard !Task.isCancelled else { return }
+            guard let self = self else { return }
+
+            // Read back the latest pending value at flush time — newer drags
+            // may have overwritten it during the sleep.
+            guard let latest = self.pendingParameterValues.removeValue(forKey: name) else {
+                return
+            }
+
+            do {
+                try await client.setRuntimeParameter(
+                    effectId: effectId,
+                    name: name,
+                    value: latest
+                )
+            } catch {
+                self.appVM?.log("Runtime parameter \(name) failed: \(error.localizedDescription)", category: "EFFECTS-ERROR")
+            }
+        }
+    }
+
+    // MARK: Phase 2 — picker enhancements
+    //
+    // F-2 power-user toggle. By default the picker hides effects tagged
+    // `isExperimental` by firmware (see PatternRegistry::isExperimental). The
+    // `showExperimental` flag flips the picker into a power-user mode where
+    // experimentals are visible and visually flagged. Off by default for safety
+    // — Captain's intent is that experimental effects do not appear in the
+    // production rotation without explicit opt-in.
+    //
+    // Wired up by `EffectSelectorView` via a toolbar toggle button; observable
+    // through @Observable so the picker re-renders when the flag flips.
+
+    /// Power-user toggle. When true, `filteredEffects()` includes effects
+    /// tagged `isExperimental` by firmware. Defaults to false.
+    var showExperimental: Bool = false
+
+    /// Flip the power-user toggle. Used by the picker's toolbar control.
+    func toggleShowExperimental() {
+        showExperimental.toggle()
+    }
+}
+
+// MARK: - EffectParameter mutation helper (file-private)
+
+private extension EffectParameter {
+    /// Build a copy of `original` with a new live `value`. `EffectParameter`
+    /// has `let` properties (it is decoded from the wire), so we round-trip
+    /// through the encoder rather than introducing a memberwise initialiser
+    /// that would widen the public API.
+    static func replacingValue(of original: EffectParameter, with newValue: Float) -> EffectParameter {
+        // Encode → mutate the dictionary → decode. Cheap (one parameter at
+        // a time) and keeps `EffectParameter`'s definition untouched.
+        guard let data = try? JSONEncoder().encode(original),
+              var dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return original
+        }
+        dict["value"] = newValue
+        guard let mutated = try? JSONSerialization.data(withJSONObject: dict),
+              let decoded = try? JSONDecoder().decode(EffectParameter.self, from: mutated) else {
+            return original
+        }
+        return decoded
+    }
+}
+
+================================================================================
+FILE: lightwave-ios-v2/LightwaveOS/ViewModels/ParametersViewModel.swift
+================================================================================
+
+//
+//  ParametersViewModel.swift
+//  LightwaveOS
+//
+//  Visual parameters management with debounced updates.
+//  Port from v1 — the debounce logic is solid, kept as-is.
+//  iOS 17+, Swift 6 with @Observable @MainActor.
+//
+
+import Foundation
+import Observation
+
+@MainActor
+@Observable
+class ParametersViewModel {
+    // MARK: - Parameters
+
+    var brightness: Double = 128
+    var speed: Double = 15
+    var mood: Double = 128
+    var fadeAmount: Double = 20
+    var hue: Double = 0
+    var saturation: Double = 255
+    var intensity: Double = 128
+    var complexity: Double = 128
+    var variation: Double = 0
+
+    // MARK: - Dependencies
+
+    var restClient: RESTClient?
+
+    // MARK: - Internal State (Pending flags pattern)
+
+    private var pendingParams: Set<String> = []
+    private var debounceTasks: [String: Task<Void, Never>] = [:]
+    private var clearPendingTasks: [String: Task<Void, Never>] = [:]
+
+    // MARK: - Slider Interaction
+
+    func sliderChanged(_ param: String, value: Double) {
+        // Update local value immediately for responsive UI
+        setValue(param, to: value)
+
+        // Mark as pending to ignore WS updates
+        pendingParams.insert(param)
+
+        // Cancel previous debounce task for THIS parameter only
+        debounceTasks[param]?.cancel()
+
+        // Debounce the network update (150ms) per parameter
+        debounceTasks[param] = Task {
+            do {
+                try await Task.sleep(nanoseconds: 150_000_000) // 150ms
+
+                guard !Task.isCancelled else { return }
+                guard let client = restClient else { return }
+
+                // Send update
+                try await client.setParameters([param: Int(value)])
+
+                debounceTasks.removeValue(forKey: param)
+
+            } catch is CancellationError {
+                // Cancelled by newer update, this is expected
+            } catch {
+                print("Error updating parameter \(param): \(error)")
+            }
+        }
+    }
+
+    func sliderReleased(_ param: String) {
+        // Clear pending flag after a short delay to allow final WS update to be ignored
+        clearPendingTasks[param]?.cancel()
+
+        clearPendingTasks[param] = Task {
+            try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+            guard !Task.isCancelled else { return }
+            pendingParams.remove(param)
+            clearPendingTasks.removeValue(forKey: param)
+        }
+    }
+
+    // MARK: - WebSocket Updates
+
+    func updateFromStatus(_ status: [String: Any]) {
+        // Only update parameters that aren't currently being dragged
+        for (key, value) in status {
+            guard !pendingParams.contains(key) else { continue }
+
+            if let doubleValue = value as? Double {
+                setValue(key, to: doubleValue)
+            } else if let intValue = value as? Int {
+                setValue(key, to: Double(intValue))
+            }
+        }
+    }
+
+    // MARK: - API Methods
+
+    func loadParameters() async {
+        guard let client = restClient else { return }
+
+        do {
+            let response = try await client.getParameters()
+
+            brightness = Double(response.data.brightness)
+            speed = Double(response.data.speed)
+            mood = Double(response.data.mood ?? 128)
+            fadeAmount = Double(response.data.fadeAmount ?? 20)
+            hue = Double(response.data.hue ?? 0)
+            saturation = Double(response.data.saturation ?? 255)
+            intensity = Double(response.data.intensity ?? 128)
+            complexity = Double(response.data.complexity ?? 128)
+            variation = Double(response.data.variation ?? 0)
+
+            print("Loaded parameters")
+
+        } catch {
+            print("Error loading parameters: \(error)")
+        }
+    }
+
+    // MARK: - Private Helpers
+
+    private func setValue(_ param: String, to value: Double) {
+        switch param {
+        case "brightness":
+            brightness = value
+        case "speed":
+            speed = value
+        case "mood":
+            mood = value
+        case "fadeAmount":
+            fadeAmount = value
+        case "hue":
+            hue = value
+        case "saturation":
+            saturation = value
+        case "intensity":
+            intensity = value
+        case "complexity":
+            complexity = value
+        case "variation":
+            variation = value
+        default:
+            break
+        }
+    }
+}

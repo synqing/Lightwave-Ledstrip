@@ -4,41 +4,89 @@ Prioritised engineering backlog. Items are tagged by category and roughly ordere
 
 ---
 
+## Critical — Work Blocks
+
+Work Blocks are critical tasks discovered while executing another mission. They must be scoped, logged, assigned out, and then the original mission must resume unless Captain explicitly re-scopes the session or an RBDO hard stop prevents continuation. Protocol: `instructions/work-blocking-protocol-v1.md`.
+
+### WB-1 — Systemic naming, definition, and metric accountability audit (OPEN — ASSIGN OUT)
+
+- **Problem statement:** Recent visual-pipeline work exposed misleading names and descriptions around renderer metrics and timing surfaces. Examples include `frameDrops` reading as skipped output frames when it is currently deadline-miss accounting, `cpu=100%` reading as whole-device CPU utilisation when it is renderer frame-budget occupancy, and `show_leds` reading as FastLED-only timing when it included output preparation plus LED driver show.
+- **Trigger / evidence:** K1v2 waveform/hybrid characterisation and VP Stack timing split, especially commits `6ec1d0b6` and `7c867df4`; docs: `firmware-v3/docs/research/k1_waveform_hybrid_serial_evidence_2026-05-07.md`, `firmware-v3/docs/debugging/VP_STACK_INTROSPECTION_COMMAND_SPEC.md`.
+- **Scope:** Audit high-risk metric names, debug labels, protocol fields, docs descriptions, and agent-facing terminology where the name can lead to wrong tactical conclusions. For each item, record actual definition, likely misread, operational risk, source anchor, and proposed action: rename, split, document, deprecate, or leave as-is with justification.
+- **Non-goals:** Do not rename broad surfaces blindly. Do not break client contracts without migration. Do not pause the current effects-characterisation lane after this Work Block is logged.
+- **Success conditions:** A source-anchored inventory exists; every proposed change has compatibility impact noted; every new or revised metric/debug field defines numerator, denominator, timing window, inclusion/exclusion boundary, and owner; approved corrections are reflected in docs and code where appropriate.
+- **Failure conditions:** Loose prose without source anchors; renames without migration plan; treating one corrected metric as proof that the wider naming/definition problem is solved.
+- **Owner / pickup mode:** Separate governance/observability agent or team. Start from the cited docs and current renderer/serial status surfaces.
+- **Resume rule for original mission:** Effects visual-quality work continues after this entry is logged. Do not turn waveform/PVF/BPS tuning into a repo-wide terminology audit in the same session.
+
+### WB-2 — FastLED/RMT transport visibility and ownership study (OPEN — ASSIGN OUT)
+
+- **Problem statement:** FastLED is not currently proven broken. The problem is insufficient project visibility into the FastLED overlay, RMT driver behaviour, wire-time fencing, return semantics, and low-level LED transport configuration now that those details affect K1 visual-pipeline timing interpretation.
+- **Trigger / evidence:** The VP Stack timing split showed the need to separate output preparation from LED driver show timing. Source anchors include `firmware-v3/src/core/led/LedDriver_S3.cpp` and `firmware-v3/src/core/led/LedDriver_S3.h`; docs and commits: `6ec1d0b6`, `7c867df4`, `firmware-v3/docs/research/k1_waveform_hybrid_serial_evidence_2026-05-07.md`, `firmware-v3/docs/debugging/VP_STACK_INTROSPECTION_COMMAND_SPEC.md`.
+- **Scope:** Map the active LED transport from `LedDriver_S3` through the vendored FastLED RMT4 overlay into ESP-IDF RMT calls. Establish what blocks, what returns early, what the fixed wire fence covers, how dual 160-LED strip timing behaves, and what instrumentation would prove TX start/TX complete/reset-latch boundaries on K1v1 and K1v2.
+- **Non-goals:** Do not declare FastLED broken without evidence. Do not remove or weaken the FastLED/RMT fence as part of this study. Do not rewrite LED transport inside the current effects-characterisation lane.
+- **Success conditions:** A source-anchored transport map exists; timing diagram distinguishes CPU preparation, `FastLED.show()`, RMT TX, fixed fence, and latch/reset windows; hardware instrumentation plan or evidence is recorded; decision matrix compares keep-upstream, vendor-fork, project-owned transport wrapper, and full in-house LED driver options.
+- **Failure conditions:** Library-blame without proof; generic rewrite proposal without test harness and safety gates; changing LED output behaviour before the study has hardware evidence.
+- **Owner / pickup mode:** Separate low-level firmware/transport agent or team. Treat this as an investigation first, not an implementation pass.
+- **Resume rule for original mission:** Effects visual-quality work continues after this entry is logged. FastLED/RMT ownership is not the next PVF/BPS/waveform tuning task unless Captain explicitly reopens it.
+
+---
+
 ## Critical — Upstream Calibration Debt
 
 Per the RBDO Gate (`CLAUDE.md` top), these upstream facts are unresolved. Until each is resolved or explicitly accepted under DEGRADED-MODE with disclosed risk, every tactical output that depends on them must be labelled DEGRADED-MODE or REFUSED. New tactical outputs MUST NOT add a fourth dependent to any URGENT row without resolving it first.
 
-### C-1 — Microphone-domain operating envelope (URGENT)
+### C-1 — Microphone-domain operating envelope (HIGH — MEASURED-DEGRADED 2026-05-06)
 What mic-domain RMS / peak / silentScale-trip range was the firmware tuned against?
-- **Blocks:** LUFS target for any audio test sweep; AFS v2 silentScale validation; any "tuned-regime sign-off" claim.
-- **Affected outputs:** ≥ 3.
-- **Priority:** URGENT.
-- **Revisit trigger:** Captain-allocated 30–60 min hardware envelope characterisation pass, OR audit of `firmware-v3/docs/research/audio_feature_surface_v2_baseline_2026-04-27.md` confirms it is already documented there.
+- **Blocks:** No longer blocks current K1v2 firmware-domain tuning, AFS v2 silentScale validation, or tuned-regime sign-off work that uses the same ESV11 32 kHz profile and Captain-approved private playback chain. Still blocks SPL/LUFS, cross-room, K1v1/K1v2 parity, and production-acoustic claims.
+- **Affected outputs:** Firmware-domain outputs can cite the measured-degraded envelope; absolute acoustic outputs remain DEGRADED-MODE.
+- **Priority:** HIGH follow-up debt, not an URGENT hard stop for current K1v2 firmware-domain work.
+- **Audit status:** 2026-05-06 audit of `firmware-v3/docs/research/audio_feature_surface_v2_baseline_2026-04-27.md` completed in `firmware-v3/docs/research/c1_mic_domain_envelope_audit_2026-05-06.md`; it narrowed the raw-hop RMS scale but did not close C-1 by itself.
+- **Hardware evidence:** 2026-05-06 K1v2 capture completed in `firmware-v3/docs/research/c1_mic_domain_envelope_capture_2026-05-06.md`. Current measured raw-hop RMS envelope: idle p50/p95/p99 `0.001591/0.003477/0.005916`; quiet p50/p95 `0.005513/0.015687`; normal p50/p95 `0.017600/0.036282`; dense p50/p95 `0.026247/0.044652`; observed max `0.064463`. Stop recovery after a 20.0 s hard stop: `isSilent=true` at `0.266399 s`, `silentScale<0.2` at `1.128722 s`.
+- **Captain approval:** 2026-05-06 hardware envelope pass completed with Captain-provided private tracks. Clip paths and audio material stay out of public repo artefacts per C-3.
+- **Remaining debt:** No SPL/LUFS reference level, no calibrated acoustic room/output level, no K1v1 parity pass, and no production photometry tie-off.
+- **Revisit trigger:** Microphone placement, enclosure acoustics, sample rate, silence-gate constants, playback chain, source corpus, or target hardware revision changes; or any request to claim SPL/LUFS/cross-device production acoustic validity.
 
-### C-2 — Feature × effect × dwell coverage matrix (HIGH)
+### C-2 — Feature × effect × dwell coverage matrix (HIGH — DONE-DEGRADED 2026-05-06)
 Which AFS v2 features × which Phase 5 effects × what minimum dwell each phenomenon needs to manifest visually.
-- **Blocks:** sign-off sweep duration; per-clip dwell minimums; rubric anchor points.
-- **Priority:** HIGH.
-- **Revisit trigger:** Phase 5 sign-off authorisation moment, or any new audio-reactive effect requiring fixture validation.
+- **Blocks:** no longer blocks C-5 authoring or sign-off harness planning. Still blocks final Phase 5 ship-gate claims until the C-5 hardware run validates the timestamped observables visually.
+- **Priority:** HIGH follow-up debt, not an authoring hard stop.
+- **Evidence:** `firmware-v3/docs/research/c2_feature_effect_dwell_matrix_2026-05-06.md` maps Phase 5 effects `0x2100`/`0x2101`/`0x2102` to source-backed audio feature rows, fixture archetypes, and minimum dwell lower bounds.
+- **Remaining debt:** dwell minima are source-derived and DEGRADED-MODE until the C-5 hardware run validates them against the timestamped observable matrix.
+- **Revisit trigger:** C-5 timestamped observable pass, Phase 5 sign-off authorisation moment, or any new audio-reactive effect requiring fixture validation.
 
 ### C-3 — Clip licence status + K1 repo public-status (HIGH)
 Are the hybrid-beat-tracker corpus clips licensed for inclusion or path-reference in K1 firmware artefacts? What is the K1 repo's public-status at launch (open-source, public-on-release, private)?
 - **Blocks:** clip pool composition for sign-off sweep; calibrated WAV storage policy; any third-party music reference in this repo.
 - **Priority:** HIGH (legal exposure if assumed wrong).
+- **Captain answer:** 2026-05-06: the repo is already public. Clips are to stay private. Captain can suggest several music tracks when the sign-off corpus is actually needed.
+- **Current status:** Repo-public status and clip privacy are resolved. Do not commit clips or public path references to private clips. The exact reference-track list remains deferred until the sign-off corpus step.
 - **Revisit trigger:** Captain answers (a) repo public-status at launch, (b) hybrid-beat-tracker licence applicability for commercial-product testing, (c) presence/absence of a Captain-licensed audiophile reference library.
 
 ### C-4 — First sign-off purpose (MEDIUM — DECIDED)
 **Decision (current):** First Phase 5 sign-off is a **diagnostic baseline**, not a ship gate, not a regression detector.
-- **Reason:** no calibrated baseline or timestamped observables exist yet (C-5 unresolved; C-1 unresolved).
-- **Priority:** MEDIUM (decided; pending re-audit when C-5 lands).
-- **Revisit trigger:** When C-5 produces ratifiable observables, the next sign-off cycle can be promoted to ship-gate (cycle 2) or regression-detector (cycle 3+).
+- **Reason:** the first attestation was accepted before per-effect timestamped observables existed. C-1 is now measured-degraded for current K1v2 firmware-domain work, C-2 is done-degraded, and C-5 now supplies a ratifiable observable matrix, but no hardware visual run has executed against that matrix yet.
+- **Priority:** MEDIUM (decided; pending hardware re-audit against C-5).
+- **Revisit trigger:** When the C-5 observable matrix is run on hardware, the next sign-off cycle can be promoted to ship-gate (cycle 2) or regression-detector (cycle 3+), subject to C-3 corpus composition.
 
-### C-5 — Per-effect timestamped observables (MEDIUM)
+### C-5 — Per-effect timestamped observables (MEDIUM — DONE-DEGRADED 2026-05-06)
 What exactly does the operator look for, anchored to (clip, timestamp, measurable phenomenon), per Phase 5 effect (RTS / PVF / BPS)?
-- **Blocks:** final rubric contents regardless of rubric shape (Y/N, 1–5, freeform).
-- **Depends on:** C-2.
-- **Priority:** MEDIUM.
-- **Revisit trigger:** After C-2 lands; pre-flight to any sign-off harness build.
+- **Blocks:** no longer blocks final rubric authoring or sign-off harness planning. Still blocks ship-gate promotion until the hardware run records Captain visual answers for each row.
+- **Depends on:** C-2 matrix landed; private corpus labels/windows selected from Captain-authorised local material. Exact source media mapping remains outside the public repo per C-3.
+- **Evidence:** `firmware-v3/docs/research/c5_phase5_timestamped_observables_2026-05-06.md` binds RTS/PVF/BPS to redacted private labels, timestamp windows, trace counters, expected visual phenomena, and Captain visual questions.
+- **Hardware sweep:** `firmware-v3/docs/research/c5_phase5_hardware_sweep_2026-05-06.md` records the first K1v2 serial execution. 18/18 rows produced trace evidence; all effect-specific render p99 values were under 2 ms; RMT wire time stayed around 6.1-6.3 ms. Captain gave one explicit visual judgement: `RTS-4` was an extremely poor effect/fixture choice.
+- **Remaining debt:** clip/window adequacy and visual quality remain DEGRADED-MODE until row-level Captain PASS / FAIL / DEGRADED-PASS answers are captured. `RTS-4` specifically requires replacement, redesign, or explicit removal from the sign-off matrix.
+- **Priority:** MEDIUM follow-up debt, not an authoring hard stop.
+- **Revisit trigger:** Replacement/rerun of `RTS-4`, full row-level Captain PASS / FAIL capture, private corpus replacement, changed audio backend/sample-rate profile, or changed Phase 5 effect implementation.
+
+### C-7 — K1 LGP perceptual JND floor (HIGH — MEASURED-DEGRADED 2026-05-05)
+What is the minimum perceptible brightness/contrast change through K1's actual LGP at customer viewing distance and normal viewing conditions?
+- **Blocks:** Phase 1 Move 1.7 PerceptualJND constants; INF-02 FramebufferLPF minimum cutoff bounds; PER-X minimum tau bounds; any claim that subtle motion/flicker thresholds are calibrated rather than inherited from ES/SB intuition.
+- **Measurement:** Captain observed the fixed `test_brightness_floor` harness on K1 hardware after flashing `test_brightness_floor` to MAC `b4:3a:45:a5:87:f8` over `/dev/cu.usbmodem2101`; LEDs were only visible from test level 4 onward in both Phase 1 and Phase 2. Test level 4 is `8.0%` perceptual in `firmware-v3/test/test_brightness_floor/main.cpp`.
+- **Accepted degraded constant:** use `8.0% perceptual` as the current minimum visible LGP brightness floor for Move 1.7 bounds until photometer data supersedes it.
+- **Remaining debt:** viewing distance, ambient conditions, observer count, and photometer readings were not captured; this is good enough to unblock placeholder-free constants, not good enough for final production photometry claims.
+- **Priority:** MEDIUM follow-up debt after Move 1.7; production photometry still owed, but placeholder-free constants are now unblocked.
+- **Revisit trigger:** Photometer-backed K1 + LGP measurement campaign at customer viewing distance, or Captain reports a different visible threshold under normal customer ambient conditions.
 
 ### F-1 — Contract authority (HIGH — DECIDED 2026-05-01)
 Is the YAML at `docs/protocol/k1-{rest,ws}-contract.yaml` source-of-truth, or has it drifted past usability? Audit found ~50 REST routes + ~40 WS commands in firmware are absent from the contract; 5 WS commands in YAML have firmware handlers commented out (`WsFilesystemCommands.cpp:21-25`).
@@ -82,9 +130,32 @@ Captain has authorised reversing the "AP-only-EVER, STA never worked" doctrine a
 - **Priority:** HIGH (decided; engineering execution pending hardware-in-the-loop session).
 - **Revisit trigger:** First successful pure-STA flash + 30-min hardware soak (validation criterion 4 above), OR an ESP-IDF 5.x upgrade that resolves the concurrent AP+STA bug at the driver level (current K1 is pinned at IDF 4.4.7; upgrade is blocked by an I2C bug + API rewrites per `firmware_build_envs.md`).
 
+### F-6 — CONTROLBUS_NUM_ZONES violates 3-zone hard rule (HIGH — DECIDED 2026-05-04)
+`firmware-v3/src/audio/contracts/ControlBus.h:22` defines `static constexpr uint8_t CONTROLBUS_NUM_ZONES = 4;`. This violates the Captain-defined hard rule (`feedback_zone_numbering.md`, MEMORY.md): **Zone 1, Zone 2, Zone 3 only. Zero-indexed zones BANNED. Max 3 zones. No 4th zone.** Surfaced 2026-05-04 during NotebookLM infographic source-pack audit when an external consultant proposed namespacing around the 4-zone audio AGC array — Captain rejected the namespacing approach: fix the code, do not document the bug as a feature.
+- **Decision (current):** Bring `CONTROLBUS_NUM_ZONES` from 4 to 3 across all consumers. Choice of band-restructuring (drop one band, merge two, or repartition to 3 buckets) is a firmware engineering decision that needs evaluation against current AGC behaviour.
+- **Engineering scope (4 tasks):**
+  1. **DONE (audit-only):** Current 4-zone partition and consumers documented in `firmware-v3/docs/research/f6_controlbus_num_zones_audit_2026-05-06.md`. Finding: the 4-zone ControlBus AGC path is source/doc debt and still live in legacy/non-ES `UpdateFromHop()` paths, but production K1v2 ESV11 disables the REST/WS Zone AGC surface and calls `applyDerivedFeatures()` rather than the Zone AGC stage.
+  2. **Decide band-restructuring approach.** Three viable options: (a) drop the highest band (typically least musically informative), (b) merge two adjacent bands (sub-bass + bass, or upper-mid + treble), (c) re-partition to 3 logarithmic-spectrum buckets that better match the user-facing visual zone semantics. Captain requested the need for this process be explained before choosing.
+  3. **Refactor consumers.** `AudioActor.cpp:316`, `AudioActor.h:416-417` (`followers[CONTROLBUS_NUM_ZONES]`, `maxMags[CONTROLBUS_NUM_ZONES]`) — these arrays auto-resize via the constant but the band-mapping logic in AudioActor needs to be re-checked. Search for any hardcoded `[3]` indices that assume 4 zones.
+  4. **Hardware-test before commit.** Per `feedback_hardware_test_before_commit.md`: build success not enough. Flash and audit AGC behaviour against reference audio corpus. Confirm visual zone behaviour unchanged or improved.
+- **Reason:** The 4-zone audio AGC array is an internal implementation detail that contradicts the user-facing 3-zone contract. The contradiction creates two long-term risks: (a) future agents will document the 4-zone array as canonical and propagate it into specs/docs/UI (already happened once, rejected); (b) any code path that bridges audio AGC zones to user-facing zone IDs has an implicit off-by-one that may already be silently masking visual artifacts. Fixing the constant aligns internal and external semantics.
+- **Affected outputs:** NotebookLM infographic source pack (audio-AGC zones STRUCK from `06_PART_OUTLINES.md` until fix lands — see `docs/tooling/notebooklm-bundles/lightwave_ledstrip_infographics/sources/05_FORBIDDEN_CLAIMS.md`). No other consumers identified yet — Phase 1 of fix should grep all references to `CONTROLBUS_NUM_ZONES` and audit for downstream assumptions.
+- **Priority:** HIGH (decided; engineering execution requires Captain input on band-restructuring approach + separate hardware-in-the-loop session).
+- **Revisit trigger:** Captain selects band-restructuring approach (option a/b/c above) — at that point Phase 1 audit + refactor unblocks. OR audio AGC zones are needed in a Captain-approved infographic panel (would require interim "K1v2 audio AGC currently uses 4 internal bands, scheduled for refactor" disclaimer, which requires Captain authorisation).
+
 ---
 
 ## Performance
+
+### [DONE] ~~K1v2 SRAM/PSRAM reclaim pass~~ — completed 2026-05-06
+- **Authority:** `firmware-v3/docs/research/k1v2_sram_psram_reclaim_handoff_2026-05-06.md`.
+- **Trigger:** K1v2 Phase 5 testing exposed real low-heap pressure: WebServer low-heap shedding latched around 8.9-10.5 KB internal free heap and `RendererActor::handleSetEffect()` rejected effect switches below its 12 KB floor.
+- **Current evidence:** commit `63a4b392` disabled production diagnostic monitors for K1v2 and restored ~6.9 KB static RAM. K1v2 `/dev/cu.usbmodem2101` / MAC `b4:3a:45:a5:87:f8` then booted with `17776` B free internal heap, `15848` B min free, `8180` B max alloc, `showSkips=0`, and accepted `0x2103` plus `0x0100` effect switches.
+- **Goal:** recover enough additional internal DRAM/SRAM to keep K1v2 out of low-heap shedding during normal AP/effect-switch testing, preferably `>=22 KB` no-client boot free internal heap and at least `>=8 KB` largest alloc/free block.
+- **First candidates:** cold/control-path SRAM consumers only: `CaptureStreamer` fallback/task buffers, `StaticAssetRoutes` 3 KB static buffer, `WsCommandRouter` handler table, and builtin effect registry metadata. Measure from the current ELF before patching.
+- **Completed evidence:** `firmware-v3/docs/research/k1v2_sram_psram_reclaim_run_2026-05-06.md` records the Batch A patch, baseline/post-patch build deltas, symbol guard, K1v2 upload, and serial verification. Static internal RAM dropped from `136084` B to `125748` B. K1v2 booted with `28088` B free internal heap, `26160` B min free, `18420` B max alloc, `showSkips=0`, and accepted `0x2103`, `0x0100`, and `0x2102`; post-switch memory remained `27940` B free with `18420` B max alloc.
+- **Hard stops honoured:** heap guard thresholds unchanged; `SnapshotBuffer<ControlBusFrame>` not moved; no render hot-path heap added; STA untouched; failed two-unit manual A/B not revived; unrelated dirty files not staged.
+- **Return path:** after this pass is verified and committed, resume Phase 5 visual-quality tuning on promising effects (`0x2101`/`0x2102` etc.) with RTS/`0x2100` parked unless Captain explicitly reopens it.
 
 ### [DONE] ~~RendererActor vTaskDelay(1) costs 10 ms per frame~~ — resolved in d943101a
 - Original `vTaskDelay(1)` before `showLeds()` replaced with `vTaskDelay(0)` (equivalent to `taskYIELD()`)
@@ -130,15 +201,25 @@ Captain has authorised reversing the "AP-only-EVER, STA never worked" doctrine a
 
 ## Synergy-Topology Programme
 
-The active feature branch is `feature/synergy-topology-phase-0-1`. Phase moves land here; merge to `main` is gated on completion of selected programme work.
+Canonical plan is `firmware-v3/docs/research/synergy-topology/Topology_Reconciliation.md` §5, with the resume protocol preserved in `firmware-v3/docs/research/synergy-topology/RESUME_BRIEF_2026-05-05.md`. Do **not** implement against the superseded 6-phase `PASS_3_KILL_ORDER.md` ordering.
 
-### [DONE] ~~Phase 1 — Infrastructure substrates (Moves 1.1–1.6)~~
+Original execution branch `feature/synergy-topology-phase-0-1` was folded into later work via merge `effa781d`. Current resume branch: `feature/synergy-topology-resume-2026-05-05`; keep new resume work isolated unless Captain redirects.
+
+### [DONE] ~~Phase 0 — Baseline Guardrails~~
+- Phase 0A kill-list lint shipped — commit b2cc2824
+- Move 0.1 Product Signature Filter-as-code accepted from the Phase 0A kill-list lint — commit b2cc2824
+- Move 0.2 centre-origin / brand-voice violation triage shipped — commit d4348f08
+- Move 0.2 follow-up recovery after sandbox-to-integration loss shipped — commit 6b1a222f
+- **Gate resolved 2026-05-05:** Captain accepted the existing Phase 0A + Move 0.2 commits as satisfying `Topology_Reconciliation.md` §5 Move 0.1 Product Signature Filter-as-code and Move 0.2 centre-origin audit pass for this resume branch.
+
+### Phase 1 — Infrastructure substrates — DONE-DEGRADED (7 landed)
 - Move 1.1 PersistenceHelpers — commit 6907404c
 - Move 1.2 EffectRoleFlags substrate — commit 7a077701
 - Move 1.3 FramebufferLPF — commit 00628fe7
 - Move 1.4 LayerStack composer — commit d2a7499f
 - Move 1.6 sinLUT256 + CFLSubstepGate — commit b62cc5d7
-- Move 1.5: not yet planned (gap left intentional)
+- Move 1.5 ControlBus render-side reuse refactor — shipped in resume-branch Phase Move commit; expands generic AudioEffectMapping sources using existing ControlBusFrame fields only
+- Move 1.7 E-05 PerceptualJND calibration constants — shipped in resume branch; `8.0% perceptual` floor captured in `effects/PerceptualJND.h`, INF-02 lower cutoff bound named, isolated native test added; photometer-grade calibration remains C-7 follow-up debt.
 
 ### [DONE] ~~Phase 1B — AFS v2 instrumentation + ControlBus contract lock~~
 - Phase 1B instrumentation — commit 19007888
@@ -148,19 +229,34 @@ The active feature branch is `feature/synergy-topology-phase-0-1`. Phase moves l
 
 ### [DONE] ~~Phase 2 Move 2.1 — PSRAMScalarRing substrate~~ -- commit f8b52bce
 
-### [DONE] ~~Phase 4 — Audio substrates + cinematic boot~~
+### [DONE] ~~Phase 3 — Dual-Strip Moat~~
+- Move 3.1 F5 Reflective Twin contract enforcement — shipped in resume branch; `ReflectiveTwinPolicy` gates direct dual-strip output so default/legacy effects stay on the mirrored unified path unless metadata declares `EffectRoleFlags::DUAL_CHANNEL`; native harness matrix includes the scoped policy test.
+- Move 3.2 F4 Cross-Strip Wave Interference — shipped in resume branch after Captain LGP fringe-visibility sign-off; default `3pi/4` phase offset matched the strongest visible tooth/trough separation, and K1v2 hardware testing resolved white vertical flashes by enforcing full WS2812 wire-time after patched FastLED RMT `show()`.
+- Move 3.3 GEO-13 InterStripPhaseDelay infrastructure — shipped in resume branch; `InterStripPhaseDelay` wraps paired PSRAM frame rings so future `DUAL_CHANNEL` effects can sample delayed strip A/B frames without render-path allocation; native harness matrix includes the scoped substrate test.
+- Remaining Phase 3 work: none.
+
+### Phase 4 — Audio substrates + cinematic boot — PARTIAL (3 landed, 1 owed)
 - Move 4.1 AUD-21 VoiceMusicClassifier — commit 5021d96a
 - Move 4.2 PER-18 AudioGatedConditionalDecay — commit ba816631
 - Move 4.4 F6 First-Light Ignition (cinematic boot effect) — commit 4d12edc5 (Captain hardware visual confirmed in commit body)
-- Move 4.3: not yet planned
+- Move 4.3 F3 Liquid Stillness curation — planned in `firmware-v3/docs/research/synergy-topology/MOVE_4_3_LIQUID_STILLNESS_CURATION_2026-05-05.md`; Captain noted/approved the gate on 2026-05-06, and implementation remains gated on Captain selecting the final 8–12 ambient programmes from the audition slate.
+
+### Next Synergy-Topology re-entry recommendation — CAPTAIN RATIFIED 2026-05-05
+- Phase 0 ledger gate is resolved above.
+- Move 1.5 and Move 1.7 are closed on this resume branch; C-7 remains as photometer-grade follow-up debt, not a Phase 1 blocker.
+- Move 3.1 is closed on this resume branch.
+- Move 3.3 is closed on this resume branch.
+- Move 3.2 is closed on this resume branch after Captain hardware sign-off.
+- Do not promote Phase 5 visual sign-off to ship-gate until the failed `RTS-4` row is resolved and Captain records row-level visual results for the C-5 matrix; C-1/C-2/C-5 are measured/done under DEGRADED-MODE and C-3 still gates final sign-off corpus composition.
 
 ### Phase 5 — Synergy-Topology effect exemplars (3 of 7+ moves) — DONE-DEGRADED
 - Move 5.4 RadialTimeScopeEffect (EID 0x2100) — committed in 39406e6b; **DEGRADED-MODE attested 2026-04-28**
 - Move 5.6 AttackOnlyPitchVelocityFieldEffect (EID 0x2101) — committed in 39406e6b; **DEGRADED-MODE attested 2026-04-28**
 - Move 5.7 BeatParitySpriteEffect (EID 0x2102) — committed in 39406e6b; **DEGRADED-MODE attested 2026-04-28**
+- 2026-05-07 BPS lane close-out — immediate silence/background repair is complete for this workstream and Captain confirmed silence is dark/unresponsive; BPS remains an allowed event-sprite class but is visually unsatisfactory and not the future Hybrid/V1 Waveform Pull-In class. See `docs/adr/lightweight-architecture-decision-ledger.md` ADL-009/010 and `firmware-v3/docs/research/lgp_beat_emotiscope_architecture_review_2026-05-06.md`.
 - **Native test harness:** 130/130 PASS in 1.97 s — commit f49b4d6a; gated by `pio test -e native_test_phase5` in `firmware-v3_build_check.yml` since 632132e4
 - **Hardware traces:** 8 captures committed in `firmware-v3/tools/baselines/` totalling ~21,000 events; `bps_kick_fired` → `bps_sprite_spawn` 1:1 ratio confirmed
-- **B.4 DONE-DEGRADED:** Phase 5 sign-off attested under DEGRADED-MODE per Captain authorisation 2026-04-28. Attestation: `firmware-v3/docs/audit/phase_5_visual_sign_off_2026-04-28.md`. Diagnostic-baseline only — does NOT claim hardware visual sign-off, does NOT promote to ship-quality. Cycle 2 sign-off (calibrated, hardware-validated, ship-gate purpose) requires C-1/C-2/C-5 resolution first.
+- **B.4 DONE-DEGRADED:** Phase 5 sign-off attested under DEGRADED-MODE per Captain authorisation 2026-04-28. Attestation: `firmware-v3/docs/audit/phase_5_visual_sign_off_2026-04-28.md`. Diagnostic-baseline only — does NOT claim hardware visual sign-off, does NOT promote to ship-quality. Cycle 2 sign-off now has a trace-complete C-5 hardware sweep, but remains blocked by the failed `RTS-4` row, missing row-level Captain visual answers, and C-3 corpus composition; C-1/C-2/C-5 are measured/done under DEGRADED-MODE.
 
 ### Pathmode programmes — IntentSpecs feeding device + Pathmode product manifest
 
@@ -201,23 +297,41 @@ These are NOT phases; they are validated engineering intents that update both fi
 
 ### Surface 2 / 3 Tier 2 decomposition spans (gated, opt-in)
 - Spec: `TRACE_INSTRUMENTATION_SPEC.md` §2 + §3 Tier 2 tables
-- Surface 2 spans (`bus_copy_memcpy`, `bus_retry_check`, `audio_ctx_populate_us`, `motion_engine_tick_us`, `motion_shaper_tick_us`) gated on `FEATURE_TRACE_AUDIO_HANDOFF`
+- DONE: Surface 2 live-code spans (`bus_copy_memcpy`, `bus_copy_retry`, `bus_retry_check`, `audio_ctx_populate_us`) are gated on `FEATURE_TRACE_AUDIO_HANDOFF` and build via `esp32dev_audio_esv11_k1v2_32khz_trace_handoff`.
+- NOT IMPLEMENTED: `motion_engine_tick_us` / `motion_shaper_tick_us` have no live update call site in `RendererActor`; activating them would change effect-facing motion semantics, so they remain parked until a Captain-approved product behaviour change exists.
 - Surface 3 spans (`i2s_dma_read`, `stm_rfft_256`, `onset_detect_span`, `band_ratio_detect`, `controlbus_publish`) gated on `FEATURE_TRACE_AUDIO_DSP`
-- Captain decision deferred per spec Q3: implement only if `audio_snapshot_read` p99 stays > 300 µs after the DRAM relocation (below) lands
+- DONE: Surface 3 opt-in DSP decomposition now has `esp32dev_audio_esv11_k1v2_32khz_trace_dsp`. Gated spans cover `i2s_dma_read`, `controlbus_build`, `stm_rfft_256`, `stm_extract`, `onset_detect_span`, legacy `onset_detect`, `band_ratio_detect`, `controlbus_update_stage_b`, `snapshot_publish`, and `controlbus_publish`; Tier 1 counters remain available in trace builds via `audio_hop_us`, `audio_hop_freq`, `audio_silence_scale`, `audio_rms_x1000`, and `audio_hop_count`.
+- 2026-05-06 K1v2 handoff trace (`0x2102`, MAC `b4:3a:45:a5:87:f8`): `audio_snapshot_read` p99 687 µs; `bus_copy_memcpy` p99 247 µs; `audio_ctx_populate_us` p99 302 µs; retry only 2/98 reads. Retry contention is not the root cause.
+- DONE: Renderer-side copy-count reduction now populates single-effect and independent-strip `EffectContext.audio` directly from the renderer-owned frame instead of first copying through `m_sharedAudioCtx`. The zone path keeps one compatibility context because `ZoneComposer` owns its own reusable context.
+- 2026-05-06 K1v2 copy-reduction trace (`0x2102`, MAC `b4:3a:45:a5:87:f8`): `audio_snapshot_read` p99 460 µs; `bus_copy_memcpy` p99 251 µs; `audio_ctx_populate_us` p99 293 µs; `render_frame` p99 2755 µs; retry still 2/99 reads.
+- Next gate: only graduate the ControlBusFrame hot/cold split below if sub-300 µs snapshot reads become a hard requirement. Do not tune retry policy unless a later trace shows retry frequency rising.
 
-### ControlBusFrame → internal DRAM relocation (Captain Q3 RESOLVED in spec, implementation pending)
+### ControlBusFrame → internal DRAM relocation (Captain Q3 RESOLVED in spec, implementation shipped)
 - Captain-approved 2026-04-27 architectural change: relocate `SnapshotBuffer<ControlBusFrame>` from PSRAM to internal DRAM (5 KB cost approved)
 - Expected outcome: 5–10× speedup on `audio_snapshot_read` (current p99 836 µs → target <200 µs)
 - The Tier 1 measurement contract (`audio_snapshot_age_us`, `hop_seq_lag`, `size_bytes`, `snapshot_read_retries_total`) is SHIPPED — before/after baseline diffing via `firmware-v3/tools/analyse_trace.py --baseline tools/baselines/k1v2_0x2102_2026-04-27.json --strict` is mechanical
+- DONE: 1C verify-first diagnostic is implemented. ActorSystem init now reports actor/snapshot payload memory region (`DRAM`, `PSRAM`, or `OTHER`) and trace counters `audio_actor_storage_region`, `audio_snapshot_storage_region`, `audio_snapshot_payload_bytes`.
+- DONE: 1B narrow relocation is implemented. K1v2 hardware verification on `/dev/cu.usbmodem2101` / MAC `b4:3a:45:a5:87:f8` changed the boot diagnostic from `actor=PSRAM payload=PSRAM` to `actor=PSRAM payload=DRAM`; whole-actor 1A allocation was not used.
+- DONE: 2026-05-06 post-relocation Tier 1 trace captured in `firmware-v3/docs/research/phase1b_runtime_evidence_2026-05-06/controlbus_dram_relocation_trace/`. `audio_snapshot_read` p99 stayed above the target (`647 µs`), so the gated Tier 2 handoff trace was implemented and captured.
+- DONE: 2026-05-06 renderer copy-count reduction improved the same K1v2 handoff trace from `audio_snapshot_read` p99 687 µs to 460 µs and `render_frame` p99 3072 µs to 2755 µs, without changing the cross-core `SnapshotBuffer` safety copy.
 - Strategy options surfaced by the SSA-PHASE-A audit (2026-04-27): (1A) override `AudioActor::operator new` to force `MALLOC_CAP_INTERNAL` — lowest risk, ~50–100 KB cost; (1B) convert `m_controlBusBuffer` to a heap-allocated pointer — closer to 5 KB envelope but ~10 KB minimum for double-buffer; (1C) verify-first via `esp_ptr_in_dram` boot diagnostic before committing budget
-- Owner: Captain decision required (1A vs 1B vs 1C); agent applies once authorised
+- Result: DRAM placement plus renderer copy-count reduction reduced but did not close the original `<200 µs` target. The remaining target is frame shape / hot-cold split, not allocation region or retry policy.
 
 ### Audio-side bench toggle wiring (Surface 7 follow-up)
 - BenchRegistry framework + 8 toggle registrations + `render.color_correction` consumer wiring SHIPPED
-- Audio-side toggles (`audio.lookahead`, `audio.zone_agc`, `audio.chroma_zone_agc`) registered as visibility stubs; per-hop observer call site needs a small AudioActor change (one line at hop entry)
+- DONE: Audio-side toggles (`audio.lookahead`, `audio.zone_agc`, `audio.chroma_zone_agc`) are wired into the ControlBus `UpdateFromHop` backends through an AudioActor per-hop observer plus scoped native regression coverage.
+- ESV11 caveat: production K1v2 builds construct a `ControlBusFrame` through `EsV11Adapter` and bypass ControlBus Stage A (`UpdateFromHop`), so equivalent ESV11 adapter A/B gates require a separate semantic change and are not part of this small Surface 7 follow-up.
 - `render.async_rmt` and `render.dual_strip_parallel`: also stubs; require LedDriver disentanglement (not in current scope)
-- `effect.fade_to_black`: per-effect opt-in via a thin `fadeToBlackByGated` helper (not yet authored)
+- DONE: `effect.fade_to_black` helper substrate (`effects/FadeOverride.h`) is authored and covered by `native_test_fade_override`; no effect call sites migrated yet, so default product visuals are unchanged.
 - Trigger to revisit: when Captain asks for runtime A/B of any specific toggle
+
+### VP render path audit follow-ups (2026-05-05)
+- DONE: gamma LUT lifecycle/status correctness (`adacee3d`). NVS and runtime colour-correction config writes now route through `ColorCorrectionEngine::setConfig()`, and REST/WS/SerialCLI/SerialJSON expose `gammaEnabled`, `gammaValue`, `lutGenerationId`, and LUT proof samples.
+- DONE: source-grounded VP frame lifecycle audit (`3978c167`). The audit documents one shared output path with a buffer-ownership fork, not two render pipelines.
+- DONE: VP validation protocol drafted in `firmware-v3/docs/audit/VP_VALIDATION_PROTOCOL_2026-05-06.md`. Use it before buffer-ownership correction, silence-policy metadata, or colour-correction default changes.
+- GATED: buffer-ownership correction. Current source applies `ColorCorrectionEngine::processBuffer()` to `m_leds` in `RendererActor::onTick()`, while direct dual-channel effects can author `m_strip1/m_strip2` and bypass the corrected surface before `showLeds()`. Patching this changes visible output for strip-authored effects, so do not implement until the protocol is followed and the run report exists.
+- GATED: silence-policy metadata. Global `silentScale` is an output brightness policy and can make ambient/non-reactive effects appear audio-reactive. Add per-effect policy metadata only behind tests, protocol evidence, and explicit product approval; default changes are visible behaviour.
+- SKIPPED: subjective two-unit/manual colour A/B. Do not revive the failed timed A/B workflow or use its observations as evidence. Any future visual-default change needs a new protocol first.
 
 ### Investigate Perfetto-compatible tracing alternatives
 - MabuTrace is GPL-3.0 (dev-only, never ships -- acceptable but not ideal)
@@ -232,6 +346,8 @@ These are NOT phases; they are validated engineering intents that update both fi
 ### ControlBusFrame hot/cold split
 - The ~2 KB ControlBusFrame is copied atomically across cores via SnapshotBuffer
 - If cross-core contention becomes measurable, split into hot (~100 B: RMS, flux, bands) and cold (~1.9 KB: full spectrum, waveform) sub-structs with independent update rates
+- 2026-05-06 evidence after duplicate renderer-copy removal: direct snapshot payload copy is still ~251 µs p99 and `audio_snapshot_read` is ~460 µs p99 on K1v2 `0x2102`. Hot/cold split is the next plausible lever, but it is a contract refactor touching stimulus, legacy inactive Trinity compatibility, debug/streaming, and effect compatibility; do not start it as a small patch.
+- Trinity status note: Captain clarified on 2026-05-06 that Trinity has never been actively deployed or utilised; source hooks should be treated as dormant compatibility only. Evidence note: `firmware-v3/docs/research/trinity_inactive_status_note_2026-05-06.md`.
 
 ### MabuTrace library risk
 - 7 GitHub stars, 1 fork, single maintainer (mabuware/Matthias Buhlmann)

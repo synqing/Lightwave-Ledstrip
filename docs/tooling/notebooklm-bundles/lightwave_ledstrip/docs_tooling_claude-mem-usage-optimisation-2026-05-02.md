@@ -25,7 +25,7 @@ Captain asked for a granular study of these official claude-mem resources and fo
 | Automatic capture | Session hooks capture tool activity such as `Read`, `Write`, `Edit`, `Bash`, `Glob`, and `Grep`; the worker extracts title, subtitle, narrative, facts, concepts, type, and files. | Preserve automatic capture. Treat SessionStart output as an index, not complete truth. |
 | Session summaries | Stop hook generates request, investigated, learned, completed, and next-step summaries. | Use summaries for orientation only. Verify current source/runtime for live behaviour. |
 | Memory MCP | `__IMPORTANT`, `search`, `timeline`, `get_observations`. | Standard route is `search -> timeline -> get_observations`; no stale `mem-search` namespace. |
-| Worker API | `GET /api/search`, `GET /api/timeline`, `POST /api/observations/batch`, `GET /api/health`, `GET /api/version`. | Health/version checks are part of the trust gate when memory freshness warnings appear. |
+| Worker API | `GET /api/search`, `GET /api/timeline`, `POST /api/observations/batch`, `GET /api/health`, `GET /api/version`. | Health/version checks are part of the trust gate when memory freshness warnings appear. If MCP stdio transport is closed while `/api/health` is OK, worker API search is the supported bypass. |
 | Queue admin API | `GET /api/pending-queue`, `POST /api/pending-queue/process`, `DELETE /api/pending-queue/failed`, `DELETE /api/pending-queue/all`. | Queue admin routes are method-specific. `GET /api/pending-queue/failed` and `GET /api/pending-queue/all` returning `404` does not prove the routes are missing. Do not validate destructive routes by firing `DELETE` unless repair mode is explicit and backup/export protection is acceptable. |
 | Search backend | SQLite FTS5 plus Chroma semantic search/hybrid retrieval. | Use FTS5 syntax for precise incidents and file names; use semantic search for vague topics. |
 | Search filters | `query`, `limit`, `offset`, `type`, `obs_type`, `project`, `dateStart`, `dateEnd`, `orderBy`. | Start with `limit=3-5`, add `project` and date/type filters before fetching details. |
@@ -34,7 +34,7 @@ Captain asked for a granular study of these official claude-mem resources and fo
 | Context engineering | Just-in-time context, hybrid retrieval, compaction, structured notes, and sub-agent architectures. | Use memory indexes and references first; deploy sub-agents for independent research domains; keep main context for synthesis and edits. |
 | Progressive disclosure | L1 index, L2 timeline/context, L3 full detail, L4 source files. | The instruction layer now names the four layers and requires selective fetching. |
 | Legend/types | `session-request`, `gotcha`, `problem-solution`, `how-it-works`, `what-changed`, `discovery`, `why-it-exists`, `decision`, `trade-off`. | Critical types such as gotchas, decisions, and trade-offs are worth fetching earlier than generic changes. |
-| Smart Explore | `smart_search`, `smart_outline`, `smart_unfold`. | Use for exact non-C++ code navigation and large Markdown/code files when available. In Lightwave C++ symbol work, clangd still wins because the repo hard gate says clangd first. |
+| Smart Explore | `smart_search`, `smart_outline`, `smart_unfold`. | Optional code-navigation layer only. Use for exact non-C++ code navigation and large Markdown/code files when the MCP transport is live. In Lightwave C++ symbol work, clangd still wins because the repo hard gate says clangd first. |
 | Smart Explore benchmark | Smart Explore is much cheaper for targeted code reads; Explore agents are better for cross-file synthesis. | Use Smart Explore for "where is this?" and "show this symbol"; use SSAs for "explain this subsystem". |
 | File Read Gate | PreToolUse `Read` hook surfaces a by-file timeline before full read; small files under 1,500 bytes bypass the gate. | Treat gate output as intended guidance. Escalate from timeline to observations to Smart Explore before a full large-file read. |
 | File timeline API | `GET /api/observations/by-file`. | Use as semantic priming for large files; current file reads remain necessary when the source may have changed. |
@@ -61,7 +61,7 @@ mcp__plugin_claude-mem_mcp-search__get_observations
 
 5. **File Read Gate is not a failure.** It should prompt timeline/observation/Smart Explore use before expensive large-file reads.
 
-6. **Smart Explore is adopted with Lightwave constraints.** It is suitable for non-C++ structural exploration and large Markdown navigation. For firmware C++ symbols, root `CLAUDE.md` still requires clangd first.
+6. **Smart Explore is adopted with Lightwave constraints and an explicit failure path.** It is suitable for non-C++ structural exploration and large Markdown navigation only when the client MCP transport is live. For firmware C++ symbols, root `CLAUDE.md` still requires clangd first. If `smart_search`, `smart_outline`, or `smart_unfold` return `Transport closed`, unsupported-language, parser, or empty-outline failures, classify Smart Explore as degraded for the session and route to worker `GET /api/search`, SQLite FTS, `$RECALL_CLI`, `rg`, or clangd according to whether the question is memory or current source.
 
 7. **Health gates are part of memory trust.** A reachable worker is not enough if queue backlog, version drift, or parser storms are present. Current-state claims must be verified live when warnings appear.
 
@@ -98,6 +98,7 @@ Do not classify `/failed` or `/all` as missing from a `GET`/`POST` `404`; those 
 - Do not edit inside generated `<claude-mem-context>` blocks.
 - Do not ignore claude-mem health warnings; verify worker health, version, logs, and queue state before trusting fresh memory.
 - Do not test `/api/pending-queue/failed` or `/api/pending-queue/all` with `GET` and report the resulting `404` as route drift. They are `DELETE` routes, and firing them is destructive.
+- Do not treat `smart_search` / `smart_outline` / `smart_unfold` `Transport closed` as proof that claude-mem memory search is down. Verify `/api/health`; if the worker is healthy, use worker API search or SQLite FTS and continue.
 - Do not read large code files blindly if File Read Gate or Smart Explore can answer the narrower question.
 
 ---
@@ -106,3 +107,4 @@ Do not classify `/failed` or `/all` as missing from a `GET`/`POST` `404`; those 
 |------|--------|--------|
 | 2026-05-02 | agent:codex | Created docs-backed claude-mem capability map and local integration decision record. |
 | 2026-05-02 | agent:codex | Added method-aware queue admin route contract after live 12.4.9 validation. |
+| 2026-05-05 | agent:codex | Added Smart Explore transport failure protocol and direct memory-search bypass routes. |

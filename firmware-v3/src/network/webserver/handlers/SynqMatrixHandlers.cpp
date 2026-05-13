@@ -1,12 +1,12 @@
 /**
- * @file SongAwareHandlers.cpp
- * @brief REST handlers for runtime-only song-aware director controls.
+ * @file SynqMatrixHandlers.cpp
+ * @brief REST handlers for runtime-only synq-matrix director controls.
  */
 
-#include "SongAwareHandlers.h"
+#include "SynqMatrixHandlers.h"
 
 #include "../../ApiResponse.h"
-#include "../../../core/songaware/SongAwareDirector.h"
+#include "../../../core/synqmatrix/SynqMatrix.h"
 
 #include <ArduinoJson.h>
 #include <cstring>
@@ -18,18 +18,18 @@ namespace handlers {
 
 namespace {
 
-songaware::SongAwareRuntimeState g_restorePoint;
+synqmatrix::SynqMatrixRuntimeState g_restorePoint;
 bool g_restorePointValid = false;
 
 void captureRestorePoint() {
-    g_restorePoint = songaware::SongAwareDirector::instance().exportRuntimeState();
+    g_restorePoint = synqmatrix::SynqMatrix::instance().exportRuntimeState();
     g_restorePointValid = true;
 }
 
-void encodeConfig(JsonObject& data, const songaware::SongAwareConfig& config) {
+void encodeConfig(JsonObject& data, const synqmatrix::SynqMatrixConfig& config) {
     data["enabled"] = config.enabled;
-    data["mode"] = songaware::songAwareModeName(config.mode);
-    data["profile"] = songaware::songAwareProfileName(config.profile);
+    data["mode"] = synqmatrix::songAwareModeName(config.mode);
+    data["profile"] = synqmatrix::songAwareProfileName(config.profile);
     data["switchingEnabled"] = config.switchingEnabled;
     data["familyMorphing"] = config.familyMorphing;
     data["constrainedSwitching"] = config.constrainedSwitching;
@@ -39,17 +39,17 @@ void encodeConfig(JsonObject& data, const songaware::SongAwareConfig& config) {
     data["confidenceFloor"] = config.confidenceFloor;
 }
 
-void encodePolicy(JsonObject data, const songaware::SongAwarePolicySnapshot& policy) {
-    data["state"] = songaware::songAwareStateName(policy.state);
+void encodePolicy(JsonObject data, const synqmatrix::SynqMatrixPolicySnapshot& policy) {
+    data["state"] = synqmatrix::songAwareStateName(policy.state);
     data["effectId"] = policy.effectId;
     data["family"] = policy.family;
     data["visualLanguage"] = policy.visualLanguage;
-    data["reason"] = songaware::songAwareSwitchReasonName(policy.reason);
+    data["reason"] = synqmatrix::songAwareSwitchReasonName(policy.reason);
     data["minConfidence"] = policy.minConfidence;
     data["enabled"] = policy.enabled;
 }
 
-void encodeAllowlist(JsonObject data, const songaware::SongAwareAllowlistSnapshot& allowlist) {
+void encodeAllowlist(JsonObject data, const synqmatrix::SynqMatrixAllowlistSnapshot& allowlist) {
     data["count"] = allowlist.count;
     JsonArray policies = data["policies"].to<JsonArray>();
     for (uint8_t i = 0; i < allowlist.count; ++i) {
@@ -58,7 +58,7 @@ void encodeAllowlist(JsonObject data, const songaware::SongAwareAllowlistSnapsho
     }
 }
 
-void encodeHealth(JsonObject data, const songaware::SongAwareStatus& status) {
+void encodeHealth(JsonObject data, const synqmatrix::SynqMatrixStatus& status) {
     data["healthDegraded"] = status.healthDegraded;
     data["showSkips"] = status.showSkips;
     data["failures"] = status.failures;
@@ -68,28 +68,28 @@ void encodeHealth(JsonObject data, const songaware::SongAwareStatus& status) {
     data["healthCleanWindowRemainingMs"] = status.healthCleanWindowRemainingMs;
 }
 
-void encodeStatus(JsonObject& data, const songaware::SongAwareStatus& status) {
+void encodeStatus(JsonObject& data, const synqmatrix::SynqMatrixStatus& status) {
     data["enabled"] = status.enabled;
-    data["mode"] = songaware::songAwareModeName(status.effectiveMode);
-    data["effectiveMode"] = songaware::songAwareModeName(status.effectiveMode);
-    data["profile"] = songaware::songAwareProfileName(status.profile);
-    data["owner"] = songaware::songAwareOwnerName(status.owner);
-    data["suppressedReason"] = songaware::songAwareSuppressedReasonName(status.suppressedReason);
-    data["previousSuppressedReason"] = songaware::songAwareSuppressedReasonName(status.previousSuppressedReason);
-    data["classificationReason"] = songaware::songAwareClassificationReasonName(status.classificationReason);
-    data["rawSongState"] = songaware::songAwareStateName(status.rawSongState);
-    data["previousSongState"] = songaware::songAwareStateName(status.previousSongState);
-    data["currentSongState"] = songaware::songAwareStateName(status.currentSongState);
-    data["candidateSongState"] = songaware::songAwareStateName(status.candidateSongState);
-    data["intent"] = songaware::songAwareIntentName(status.intent);
-    data["actionPlan"] = songaware::songAwareActionPlanName(status.actionPlan);
-    data["boundaryGate"] = songaware::songAwareBoundaryGateName(status.boundaryGate);
+    data["mode"] = synqmatrix::songAwareModeName(status.effectiveMode);
+    data["effectiveMode"] = synqmatrix::songAwareModeName(status.effectiveMode);
+    data["profile"] = synqmatrix::songAwareProfileName(status.profile);
+    data["owner"] = synqmatrix::songAwareOwnerName(status.owner);
+    data["suppressedReason"] = synqmatrix::songAwareSuppressedReasonName(status.suppressedReason);
+    data["previousSuppressedReason"] = synqmatrix::songAwareSuppressedReasonName(status.previousSuppressedReason);
+    data["classificationReason"] = synqmatrix::songAwareClassificationReasonName(status.classificationReason);
+    data["rawSongState"] = synqmatrix::songAwareStateName(status.rawSongState);
+    data["previousSongState"] = synqmatrix::songAwareStateName(status.previousSongState);
+    data["currentSongState"] = synqmatrix::songAwareStateName(status.currentSongState);
+    data["candidateSongState"] = synqmatrix::songAwareStateName(status.candidateSongState);
+    data["intent"] = synqmatrix::songAwareIntentName(status.intent);
+    data["actionPlan"] = synqmatrix::songAwareActionPlanName(status.actionPlan);
+    data["boundaryGate"] = synqmatrix::songAwareBoundaryGateName(status.boundaryGate);
     data["boundaryReady"] = status.boundaryReady;
     data["waitingForBoundary"] = status.waitingForBoundary;
     data["boundaryConfidence"] = status.boundaryConfidence;
     data["confidence"] = status.confidence;
     data["selectionScore"] = status.selectionScore;
-    data["lastAction"] = songaware::songAwareLastActionName(status.lastAction);
+    data["lastAction"] = synqmatrix::songAwareLastActionName(status.lastAction);
     data["activeEffectId"] = status.activeEffectId;
     data["previousEffectId"] = status.previousEffectId;
     data["selectedEffectId"] = status.selectedEffectId;
@@ -128,7 +128,7 @@ void encodeStatus(JsonObject& data, const songaware::SongAwareStatus& status) {
     encodeHealth(health, status);
 }
 
-void encodeDebug(JsonObject& data, const songaware::SongAwareDebugSnapshot& debug) {
+void encodeDebug(JsonObject& data, const synqmatrix::SynqMatrixDebugSnapshot& debug) {
     JsonObject config = data["config"].to<JsonObject>();
     encodeConfig(config, debug.config);
     JsonObject status = data["status"].to<JsonObject>();
@@ -148,7 +148,7 @@ void encodeDebug(JsonObject& data, const songaware::SongAwareDebugSnapshot& debu
     encodeAllowlist(allowlist, debug.allowlist);
 }
 
-bool applyConfigJson(JsonObjectConst root, songaware::SongAwareConfig& config, const char** error) {
+bool applyConfigJson(JsonObjectConst root, synqmatrix::SynqMatrixConfig& config, const char** error) {
     if (root.containsKey("enabled")) {
         if (!root["enabled"].is<bool>()) {
             *error = "enabled must be bool";
@@ -161,8 +161,8 @@ bool applyConfigJson(JsonObjectConst root, songaware::SongAwareConfig& config, c
         const char* value = root["mode"].as<const char*>();
         bool ok = false;
         bool profileOk = false;
-        const auto legacyProfile = songaware::parseSongAwareProfile(value, &profileOk);
-        config.mode = songaware::parseSongAwareMode(value, &ok);
+        const auto legacyProfile = synqmatrix::parseSynqMatrixProfile(value, &profileOk);
+        config.mode = synqmatrix::parseSynqMatrixMode(value, &ok);
         if (!ok) {
             *error = "mode must be off, assist, or director";
             return false;
@@ -171,14 +171,14 @@ bool applyConfigJson(JsonObjectConst root, songaware::SongAwareConfig& config, c
             (strcmp(value, "subtle") == 0 || strcmp(value, "balanced") == 0 ||
              strcmp(value, "high") == 0 || strcmp(value, "high_energy") == 0)) {
             config.profile = legacyProfile;
-            config.mode = songaware::SongAwareMode::Assist;
+            config.mode = synqmatrix::SynqMatrixMode::Assist;
         }
     }
 
     if (root.containsKey("profile")) {
         const char* value = root["profile"].as<const char*>();
         bool ok = false;
-        config.profile = songaware::parseSongAwareProfile(value, &ok);
+        config.profile = synqmatrix::parseSynqMatrixProfile(value, &ok);
         if (!ok) {
             *error = "profile must be subtle, balanced, or high";
             return false;
@@ -235,14 +235,14 @@ bool applyConfigJson(JsonObjectConst root, songaware::SongAwareConfig& config, c
 
 } // namespace
 
-void SongAwareHandlers::handleGetConfig(AsyncWebServerRequest* request) {
-    const auto config = songaware::SongAwareDirector::instance().getConfig();
+void SynqMatrixHandlers::handleGetConfig(AsyncWebServerRequest* request) {
+    const auto config = synqmatrix::SynqMatrix::instance().getConfig();
     sendSuccessResponse(request, [&config](JsonObject& data) {
         encodeConfig(data, config);
     });
 }
 
-void SongAwareHandlers::handleSetConfig(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
+void SynqMatrixHandlers::handleSetConfig(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, data, len);
     if (err) {
@@ -253,8 +253,8 @@ void SongAwareHandlers::handleSetConfig(AsyncWebServerRequest* request, uint8_t*
     const char* action = doc["action"] | "";
     if (strcmp(action, "reset") == 0 || strcmp(action, "wipe") == 0) {
         captureRestorePoint();
-        songaware::SongAwareDirector::instance().reset();
-        const auto status = songaware::SongAwareDirector::instance().getStatus();
+        synqmatrix::SynqMatrix::instance().reset();
+        const auto status = synqmatrix::SynqMatrix::instance().getStatus();
         sendSuccessResponse(request, [&status](JsonObject& response) {
             response["reset"] = true;
             JsonObject statusObj = response["status"].to<JsonObject>();
@@ -268,8 +268,8 @@ void SongAwareHandlers::handleSetConfig(AsyncWebServerRequest* request, uint8_t*
                               "No songAware restore point captured by REST config");
             return;
         }
-        songaware::SongAwareDirector::instance().restoreRuntimeState(g_restorePoint);
-        const auto status = songaware::SongAwareDirector::instance().getStatus();
+        synqmatrix::SynqMatrix::instance().restoreRuntimeState(g_restorePoint);
+        const auto status = synqmatrix::SynqMatrix::instance().getStatus();
         sendSuccessResponse(request, [&status](JsonObject& response) {
             response["restored"] = true;
             JsonObject statusObj = response["status"].to<JsonObject>();
@@ -279,8 +279,8 @@ void SongAwareHandlers::handleSetConfig(AsyncWebServerRequest* request, uint8_t*
     }
     if (strcmp(action, "countersReset") == 0 || strcmp(action, "counters_reset") == 0) {
         captureRestorePoint();
-        songaware::SongAwareDirector::instance().resetCounters();
-        const auto status = songaware::SongAwareDirector::instance().getStatus();
+        synqmatrix::SynqMatrix::instance().resetCounters();
+        const auto status = synqmatrix::SynqMatrix::instance().getStatus();
         sendSuccessResponse(request, [&status](JsonObject& response) {
             response["reset"] = true;
             response["parameterUpdates"] = status.parameterUpdates;
@@ -296,7 +296,7 @@ void SongAwareHandlers::handleSetConfig(AsyncWebServerRequest* request, uint8_t*
         return;
     }
 
-    songaware::SongAwareConfig config = songaware::SongAwareDirector::instance().getConfig();
+    synqmatrix::SynqMatrixConfig config = synqmatrix::SynqMatrix::instance().getConfig();
     const char* error = nullptr;
     if (!applyConfigJson(doc.as<JsonObjectConst>(), config, &error)) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST, ErrorCodes::INVALID_VALUE,
@@ -305,25 +305,25 @@ void SongAwareHandlers::handleSetConfig(AsyncWebServerRequest* request, uint8_t*
     }
 
     captureRestorePoint();
-    songaware::SongAwareDirector::instance().setConfig(config);
+    synqmatrix::SynqMatrix::instance().setConfig(config);
     sendSuccessResponse(request, [&config](JsonObject& response) {
         encodeConfig(response, config);
     });
 }
 
-void SongAwareHandlers::handleGetStatus(AsyncWebServerRequest* request) {
+void SynqMatrixHandlers::handleGetStatus(AsyncWebServerRequest* request) {
     String view = request->hasParam("view") ? request->getParam("view")->value() : "status";
     view.toLowerCase();
 
     if (view == "debug") {
-        const auto debug = songaware::SongAwareDirector::instance().getDebugSnapshot();
+        const auto debug = synqmatrix::SynqMatrix::instance().getDebugSnapshot();
         sendSuccessResponse(request, [&debug](JsonObject& data) {
             encodeDebug(data, debug);
         });
         return;
     }
     if (view == "policy") {
-        const auto debug = songaware::SongAwareDirector::instance().getDebugSnapshot();
+        const auto debug = synqmatrix::SynqMatrix::instance().getDebugSnapshot();
         sendSuccessResponse(request, [&debug](JsonObject& data) {
             data["bootGraceMs"] = debug.bootGraceMs;
             data["postEnableGraceMs"] = debug.postEnableGraceMs;
@@ -340,14 +340,14 @@ void SongAwareHandlers::handleGetStatus(AsyncWebServerRequest* request) {
         return;
     }
     if (view == "allowlist") {
-        const auto allowlist = songaware::SongAwareDirector::instance().getAllowlistSnapshot();
+        const auto allowlist = synqmatrix::SynqMatrix::instance().getAllowlistSnapshot();
         sendSuccessResponse(request, [&allowlist](JsonObject& data) {
             encodeAllowlist(data, allowlist);
         });
         return;
     }
     if (view == "health") {
-        const auto status = songaware::SongAwareDirector::instance().getStatus();
+        const auto status = synqmatrix::SynqMatrix::instance().getStatus();
         sendSuccessResponse(request, [&status](JsonObject& data) {
             encodeHealth(data, status);
         });
@@ -359,20 +359,20 @@ void SongAwareHandlers::handleGetStatus(AsyncWebServerRequest* request) {
         return;
     }
 
-    const auto status = songaware::SongAwareDirector::instance().getStatus();
+    const auto status = synqmatrix::SynqMatrix::instance().getStatus();
     sendSuccessResponse(request, [&status](JsonObject& data) {
         encodeStatus(data, status);
     });
 }
 
-void SongAwareHandlers::handleGetAllowlist(AsyncWebServerRequest* request) {
-    const auto allowlist = songaware::SongAwareDirector::instance().getAllowlistSnapshot();
+void SynqMatrixHandlers::handleGetAllowlist(AsyncWebServerRequest* request) {
+    const auto allowlist = synqmatrix::SynqMatrix::instance().getAllowlistSnapshot();
     sendSuccessResponse(request, [&allowlist](JsonObject& data) {
         encodeAllowlist(data, allowlist);
     });
 }
 
-void SongAwareHandlers::handleSetAllowlist(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
+void SynqMatrixHandlers::handleSetAllowlist(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, data, len);
     if (err) {
@@ -385,7 +385,7 @@ void SongAwareHandlers::handleSetAllowlist(AsyncWebServerRequest* request, uint8
         return;
     }
     bool ok = false;
-    const auto state = songaware::parseSongAwareState(doc["state"].as<const char*>(), &ok);
+    const auto state = synqmatrix::parseSynqMatrixState(doc["state"].as<const char*>(), &ok);
     if (!ok) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST, ErrorCodes::INVALID_VALUE,
                           "Invalid songAware state");
@@ -393,17 +393,17 @@ void SongAwareHandlers::handleSetAllowlist(AsyncWebServerRequest* request, uint8
     }
 
     captureRestorePoint();
-    songaware::SongAwareDirector::instance().setPolicyAllowed(state, doc["enabled"].as<bool>());
-    const auto allowlist = songaware::SongAwareDirector::instance().getAllowlistSnapshot();
+    synqmatrix::SynqMatrix::instance().setPolicyAllowed(state, doc["enabled"].as<bool>());
+    const auto allowlist = synqmatrix::SynqMatrix::instance().getAllowlistSnapshot();
     sendSuccessResponse(request, [&allowlist](JsonObject& response) {
         encodeAllowlist(response, allowlist);
     });
 }
 
-void SongAwareHandlers::handleResetAllowlist(AsyncWebServerRequest* request) {
+void SynqMatrixHandlers::handleResetAllowlist(AsyncWebServerRequest* request) {
     captureRestorePoint();
-    songaware::SongAwareDirector::instance().resetPolicyAllowlist();
-    const auto allowlist = songaware::SongAwareDirector::instance().getAllowlistSnapshot();
+    synqmatrix::SynqMatrix::instance().resetPolicyAllowlist();
+    const auto allowlist = synqmatrix::SynqMatrix::instance().getAllowlistSnapshot();
     sendSuccessResponse(request, [&allowlist](JsonObject& response) {
         encodeAllowlist(response, allowlist);
     });

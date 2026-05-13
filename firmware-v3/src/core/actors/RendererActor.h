@@ -83,7 +83,7 @@
 namespace lightwaveos { namespace zones { class ZoneComposer; } }
 namespace lightwaveos { namespace transitions { class TransitionEngine; enum class TransitionType : uint8_t; } }
 namespace lightwaveos { namespace plugins { class IEffect; namespace runtime { class LegacyEffectAdapter; } } }
-namespace lightwaveos { namespace songaware { struct SongAwareSwitchRequest; } }
+namespace lightwaveos { namespace synqmatrix { struct SynqMatrixSwitchRequest; } }
 // Note: AudioActor forward declaration removed - use #include "../../audio/AudioActor.h" instead
 // to avoid conflict between class forward declaration and using-alias in lightwaveos::audio namespace
 
@@ -775,10 +775,10 @@ private:
                                        bool available,
                                        bool trinityActive,
                                        bool includeBehaviorContext);
-    void queueSongAwareDirectorTransition(const songaware::SongAwareSwitchRequest& request,
+    void queueSynqMatrixTransition(const synqmatrix::SynqMatrixSwitchRequest& request,
                                           EffectId previousEffectId);
-    bool processSongAwareDirectorTransition(uint32_t nowMs);
-    void syncSongAwareDirectorTransitionTelemetry(uint32_t nowMs);
+    bool processSynqMatrixTransition(uint32_t nowMs);
+    void syncSynqMatrixTransitionTelemetry(uint32_t nowMs);
 #endif
 
     /**

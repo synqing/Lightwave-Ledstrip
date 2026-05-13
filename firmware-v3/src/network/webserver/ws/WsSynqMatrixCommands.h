@@ -1,6 +1,6 @@
 /**
- * @file WsSongAwareCommands.h
- * @brief WebSocket commands for runtime-only song-aware director controls.
+ * @file WsSynqMatrixCommands.h
+ * @brief WebSocket commands for runtime-only synq-matrix director controls.
  */
 
 #pragma once
@@ -13,7 +13,7 @@ struct WebServerContext;
 
 namespace ws {
 
-void registerWsSongAwareCommands(const WebServerContext& ctx);
+void registerWsSynqMatrixCommands(const WebServerContext& ctx);
 
 } // namespace ws
 } // namespace webserver

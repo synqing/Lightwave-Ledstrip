@@ -52,7 +52,7 @@
 #include "webserver/ws/WsColorCommands.h"
 #include "webserver/ws/WsEdgeMixerCommands.h"
 #include "webserver/ws/WsRenderCommands.h"
-#include "webserver/ws/WsSongAwareCommands.h"
+#include "webserver/ws/WsSynqMatrixCommands.h"
 #include "../effects/enhancement/EdgeMixer.h"
 #include "webserver/ws/WsPaletteCommands.h"
 #include "webserver/ws/WsPresetCommands.h"
@@ -1318,7 +1318,7 @@ void WebServer::setupWebSocket() {
     webserver::ws::registerWsColorCommands(ctx);
     webserver::ws::registerWsEdgeMixerCommands(ctx);
     webserver::ws::registerWsRenderCommands(ctx);
-    webserver::ws::registerWsSongAwareCommands(ctx);
+    webserver::ws::registerWsSynqMatrixCommands(ctx);
     webserver::ws::registerWsPaletteCommands(ctx);
     webserver::ws::registerWsPresetCommands(ctx);
     webserver::ws::registerWsZonePresetCommands(ctx);

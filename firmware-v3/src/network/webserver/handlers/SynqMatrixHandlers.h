@@ -1,6 +1,6 @@
 /**
- * @file SongAwareHandlers.h
- * @brief REST handlers for runtime-only song-aware director controls.
+ * @file SynqMatrixHandlers.h
+ * @brief REST handlers for runtime-only synq-matrix director controls.
  */
 
 #pragma once
@@ -12,7 +12,7 @@ namespace network {
 namespace webserver {
 namespace handlers {
 
-class SongAwareHandlers {
+class SynqMatrixHandlers {
 public:
     static void handleGetConfig(AsyncWebServerRequest* request);
     static void handleSetConfig(AsyncWebServerRequest* request, uint8_t* data, size_t len);

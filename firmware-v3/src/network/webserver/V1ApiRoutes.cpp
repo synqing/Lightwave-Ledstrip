@@ -30,7 +30,7 @@
 #include "handlers/ShowHandlers.h"
 #include "handlers/ModifierHandlers.h"
 #include "handlers/ColorCorrectionHandlers.h"
-#include "handlers/SongAwareHandlers.h"
+#include "handlers/SynqMatrixHandlers.h"
 #include "../../effects/enhancement/EdgeMixer.h"
 #include "../../core/actors/ActorSystem.h"
 #include "handlers/StimulusHandlers.h"
@@ -263,7 +263,7 @@ void V1ApiRoutes::registerRoutes(
     registry.onGet("/api/v1/songAware/config", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::SongAwareHandlers::handleGetConfig(request);
+        handlers::SynqMatrixHandlers::handleGetConfig(request);
     });
 
     registry.onPost("/api/v1/songAware/config",
@@ -272,7 +272,7 @@ void V1ApiRoutes::registerRoutes(
         [checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
-            handlers::SongAwareHandlers::handleSetConfig(request, data, len);
+            handlers::SynqMatrixHandlers::handleSetConfig(request, data, len);
             broadcastStatus();
         }
     );
@@ -283,7 +283,7 @@ void V1ApiRoutes::registerRoutes(
         [checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
-            handlers::SongAwareHandlers::handleSetConfig(request, data, len);
+            handlers::SynqMatrixHandlers::handleSetConfig(request, data, len);
             broadcastStatus();
         }
     );
@@ -291,13 +291,13 @@ void V1ApiRoutes::registerRoutes(
     registry.onGet("/api/v1/songAware/status", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::SongAwareHandlers::handleGetStatus(request);
+        handlers::SynqMatrixHandlers::handleGetStatus(request);
     });
 
     registry.onGet("/api/v1/songAware/allowlist", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::SongAwareHandlers::handleGetAllowlist(request);
+        handlers::SynqMatrixHandlers::handleGetAllowlist(request);
     });
 
     registry.onPatch("/api/v1/songAware/allowlist",
@@ -306,7 +306,7 @@ void V1ApiRoutes::registerRoutes(
         [checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
-            handlers::SongAwareHandlers::handleSetAllowlist(request, data, len);
+            handlers::SynqMatrixHandlers::handleSetAllowlist(request, data, len);
             broadcastStatus();
         }
     );
@@ -317,7 +317,7 @@ void V1ApiRoutes::registerRoutes(
         [checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t*, size_t, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
-            handlers::SongAwareHandlers::handleResetAllowlist(request);
+            handlers::SynqMatrixHandlers::handleResetAllowlist(request);
             broadcastStatus();
         }
     );

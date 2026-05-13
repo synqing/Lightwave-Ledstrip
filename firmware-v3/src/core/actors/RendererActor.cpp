@@ -48,7 +48,7 @@
 #if FEATURE_AUDIO_SYNC
 #include "../../audio/AudioActor.h"
 #include "../../audio/contracts/OnsetSemantics.h"
-#include "../songaware/SongAwareDirector.h"
+#include "../synqmatrix/SynqMatrix.h"
 #if !FEATURE_AUDIO_BACKEND_ESV11
 // TempoTracker integration (replaces K1)
 #include "../../audio/tempo/TempoTracker.h"
@@ -691,7 +691,7 @@ void RendererActor::onMessage(const Message& msg)
         case MessageType::SET_EDGE_MIXER_TEMPORAL:
         case MessageType::START_TRANSITION: {
             const uint32_t nowMs = millis();
-            auto& director = songaware::SongAwareDirector::instance();
+            auto& director = synqmatrix::SynqMatrix::instance();
             if (director.isShowOwnerActive(nowMs)) {
                 director.markShowControl(nowMs);
             } else {
@@ -1604,8 +1604,8 @@ void RendererActor::initLeds()
 }
 
 #if FEATURE_AUDIO_SYNC
-void RendererActor::queueSongAwareDirectorTransition(
-    const songaware::SongAwareSwitchRequest& request,
+void RendererActor::queueSynqMatrixTransition(
+    const synqmatrix::SynqMatrixSwitchRequest& request,
     EffectId previousEffectId)
 {
     m_songAwareDirectorTransitionQueued = true;
@@ -1616,7 +1616,7 @@ void RendererActor::queueSongAwareDirectorTransition(
     m_songAwareDirectorTransitionReason = request.reason;
 }
 
-bool RendererActor::processSongAwareDirectorTransition(uint32_t nowMs)
+bool RendererActor::processSynqMatrixTransition(uint32_t nowMs)
 {
     if (!m_songAwareDirectorTransitionQueued) {
         return false;
@@ -1629,19 +1629,19 @@ bool RendererActor::processSongAwareDirectorTransition(uint32_t nowMs)
     const char* reason = m_songAwareDirectorTransitionReason;
     m_songAwareDirectorTransitionQueued = false;
 
-    auto& director = songaware::SongAwareDirector::instance();
+    auto& director = synqmatrix::SynqMatrix::instance();
     if (isTransitionActive()) {
-        director.notifySwitchRejected(targetEffect, nowMs, songaware::SongAwareSuppressedReason::TransitionActive);
+        director.notifySwitchRejected(targetEffect, nowMs, synqmatrix::SynqMatrixSuppressedReason::TransitionActive);
         return false;
     }
     if (findById(targetEffect) == nullptr) {
-        director.notifySwitchRejected(targetEffect, nowMs, songaware::SongAwareSuppressedReason::TargetUnavailable);
+        director.notifySwitchRejected(targetEffect, nowMs, synqmatrix::SynqMatrixSuppressedReason::TargetUnavailable);
         return false;
     }
 
 #if FEATURE_TRANSITIONS
     if (!m_transitionEngine) {
-        director.notifySwitchRejected(targetEffect, nowMs, songaware::SongAwareSuppressedReason::SwitchingDisabled);
+        director.notifySwitchRejected(targetEffect, nowMs, synqmatrix::SynqMatrixSuppressedReason::SwitchingDisabled);
         return false;
     }
 
@@ -1654,7 +1654,7 @@ bool RendererActor::processSongAwareDirectorTransition(uint32_t nowMs)
     const EffectId currentAfterTransitionStart =
         m_currentEffectValid ? m_validatedEffectId : validateEffectId(m_currentEffect);
     if (currentAfterTransitionStart != targetEffect) {
-        director.notifySwitchRejected(targetEffect, millis(), songaware::SongAwareSuppressedReason::TargetUnavailable);
+        director.notifySwitchRejected(targetEffect, millis(), synqmatrix::SynqMatrixSuppressedReason::TargetUnavailable);
         return false;
     }
 
@@ -1685,8 +1685,8 @@ bool RendererActor::processSongAwareDirectorTransition(uint32_t nowMs)
         m_songAwareDirectorTransitionActiveNotified = false;
     }
 
-    LW_LOGI("SongAware Director transition state=%s confidence=%.3f prev=0x%04X target=0x%04X family=%s language=%s reason=%s",
-            songaware::songAwareStateName(director.getStatus().currentSongState),
+    LW_LOGI("SynqMatrix Director transition state=%s confidence=%.3f prev=0x%04X target=0x%04X family=%s language=%s reason=%s",
+            synqmatrix::songAwareStateName(director.getStatus().currentSongState),
             director.getStatus().confidence,
             previousEffect,
             targetEffect,
@@ -1695,15 +1695,15 @@ bool RendererActor::processSongAwareDirectorTransition(uint32_t nowMs)
             reason);
     return true;
 #else
-    director.notifySwitchRejected(targetEffect, nowMs, songaware::SongAwareSuppressedReason::SwitchingDisabled);
+    director.notifySwitchRejected(targetEffect, nowMs, synqmatrix::SynqMatrixSuppressedReason::SwitchingDisabled);
     return false;
 #endif
 }
 
-void RendererActor::syncSongAwareDirectorTransitionTelemetry(uint32_t nowMs)
+void RendererActor::syncSynqMatrixTransitionTelemetry(uint32_t nowMs)
 {
 #if FEATURE_TRANSITIONS
-    auto& director = songaware::SongAwareDirector::instance();
+    auto& director = synqmatrix::SynqMatrix::instance();
     if (m_transitionEngine && m_transitionEngine->isActive()) {
         if (!m_songAwareDirectorTransitionActiveNotified) {
             const uint32_t elapsedMs = m_transitionEngine->getElapsedMs();
@@ -1784,14 +1784,14 @@ void RendererActor::renderFrame()
 
 #if FEATURE_AUDIO_SYNC
     const uint32_t songAwareNowMs = millis();
-    syncSongAwareDirectorTransitionTelemetry(songAwareNowMs);
-    if (processSongAwareDirectorTransition(songAwareNowMs)) {
+    syncSynqMatrixTransitionTelemetry(songAwareNowMs);
+    if (processSynqMatrixTransition(songAwareNowMs)) {
 #if FEATURE_TRANSITIONS
         if (m_transitionEngine && m_transitionEngine->isActive()) {
             m_transitionEngine->update();
         }
 #endif
-        syncSongAwareDirectorTransitionTelemetry(millis());
+        syncSynqMatrixTransitionTelemetry(millis());
         return;
     }
 #endif
@@ -1803,7 +1803,7 @@ void RendererActor::renderFrame()
         const bool transitionStillActive = m_transitionEngine->update();
 #if FEATURE_AUDIO_SYNC
         if (!transitionStillActive) {
-            syncSongAwareDirectorTransitionTelemetry(millis());
+            syncSynqMatrixTransitionTelemetry(millis());
         }
 #endif
         if (millis() - m_hueLastUserSetMs > kHueAutoRotatePauseMs) {
@@ -2133,15 +2133,15 @@ void RendererActor::renderFrame()
             m_currentEffectValid ? m_validatedEffectId : validateEffectId(m_currentEffect);
         const auto& ledStats = m_ledDriver.getStats();
         const uint32_t directorNowMs = millis();
-        syncSongAwareDirectorTransitionTelemetry(directorNowMs);
-        songaware::SongAwareDirectorContext directorContext;
+        syncSynqMatrixTransitionTelemetry(directorNowMs);
+        synqmatrix::SynqMatrixContext directorContext;
         directorContext.health.showSkips = ledStats.showSkips;
         directorContext.health.failures = ledStats.ledShowFailures;
         directorContext.health.rmtErrors = ledStats.rmtErrors;
         directorContext.health.underruns = ledStats.rmtUnderruns;
 
-        songaware::SongAwareSwitchRequest switchRequest;
-        if (songaware::SongAwareDirector::instance().evaluateDirector(
+        synqmatrix::SynqMatrixSwitchRequest switchRequest;
+        if (synqmatrix::SynqMatrix::instance().tick(
                 *audioContextFrame,
                 m_lastMusicalGrid,
                 audioContextAvailable,
@@ -2150,13 +2150,13 @@ void RendererActor::renderFrame()
                 directorContext,
                 switchRequest)) {
             if (switchRequest.requested && findById(switchRequest.targetEffectId) != nullptr) {
-                queueSongAwareDirectorTransition(switchRequest, activeEffectForDirector);
+                queueSynqMatrixTransition(switchRequest, activeEffectForDirector);
                 return;
             } else if (switchRequest.requested) {
-                songaware::SongAwareDirector::instance().notifySwitchRejected(
+                synqmatrix::SynqMatrix::instance().notifySwitchRejected(
                     switchRequest.targetEffectId,
                     directorNowMs,
-                    songaware::SongAwareSuppressedReason::TargetUnavailable);
+                    synqmatrix::SynqMatrixSuppressedReason::TargetUnavailable);
             }
         }
     }
@@ -2271,7 +2271,7 @@ void RendererActor::renderFrame()
         }
 
         {
-            songaware::SongAwareParams songAwareParams;
+            synqmatrix::SynqMatrixParams songAwareParams;
             songAwareParams.effectId = safeEffect;
             songAwareParams.brightness = ctx.brightness;
             songAwareParams.speed = ctx.speed;
@@ -2281,7 +2281,7 @@ void RendererActor::renderFrame()
             songAwareParams.variation = ctx.variation;
             songAwareParams.hue = ctx.gHue;
 
-            songaware::SongAwareDirector::instance().apply(
+            synqmatrix::SynqMatrix::instance().apply(
                 *audioContextFrame,
                 m_lastMusicalGrid,
                 audioContextAvailable,

@@ -165,10 +165,10 @@ endpoints:
       fadeAmount: { type: uint8, optional: true, description: "REST only" }
     consumers: [ios]
 
-  # ── Song-Aware Director ──────────────────────────────────────────────────
+  # ── SynqMatrix Director ──────────────────────────────────────────────────
   /api/v1/songAware/config:
     method: GET
-    description: "Get runtime-only SongAware configuration. Mode is the authority boundary; profile is aggression. No NVS persistence."
+    description: "Get runtime-only SynqMatrix configuration. Mode is the authority boundary; profile is aggression. No NVS persistence."
     response:
       enabled: bool
       mode: { type: string, enum: [off, assist, director] }
@@ -184,7 +184,7 @@ endpoints:
 
   /api/v1/songAware/config:
     method: [POST, PATCH]
-    description: "Set runtime-only song-aware director configuration, or run a bounded runtime action through the existing config route. No NVS persistence."
+    description: "Set runtime-only synq-matrix director configuration, or run a bounded runtime action through the existing config route. No NVS persistence."
     body:
       action: { type: string, optional: true, enum: [reset, wipe, restore, countersReset, counters_reset], note: "When present, runs the action instead of applying config fields. reset is a compatibility alias for wipe." }
       enabled: { type: bool, optional: true }
@@ -212,7 +212,7 @@ endpoints:
 
   /api/v1/songAware/status:
     method: GET
-    description: "Get runtime song-aware director readback for validation. Optional view exposes health/debug/policy/allowlist readbacks without adding extra REST routes."
+    description: "Get runtime synq-matrix director readback for validation. Optional view exposes health/debug/policy/allowlist readbacks without adding extra REST routes."
     query_params:
       view: { type: string, optional: true, enum: [status, health, debug, policy, allowlist], default: status }
     response:
@@ -291,7 +291,7 @@ endpoints:
 
   /api/v1/songAware/allowlist:
     method: PATCH
-    description: "Enable or disable a SongAware state policy row at runtime."
+    description: "Enable or disable a SynqMatrix state policy row at runtime."
     body:
       state: { type: string, required: true, enum: [unknown, silence, ambient, steady, build, drop, breakdown, dense, transition] }
       enabled: { type: bool, required: true }

@@ -1,6 +1,6 @@
 /**
- * @file SongAwareDirector.h
- * @brief Runtime-only song-aware parameter and visual-language director.
+ * @file SynqMatrix.h
+ * @brief Runtime-only synq-matrix parameter and visual-language director.
  */
 
 #pragma once
@@ -17,28 +17,28 @@
 #endif
 
 namespace lightwaveos {
-namespace songaware {
+namespace synqmatrix {
 
-enum class SongAwareMode : uint8_t {
+enum class SynqMatrixMode : uint8_t {
     Off = 0,
     Assist = 1,
     Director = 2
 };
 
-enum class SongAwareProfile : uint8_t {
+enum class SynqMatrixProfile : uint8_t {
     Subtle = 0,
     Balanced = 1,
     High = 2
 };
 
-enum class SongAwareOwner : uint8_t {
+enum class SynqMatrixOwner : uint8_t {
     None = 0,
     Director = 1,
     Manual = 2,
     Show = 3
 };
 
-enum class SongAwareSuppressedReason : uint8_t {
+enum class SynqMatrixSuppressedReason : uint8_t {
     None = 0,
     Disabled = 1,
     NoAudio = 2,
@@ -64,7 +64,7 @@ enum class SongAwareSuppressedReason : uint8_t {
     ImpossibleTransition = 22
 };
 
-enum class SongAwareState : uint8_t {
+enum class SynqMatrixState : uint8_t {
     Unknown = 0,
     Silence = 1,
     Ambient = 2,
@@ -76,14 +76,14 @@ enum class SongAwareState : uint8_t {
     Transition = 8
 };
 
-enum class SongAwareLastAction : uint8_t {
+enum class SynqMatrixLastAction : uint8_t {
     None = 0,
     ParameterUpdate = 1,
     EffectSwitch = 2,
     SwitchSuppressed = 3
 };
 
-enum class SongAwareActionPlan : uint8_t {
+enum class SynqMatrixActionPlan : uint8_t {
     None = 0,
     ParameterModulation = 1,
     PaletteShift = 2,
@@ -93,7 +93,7 @@ enum class SongAwareActionPlan : uint8_t {
     EffectSwitch = 6
 };
 
-enum class SongAwareIntent : uint8_t {
+enum class SynqMatrixIntent : uint8_t {
     QuietHold = 0,
     CalmHold = 1,
     ReadableMotion = 2,
@@ -104,7 +104,7 @@ enum class SongAwareIntent : uint8_t {
     TransitionBridge = 7
 };
 
-enum class SongAwareBoundaryGate : uint8_t {
+enum class SynqMatrixBoundaryGate : uint8_t {
     NotRequired = 0,
     WaitingForBoundary = 1,
     BeatBoundary = 2,
@@ -112,7 +112,7 @@ enum class SongAwareBoundaryGate : uint8_t {
     PhaseFallback = 4
 };
 
-enum class SongAwareSwitchReason : uint8_t {
+enum class SynqMatrixSwitchReason : uint8_t {
     None = 0,
     AmbientPosture = 1,
     SteadyReadability = 2,
@@ -123,7 +123,7 @@ enum class SongAwareSwitchReason : uint8_t {
     TransitionBridge = 7
 };
 
-enum class SongAwareClassificationReason : uint8_t {
+enum class SynqMatrixClassificationReason : uint8_t {
     None = 0,
     NoAudio = 1,
     SilentFrame = 2,
@@ -137,12 +137,12 @@ enum class SongAwareClassificationReason : uint8_t {
     SteadyDefault = 10
 };
 
-static constexpr uint8_t kSongAwareMaxPolicySnapshotCount = 12;
+static constexpr uint8_t kSynqMatrixMaxPolicySnapshotCount = 12;
 
-struct SongAwareConfig {
+struct SynqMatrixConfig {
     bool enabled = false;
-    SongAwareMode mode = SongAwareMode::Off;
-    SongAwareProfile profile = SongAwareProfile::Balanced;
+    SynqMatrixMode mode = SynqMatrixMode::Off;
+    SynqMatrixProfile profile = SynqMatrixProfile::Balanced;
     bool familyMorphing = false;
     bool constrainedSwitching = false;
     bool switchingEnabled = false;
@@ -152,22 +152,22 @@ struct SongAwareConfig {
     float confidenceFloor = 0.20f;
 };
 
-struct SongAwareStatus {
+struct SynqMatrixStatus {
     bool enabled = false;
-    SongAwareMode effectiveMode = SongAwareMode::Off;
-    SongAwareProfile profile = SongAwareProfile::Balanced;
-    SongAwareOwner owner = SongAwareOwner::None;
-    SongAwareSuppressedReason suppressedReason = SongAwareSuppressedReason::Disabled;
-    SongAwareSuppressedReason previousSuppressedReason = SongAwareSuppressedReason::Disabled;
-    SongAwareClassificationReason classificationReason = SongAwareClassificationReason::None;
-    SongAwareState rawSongState = SongAwareState::Unknown;
-    SongAwareState previousSongState = SongAwareState::Unknown;
-    SongAwareState currentSongState = SongAwareState::Unknown;
-    SongAwareState candidateSongState = SongAwareState::Unknown;
-    SongAwareLastAction lastAction = SongAwareLastAction::None;
-    SongAwareIntent intent = SongAwareIntent::QuietHold;
-    SongAwareActionPlan actionPlan = SongAwareActionPlan::None;
-    SongAwareBoundaryGate boundaryGate = SongAwareBoundaryGate::NotRequired;
+    SynqMatrixMode effectiveMode = SynqMatrixMode::Off;
+    SynqMatrixProfile profile = SynqMatrixProfile::Balanced;
+    SynqMatrixOwner owner = SynqMatrixOwner::None;
+    SynqMatrixSuppressedReason suppressedReason = SynqMatrixSuppressedReason::Disabled;
+    SynqMatrixSuppressedReason previousSuppressedReason = SynqMatrixSuppressedReason::Disabled;
+    SynqMatrixClassificationReason classificationReason = SynqMatrixClassificationReason::None;
+    SynqMatrixState rawSongState = SynqMatrixState::Unknown;
+    SynqMatrixState previousSongState = SynqMatrixState::Unknown;
+    SynqMatrixState currentSongState = SynqMatrixState::Unknown;
+    SynqMatrixState candidateSongState = SynqMatrixState::Unknown;
+    SynqMatrixLastAction lastAction = SynqMatrixLastAction::None;
+    SynqMatrixIntent intent = SynqMatrixIntent::QuietHold;
+    SynqMatrixActionPlan actionPlan = SynqMatrixActionPlan::None;
+    SynqMatrixBoundaryGate boundaryGate = SynqMatrixBoundaryGate::NotRequired;
     bool boundaryReady = false;
     bool waitingForBoundary = false;
     float boundaryConfidence = 0.0f;
@@ -217,7 +217,7 @@ struct SongAwareStatus {
     float audioConfidence = 0.0f;
 };
 
-struct SongAwareParams {
+struct SynqMatrixParams {
     uint16_t effectId = INVALID_EFFECT_ID;
     uint8_t brightness = 0;
     uint8_t speed = 1;
@@ -228,18 +228,18 @@ struct SongAwareParams {
     uint8_t hue = 0;
 };
 
-struct SongAwareHealthCounters {
+struct SynqMatrixHealthCounters {
     uint32_t showSkips = 0;
     uint32_t failures = 0;
     uint32_t rmtErrors = 0;
     uint32_t underruns = 0;
 };
 
-struct SongAwareDirectorContext {
-    SongAwareHealthCounters health;
+struct SynqMatrixContext {
+    SynqMatrixHealthCounters health;
 };
 
-struct SongAwareSwitchRequest {
+struct SynqMatrixSwitchRequest {
     bool requested = false;
     uint16_t targetEffectId = INVALID_EFFECT_ID;
     const char* targetFamily = "none";
@@ -247,31 +247,31 @@ struct SongAwareSwitchRequest {
     const char* reason = "none";
 };
 
-struct SongAwarePolicySnapshot {
-    SongAwareState state = SongAwareState::Unknown;
+struct SynqMatrixPolicySnapshot {
+    SynqMatrixState state = SynqMatrixState::Unknown;
     uint16_t effectId = INVALID_EFFECT_ID;
     const char* family = "none";
     const char* visualLanguage = "none";
-    SongAwareSwitchReason reason = SongAwareSwitchReason::None;
+    SynqMatrixSwitchReason reason = SynqMatrixSwitchReason::None;
     float minConfidence = 1.0f;
     bool enabled = true;
 };
 
-struct SongAwareSelectionSnapshot {
+struct SynqMatrixSelectionSnapshot {
     bool valid = false;
-    SongAwarePolicySnapshot policy;
+    SynqMatrixPolicySnapshot policy;
     float score = 0.0f;
 };
 
-struct SongAwareAllowlistSnapshot {
+struct SynqMatrixAllowlistSnapshot {
     uint8_t count = 0;
-    SongAwarePolicySnapshot policies[kSongAwareMaxPolicySnapshotCount] = {};
+    SynqMatrixPolicySnapshot policies[kSynqMatrixMaxPolicySnapshotCount] = {};
 };
 
-struct SongAwareDebugSnapshot {
-    SongAwareConfig config;
-    SongAwareStatus status;
-    SongAwareAllowlistSnapshot allowlist;
+struct SynqMatrixDebugSnapshot {
+    SynqMatrixConfig config;
+    SynqMatrixStatus status;
+    SynqMatrixAllowlistSnapshot allowlist;
     uint32_t bootGraceMs = 0;
     uint32_t postEnableGraceMs = 0;
     uint32_t stableStateHoldMs = 0;
@@ -284,9 +284,9 @@ struct SongAwareDebugSnapshot {
     uint32_t healthCleanWindowMs = 0;
 };
 
-struct SongAwareRuntimeState {
-    SongAwareConfig config;
-    SongAwareStatus status;
+struct SynqMatrixRuntimeState {
+    SynqMatrixConfig config;
+    SynqMatrixStatus status;
     uint16_t policyAllowMask = 0;
     uint32_t manualSuppressUntilMs = 0;
     uint32_t showSuppressUntilMs = 0;
@@ -297,48 +297,48 @@ struct SongAwareRuntimeState {
     uint32_t antiThrashUntilMs = 0;
 };
 
-class SongAwareDirector {
+class SynqMatrix {
 public:
-    static SongAwareDirector& instance();
+    static SynqMatrix& instance();
 
     void reset();
     void resetCounters();
-    void setConfig(const SongAwareConfig& config);
-    SongAwareConfig getConfig() const;
-    SongAwareStatus getStatus() const;
-    SongAwareRuntimeState exportRuntimeState() const;
-    void restoreRuntimeState(const SongAwareRuntimeState& state);
-    SongAwareDebugSnapshot getDebugSnapshot() const;
-    SongAwareSelectionSnapshot resolveSelection(SongAwareState state,
+    void setConfig(const SynqMatrixConfig& config);
+    SynqMatrixConfig getConfig() const;
+    SynqMatrixStatus getStatus() const;
+    SynqMatrixRuntimeState exportRuntimeState() const;
+    void restoreRuntimeState(const SynqMatrixRuntimeState& state);
+    SynqMatrixDebugSnapshot getDebugSnapshot() const;
+    SynqMatrixSelectionSnapshot resolveSelection(SynqMatrixState state,
                                                 float confidence,
                                                 uint16_t activeEffectId) const;
     static uint8_t policyCount();
-    static bool policySnapshot(uint8_t index, SongAwarePolicySnapshot& snapshot);
-    static uint8_t copyPolicyTable(SongAwarePolicySnapshot* out, uint8_t capacity);
-    static SongAwareAllowlistSnapshot policyTableSnapshot();
-    SongAwareAllowlistSnapshot getAllowlistSnapshot() const;
-    bool setPolicyAllowed(SongAwareState state, bool enabled);
-    bool isPolicyAllowed(SongAwareState state) const;
+    static bool policySnapshot(uint8_t index, SynqMatrixPolicySnapshot& snapshot);
+    static uint8_t copyPolicyTable(SynqMatrixPolicySnapshot* out, uint8_t capacity);
+    static SynqMatrixAllowlistSnapshot policyTableSnapshot();
+    SynqMatrixAllowlistSnapshot getAllowlistSnapshot() const;
+    bool setPolicyAllowed(SynqMatrixState state, bool enabled);
+    bool isPolicyAllowed(SynqMatrixState state) const;
     void resetPolicyAllowlist();
     void markManualControl(uint32_t nowMs);
     void markShowControl(uint32_t nowMs);
     bool isShowOwnerActive(uint32_t nowMs) const;
 
 #if FEATURE_AUDIO_SYNC
-    bool evaluateDirector(const audio::ControlBusFrame& frame,
+    bool tick(const audio::ControlBusFrame& frame,
                           const audio::MusicalGridSnapshot& grid,
                           bool audioAvailable,
                           uint32_t nowMs,
                           uint16_t activeEffectId,
-                          const SongAwareDirectorContext& context,
-                          SongAwareSwitchRequest& request);
+                          const SynqMatrixContext& context,
+                          SynqMatrixSwitchRequest& request);
     void notifySwitchApplied(uint16_t previousEffectId,
                              uint16_t targetEffectId,
                              uint32_t nowMs,
                              const char* activeEffectName);
     void notifySwitchRejected(uint16_t targetEffectId,
                               uint32_t nowMs,
-                              SongAwareSuppressedReason reason);
+                              SynqMatrixSuppressedReason reason);
     void notifyTransitionStarted(uint16_t previousEffectId,
                                  uint16_t targetEffectId,
                                  uint32_t nowMs,
@@ -349,7 +349,7 @@ public:
                bool audioAvailable,
                float dtSeconds,
                uint32_t nowMs,
-               SongAwareParams& params);
+               SynqMatrixParams& params);
 #endif
 
 private:
@@ -359,7 +359,7 @@ private:
     static float unscaleFloat(uint16_t value);
 
 #if FEATURE_AUDIO_SYNC
-    struct SongAwareFeatureSnapshot {
+    struct SynqMatrixFeatureSnapshot {
         float energy = 0.0f;
         float slowEnergy = 0.0f;
         float fastSlowRatio = 1.0f;
@@ -371,48 +371,48 @@ private:
         float saliency = 0.0f;
         float adaptiveFloor = 0.0f;
         bool boundaryReady = false;
-        SongAwareBoundaryGate boundaryGate = SongAwareBoundaryGate::WaitingForBoundary;
+        SynqMatrixBoundaryGate boundaryGate = SynqMatrixBoundaryGate::WaitingForBoundary;
         float boundaryConfidence = 0.0f;
     };
 
-    SongAwareFeatureSnapshot buildFeatureSnapshot(const audio::ControlBusFrame& frame,
+    SynqMatrixFeatureSnapshot buildFeatureSnapshot(const audio::ControlBusFrame& frame,
                                                   const audio::MusicalGridSnapshot& grid,
                                                   bool audioAvailable,
                                                   float dtSeconds);
-    SongAwareState classifyState(const audio::ControlBusFrame& frame,
-                                 const SongAwareFeatureSnapshot& features,
+    SynqMatrixState classifyState(const audio::ControlBusFrame& frame,
+                                 const SynqMatrixFeatureSnapshot& features,
                                  bool audioAvailable,
                                  float confidence);
-    SongAwareState updateStableState(SongAwareState rawState,
+    SynqMatrixState updateStableState(SynqMatrixState rawState,
                                      float confidence,
                                      uint32_t nowMs);
     void updateAudioSummary(const audio::ControlBusFrame& frame, bool audioAvailable);
 #endif
-    SongAwareIntent planIntent(SongAwareState state) const;
-    SongAwareActionPlan resolveActionPlan(SongAwareMode mode,
-                                          SongAwareProfile profile,
-                                          SongAwareState state,
+    SynqMatrixIntent planIntent(SynqMatrixState state) const;
+    SynqMatrixActionPlan resolveActionPlan(SynqMatrixMode mode,
+                                          SynqMatrixProfile profile,
+                                          SynqMatrixState state,
                                           bool switching) const;
 #if FEATURE_AUDIO_SYNC
-    bool transitionIsAllowed(SongAwareState from,
-                             SongAwareState to,
-                             const SongAwareFeatureSnapshot& features) const;
-    void updateIntentTelemetry(SongAwareState state,
-                               SongAwareActionPlan actionPlan,
-                               const SongAwareFeatureSnapshot& features);
+    bool transitionIsAllowed(SynqMatrixState from,
+                             SynqMatrixState to,
+                             const SynqMatrixFeatureSnapshot& features) const;
+    void updateIntentTelemetry(SynqMatrixState state,
+                               SynqMatrixActionPlan actionPlan,
+                               const SynqMatrixFeatureSnapshot& features);
 #endif
-    void setSuppressed(SongAwareSuppressedReason reason, SongAwareOwner owner);
+    void setSuppressed(SynqMatrixSuppressedReason reason, SynqMatrixOwner owner);
     void updateRemainingGates(uint32_t nowMs);
     void updateTransitionTelemetry(uint32_t nowMs);
-    void updateHealthTracking(SongAwareHealthCounters health, uint32_t nowMs);
-    bool graceSuppresses(uint32_t nowMs, SongAwareSuppressedReason& reason);
+    void updateHealthTracking(SynqMatrixHealthCounters health, uint32_t nowMs);
+    bool graceSuppresses(uint32_t nowMs, SynqMatrixSuppressedReason& reason);
     bool wouldCreateAbaSwitch(uint16_t activeEffectId, uint16_t targetEffectId, uint32_t nowMs) const;
-    bool healthIsDegraded(SongAwareHealthCounters health) const;
-    float scorePolicy(SongAwareState state, float confidence, const SongAwarePolicySnapshot& policy) const;
+    bool healthIsDegraded(SynqMatrixHealthCounters health) const;
+    float scorePolicy(SynqMatrixState state, float confidence, const SynqMatrixPolicySnapshot& policy) const;
 
     std::atomic<bool> m_enabled{false};
-    std::atomic<uint8_t> m_mode{static_cast<uint8_t>(SongAwareMode::Off)};
-    std::atomic<uint8_t> m_profile{static_cast<uint8_t>(SongAwareProfile::Balanced)};
+    std::atomic<uint8_t> m_mode{static_cast<uint8_t>(SynqMatrixMode::Off)};
+    std::atomic<uint8_t> m_profile{static_cast<uint8_t>(SynqMatrixProfile::Balanced)};
     std::atomic<bool> m_familyMorphing{false};
     std::atomic<bool> m_constrainedSwitching{false};
     std::atomic<bool> m_switchingEnabled{false};
@@ -421,18 +421,18 @@ private:
     std::atomic<uint16_t> m_motionScalarQ1000{1000};
     std::atomic<uint16_t> m_confidenceFloorQ1000{200};
 
-    std::atomic<uint8_t> m_effectiveMode{static_cast<uint8_t>(SongAwareMode::Off)};
-    std::atomic<uint8_t> m_owner{static_cast<uint8_t>(SongAwareOwner::None)};
-    std::atomic<uint8_t> m_suppressedReason{static_cast<uint8_t>(SongAwareSuppressedReason::Disabled)};
-    std::atomic<uint8_t> m_previousSuppressedReason{static_cast<uint8_t>(SongAwareSuppressedReason::Disabled)};
-    std::atomic<uint8_t> m_classificationReason{static_cast<uint8_t>(SongAwareClassificationReason::None)};
-    std::atomic<uint8_t> m_rawSongState{static_cast<uint8_t>(SongAwareState::Unknown)};
-    std::atomic<uint8_t> m_previousSongState{static_cast<uint8_t>(SongAwareState::Unknown)};
-    std::atomic<uint8_t> m_currentSongState{static_cast<uint8_t>(SongAwareState::Unknown)};
-    std::atomic<uint8_t> m_lastAction{static_cast<uint8_t>(SongAwareLastAction::None)};
-    std::atomic<uint8_t> m_intent{static_cast<uint8_t>(SongAwareIntent::QuietHold)};
-    std::atomic<uint8_t> m_actionPlan{static_cast<uint8_t>(SongAwareActionPlan::None)};
-    std::atomic<uint8_t> m_boundaryGate{static_cast<uint8_t>(SongAwareBoundaryGate::NotRequired)};
+    std::atomic<uint8_t> m_effectiveMode{static_cast<uint8_t>(SynqMatrixMode::Off)};
+    std::atomic<uint8_t> m_owner{static_cast<uint8_t>(SynqMatrixOwner::None)};
+    std::atomic<uint8_t> m_suppressedReason{static_cast<uint8_t>(SynqMatrixSuppressedReason::Disabled)};
+    std::atomic<uint8_t> m_previousSuppressedReason{static_cast<uint8_t>(SynqMatrixSuppressedReason::Disabled)};
+    std::atomic<uint8_t> m_classificationReason{static_cast<uint8_t>(SynqMatrixClassificationReason::None)};
+    std::atomic<uint8_t> m_rawSongState{static_cast<uint8_t>(SynqMatrixState::Unknown)};
+    std::atomic<uint8_t> m_previousSongState{static_cast<uint8_t>(SynqMatrixState::Unknown)};
+    std::atomic<uint8_t> m_currentSongState{static_cast<uint8_t>(SynqMatrixState::Unknown)};
+    std::atomic<uint8_t> m_lastAction{static_cast<uint8_t>(SynqMatrixLastAction::None)};
+    std::atomic<uint8_t> m_intent{static_cast<uint8_t>(SynqMatrixIntent::QuietHold)};
+    std::atomic<uint8_t> m_actionPlan{static_cast<uint8_t>(SynqMatrixActionPlan::None)};
+    std::atomic<uint8_t> m_boundaryGate{static_cast<uint8_t>(SynqMatrixBoundaryGate::NotRequired)};
     std::atomic<bool> m_boundaryReady{false};
     std::atomic<bool> m_waitingForBoundary{false};
     std::atomic<uint16_t> m_boundaryConfidenceQ1000{0};
@@ -459,7 +459,7 @@ private:
     std::atomic<uint32_t> m_previousEffectId{INVALID_EFFECT_ID};
     std::atomic<uint32_t> m_selectedEffectId{INVALID_EFFECT_ID};
     std::atomic<uint8_t> m_selectedPolicyIndex{0};
-    std::atomic<uint8_t> m_lastSwitchReason{static_cast<uint8_t>(SongAwareSwitchReason::None)};
+    std::atomic<uint8_t> m_lastSwitchReason{static_cast<uint8_t>(SynqMatrixSwitchReason::None)};
     std::atomic<uint16_t> m_rmsQ1000{0};
     std::atomic<uint16_t> m_fluxQ1000{0};
     std::atomic<uint16_t> m_bpmQ10{0};
@@ -472,7 +472,7 @@ private:
     std::atomic<uint32_t> m_showSuppressUntilMs{0};
     std::atomic<uint32_t> m_lastEvaluationAtMs{0};
     std::atomic<uint32_t> m_stateEnteredAtMs{0};
-    std::atomic<uint8_t> m_candidateState{static_cast<uint8_t>(SongAwareState::Unknown)};
+    std::atomic<uint8_t> m_candidateState{static_cast<uint8_t>(SynqMatrixState::Unknown)};
     std::atomic<uint32_t> m_candidateSinceMs{0};
     std::atomic<uint32_t> m_switchWindowStartMs{0};
     std::atomic<uint8_t> m_switchesInWindow{0};
@@ -493,20 +493,20 @@ private:
     std::atomic<uint16_t> m_policyAllowMask{0x01FF};
 };
 
-const char* songAwareModeName(SongAwareMode mode);
-const char* songAwareProfileName(SongAwareProfile profile);
-const char* songAwareOwnerName(SongAwareOwner owner);
-const char* songAwareSuppressedReasonName(SongAwareSuppressedReason reason);
-const char* songAwareStateName(SongAwareState state);
-const char* songAwareLastActionName(SongAwareLastAction action);
-const char* songAwareActionPlanName(SongAwareActionPlan action);
-const char* songAwareIntentName(SongAwareIntent intent);
-const char* songAwareBoundaryGateName(SongAwareBoundaryGate gate);
-const char* songAwareSwitchReasonName(SongAwareSwitchReason reason);
-const char* songAwareClassificationReasonName(SongAwareClassificationReason reason);
-SongAwareMode parseSongAwareMode(const char* value, bool* ok = nullptr);
-SongAwareProfile parseSongAwareProfile(const char* value, bool* ok = nullptr);
-SongAwareState parseSongAwareState(const char* value, bool* ok = nullptr);
+const char* songAwareModeName(SynqMatrixMode mode);
+const char* songAwareProfileName(SynqMatrixProfile profile);
+const char* songAwareOwnerName(SynqMatrixOwner owner);
+const char* songAwareSuppressedReasonName(SynqMatrixSuppressedReason reason);
+const char* songAwareStateName(SynqMatrixState state);
+const char* songAwareLastActionName(SynqMatrixLastAction action);
+const char* songAwareActionPlanName(SynqMatrixActionPlan action);
+const char* songAwareIntentName(SynqMatrixIntent intent);
+const char* songAwareBoundaryGateName(SynqMatrixBoundaryGate gate);
+const char* songAwareSwitchReasonName(SynqMatrixSwitchReason reason);
+const char* songAwareClassificationReasonName(SynqMatrixClassificationReason reason);
+SynqMatrixMode parseSynqMatrixMode(const char* value, bool* ok = nullptr);
+SynqMatrixProfile parseSynqMatrixProfile(const char* value, bool* ok = nullptr);
+SynqMatrixState parseSynqMatrixState(const char* value, bool* ok = nullptr);
 
-} // namespace songaware
+} // namespace synqmatrix
 } // namespace lightwaveos

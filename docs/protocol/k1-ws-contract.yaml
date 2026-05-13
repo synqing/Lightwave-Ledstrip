@@ -292,10 +292,10 @@ commands:
     broadcast: "broadcastStatus"
     consumers: [tab5, ios]
 
-  # ── Song-Aware Director ──────────────────────────────────────────────────
+  # ── SynqMatrix Director ──────────────────────────────────────────────────
   songAware.config.get:
     direction: "client -> K1"
-    description: "Get runtime-only SongAware configuration. Mode is the authority boundary; profile is aggression. No NVS persistence."
+    description: "Get runtime-only SynqMatrix configuration. Mode is the authority boundary; profile is aggression. No NVS persistence."
     request:
       requestId: { type: string, optional: true }
     response:
@@ -315,7 +315,7 @@ commands:
 
   songAware.config.set:
     direction: "client -> K1"
-    description: "Set runtime-only SongAware configuration."
+    description: "Set runtime-only SynqMatrix configuration."
     request:
       enabled: { type: bool, optional: true }
       mode: { type: string, optional: true, enum: [off, assist, director], compatibility: "on and parameter map to assist; subtle/balanced/high set profile and map mode to assist for one release." }
@@ -345,7 +345,7 @@ commands:
 
   songAware.status:
     direction: "client -> K1"
-    description: "Get runtime SongAware readback including state, intent, action plan, gates, transition, and health."
+    description: "Get runtime SynqMatrix readback including state, intent, action plan, gates, transition, and health."
     request:
       requestId: { type: string, optional: true }
     response:
@@ -418,7 +418,7 @@ commands:
 
   songAware.reset:
     direction: "client -> K1"
-    description: "Reset runtime-only Song-Aware Director state to defaults. Captures a WebSocket-local restore point before reset."
+    description: "Reset runtime-only SynqMatrix Director state to defaults. Captures a WebSocket-local restore point before reset."
     request:
       requestId: { type: string, optional: true }
     response:
@@ -430,7 +430,7 @@ commands:
 
   songAware.restore:
     direction: "client -> K1"
-    description: "Restore the last WebSocket-captured Song-Aware runtime state. No NVS persistence."
+    description: "Restore the last WebSocket-captured SynqMatrix runtime state. No NVS persistence."
     request:
       requestId: { type: string, optional: true }
     response:
@@ -442,7 +442,7 @@ commands:
 
   songAware.debug:
     direction: "client -> K1"
-    description: "Get full Song-Aware debug snapshot: config, status, policy timing, and allowlist."
+    description: "Get full SynqMatrix debug snapshot: config, status, policy timing, and allowlist."
     request:
       requestId: { type: string, optional: true }
     response:
@@ -450,13 +450,13 @@ commands:
       data:
         config: "songAware.config payload"
         status: "songAware.status payload"
-        policy: "Song-Aware timing/gate constants"
-        allowlist: "SongAware runtime mutable state policy allowlist"
+        policy: "SynqMatrix timing/gate constants"
+        allowlist: "SynqMatrix runtime mutable state policy allowlist"
     consumers: [tab5, ios, lab]
 
   songAware.policy:
     direction: "client -> K1"
-    description: "Get Song-Aware policy timing/gate constants and allowlist count."
+    description: "Get SynqMatrix policy timing/gate constants and allowlist count."
     request:
       requestId: { type: string, optional: true }
     response:
@@ -477,7 +477,7 @@ commands:
 
   songAware.allowlist:
     direction: "client -> K1"
-    description: "Get the runtime mutable SongAware state/effect/family policy allowlist."
+    description: "Get the runtime mutable SynqMatrix state/effect/family policy allowlist."
     request:
       requestId: { type: string, optional: true }
     response:
@@ -489,7 +489,7 @@ commands:
 
   songAware.allowlist.set:
     direction: "client -> K1"
-    description: "Enable or disable one SongAware state policy row at runtime."
+    description: "Enable or disable one SynqMatrix state policy row at runtime."
     request:
       state: { type: string, required: true, enum: [unknown, silence, ambient, steady, build, drop, breakdown, dense, transition] }
       enabled: { type: bool, required: true }
@@ -515,7 +515,7 @@ commands:
 
   songAware.health:
     direction: "client -> K1"
-    description: "Get Song-Aware health counters and clean-window state."
+    description: "Get SynqMatrix health counters and clean-window state."
     request:
       requestId: { type: string, optional: true }
     response:
@@ -532,7 +532,7 @@ commands:
 
   songAware.counters.reset:
     direction: "client -> K1"
-    description: "Reset Song-Aware runtime counters and health-gate counters. Captures a WebSocket-local restore point before reset."
+    description: "Reset SynqMatrix runtime counters and health-gate counters. Captures a WebSocket-local restore point before reset."
     request:
       requestId: { type: string, optional: true }
     response:

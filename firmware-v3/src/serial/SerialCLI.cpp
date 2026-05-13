@@ -24,7 +24,7 @@
 #include "core/actors/RendererActor.h"
 #include "core/narrative/NarrativeEngine.h"
 #include "core/persistence/ZoneConfigManager.h"
-#include "core/songaware/SongAwareDirector.h"
+#include "core/synqmatrix/SynqMatrix.h"
 #include "core/shows/DynamicShowStore.h"
 
 #include "effects/enhancement/EdgeMixer.h"
@@ -90,7 +90,7 @@ namespace serial {
 
 namespace {
 
-lightwaveos::songaware::SongAwareRuntimeState g_songAwareRestorePoint;
+lightwaveos::synqmatrix::SynqMatrixRuntimeState g_songAwareRestorePoint;
 bool g_songAwareRestorePointValid = false;
 
 const char* boolName(bool value) {
@@ -101,9 +101,9 @@ const char* onOffName(bool value) {
     return value ? "on" : "off";
 }
 
-void printSongAwareStatus() {
-    const auto cfg = lightwaveos::songaware::SongAwareDirector::instance().getConfig();
-    const auto st = lightwaveos::songaware::SongAwareDirector::instance().getStatus();
+void printSynqMatrixStatus() {
+    const auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
+    const auto st = lightwaveos::synqmatrix::SynqMatrix::instance().getStatus();
     const char* activeEffectName = st.activeEffectName;
     RendererActor* ren = ActorSystem::instance().getRenderer();
     if (ren != nullptr) {
@@ -111,8 +111,8 @@ void printSongAwareStatus() {
     }
     Serial.printf("songAware: enabled=%s mode=%s profile=%s switchingEnabled=%s familyMorphing=%s sensitivity=%.3f intensityScalar=%.3f motionScalar=%.3f confidenceFloor=%.3f\n",
                   boolName(cfg.enabled),
-                  lightwaveos::songaware::songAwareModeName(cfg.mode),
-                  lightwaveos::songaware::songAwareProfileName(cfg.profile),
+                  lightwaveos::synqmatrix::songAwareModeName(cfg.mode),
+                  lightwaveos::synqmatrix::songAwareProfileName(cfg.profile),
                   boolName(cfg.switchingEnabled),
                   boolName(cfg.familyMorphing),
                   cfg.sensitivity,
@@ -120,16 +120,16 @@ void printSongAwareStatus() {
                   cfg.motionScalar,
                   cfg.confidenceFloor);
     Serial.printf("songAware_status: mode=%s profile=%s owner=%s suppressed=%s state=%s intent=%s confidence=%.3f lastAction=%s actionPlan=%s boundary=%s ready=%s activeEffect=0x%04X activeEffectName=\"%s\" parameterUpdates=%lu automaticEffectSwitches=%lu lastDecisionAtMs=%lu\n",
-                  lightwaveos::songaware::songAwareModeName(st.effectiveMode),
-                  lightwaveos::songaware::songAwareProfileName(st.profile),
-                  lightwaveos::songaware::songAwareOwnerName(st.owner),
-                  lightwaveos::songaware::songAwareSuppressedReasonName(st.suppressedReason),
-                  lightwaveos::songaware::songAwareStateName(st.currentSongState),
-                  lightwaveos::songaware::songAwareIntentName(st.intent),
+                  lightwaveos::synqmatrix::songAwareModeName(st.effectiveMode),
+                  lightwaveos::synqmatrix::songAwareProfileName(st.profile),
+                  lightwaveos::synqmatrix::songAwareOwnerName(st.owner),
+                  lightwaveos::synqmatrix::songAwareSuppressedReasonName(st.suppressedReason),
+                  lightwaveos::synqmatrix::songAwareStateName(st.currentSongState),
+                  lightwaveos::synqmatrix::songAwareIntentName(st.intent),
                   st.confidence,
-                  lightwaveos::songaware::songAwareLastActionName(st.lastAction),
-                  lightwaveos::songaware::songAwareActionPlanName(st.actionPlan),
-                  lightwaveos::songaware::songAwareBoundaryGateName(st.boundaryGate),
+                  lightwaveos::synqmatrix::songAwareLastActionName(st.lastAction),
+                  lightwaveos::synqmatrix::songAwareActionPlanName(st.actionPlan),
+                  lightwaveos::synqmatrix::songAwareBoundaryGateName(st.boundaryGate),
                   boolName(st.boundaryReady),
                   static_cast<unsigned>(st.activeEffectId),
                   activeEffectName,
@@ -156,48 +156,48 @@ void printSongAwareStatus() {
                   st.audioConfidence);
 }
 
-void printSongAwareCompactStatus() {
-    const auto cfg = lightwaveos::songaware::SongAwareDirector::instance().getConfig();
-    const auto st = lightwaveos::songaware::SongAwareDirector::instance().getStatus();
+void printSynqMatrixCompactStatus() {
+    const auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
+    const auto st = lightwaveos::synqmatrix::SynqMatrix::instance().getStatus();
     Serial.printf("sa: enabled=%s mode=%s profile=%s switching=%s state=%s intent=%s confidence=%.2f gate=%s boundary=%s action=%s\n",
                   boolName(cfg.enabled),
-                  lightwaveos::songaware::songAwareModeName(cfg.mode),
-                  lightwaveos::songaware::songAwareProfileName(cfg.profile),
+                  lightwaveos::synqmatrix::songAwareModeName(cfg.mode),
+                  lightwaveos::synqmatrix::songAwareProfileName(cfg.profile),
                   boolName(cfg.switchingEnabled),
-                  lightwaveos::songaware::songAwareStateName(st.currentSongState),
-                  lightwaveos::songaware::songAwareIntentName(st.intent),
+                  lightwaveos::synqmatrix::songAwareStateName(st.currentSongState),
+                  lightwaveos::synqmatrix::songAwareIntentName(st.intent),
                   st.confidence,
-                  lightwaveos::songaware::songAwareSuppressedReasonName(st.suppressedReason),
-                  lightwaveos::songaware::songAwareBoundaryGateName(st.boundaryGate),
-                  lightwaveos::songaware::songAwareActionPlanName(st.actionPlan));
+                  lightwaveos::synqmatrix::songAwareSuppressedReasonName(st.suppressedReason),
+                  lightwaveos::synqmatrix::songAwareBoundaryGateName(st.boundaryGate),
+                  lightwaveos::synqmatrix::songAwareActionPlanName(st.actionPlan));
 }
 
-void captureSongAwareRestorePoint() {
-    g_songAwareRestorePoint = lightwaveos::songaware::SongAwareDirector::instance().exportRuntimeState();
+void captureSynqMatrixRestorePoint() {
+    g_songAwareRestorePoint = lightwaveos::synqmatrix::SynqMatrix::instance().exportRuntimeState();
     g_songAwareRestorePointValid = true;
 }
 
-void printSongAwarePolicySnapshot(const lightwaveos::songaware::SongAwarePolicySnapshot& policy) {
+void printSynqMatrixPolicySnapshot(const lightwaveos::synqmatrix::SynqMatrixPolicySnapshot& policy) {
     Serial.printf("  state=%s enabled=%s effect=0x%04X family=%s visualLanguage=%s reason=%s minConfidence=%.3f\n",
-                  lightwaveos::songaware::songAwareStateName(policy.state),
+                  lightwaveos::synqmatrix::songAwareStateName(policy.state),
                   boolName(policy.enabled),
                   static_cast<unsigned>(policy.effectId),
                   policy.family,
                   policy.visualLanguage,
-                  lightwaveos::songaware::songAwareSwitchReasonName(policy.reason),
+                  lightwaveos::synqmatrix::songAwareSwitchReasonName(policy.reason),
                   policy.minConfidence);
 }
 
-void printSongAwareAllowlist() {
-    const auto allowlist = lightwaveos::songaware::SongAwareDirector::instance().getAllowlistSnapshot();
+void printSynqMatrixAllowlist() {
+    const auto allowlist = lightwaveos::synqmatrix::SynqMatrix::instance().getAllowlistSnapshot();
     Serial.printf("songAware_allowlist: count=%u\n", allowlist.count);
     for (uint8_t i = 0; i < allowlist.count; ++i) {
-        printSongAwarePolicySnapshot(allowlist.policies[i]);
+        printSynqMatrixPolicySnapshot(allowlist.policies[i]);
     }
 }
 
-void printSongAwarePolicy() {
-    const auto debug = lightwaveos::songaware::SongAwareDirector::instance().getDebugSnapshot();
+void printSynqMatrixPolicy() {
+    const auto debug = lightwaveos::synqmatrix::SynqMatrix::instance().getDebugSnapshot();
     Serial.println("songAware_policy:");
     Serial.printf("  bootGraceMs=%lu postEnableGraceMs=%lu stableStateHoldMs=%lu dropStateHoldMs=%lu\n",
                   static_cast<unsigned long>(debug.bootGraceMs),
@@ -215,8 +215,8 @@ void printSongAwarePolicy() {
                   debug.allowlist.count);
 }
 
-void printSongAwareHealth() {
-    const auto st = lightwaveos::songaware::SongAwareDirector::instance().getStatus();
+void printSynqMatrixHealth() {
+    const auto st = lightwaveos::synqmatrix::SynqMatrix::instance().getStatus();
     Serial.printf("songAware_health: degraded=%s show_skips=%lu failures=%lu rmt_errors=%lu underruns=%lu cleanForMs=%lu cleanWindowRemainingMs=%lu\n",
                   boolName(st.healthDegraded),
                   static_cast<unsigned long>(st.showSkips),
@@ -227,15 +227,15 @@ void printSongAwareHealth() {
                   static_cast<unsigned long>(st.healthCleanWindowRemainingMs));
 }
 
-void printSongAwareDebug() {
-    const auto st = lightwaveos::songaware::SongAwareDirector::instance().getStatus();
-    printSongAwareStatus();
+void printSynqMatrixDebug() {
+    const auto st = lightwaveos::synqmatrix::SynqMatrix::instance().getStatus();
+    printSynqMatrixStatus();
     Serial.printf("songAware_debug: rawState=%s previousState=%s candidateState=%s classificationReason=%s previousSuppressed=%s selectionScore=%.3f\n",
-                  lightwaveos::songaware::songAwareStateName(st.rawSongState),
-                  lightwaveos::songaware::songAwareStateName(st.previousSongState),
-                  lightwaveos::songaware::songAwareStateName(st.candidateSongState),
-                  lightwaveos::songaware::songAwareClassificationReasonName(st.classificationReason),
-                  lightwaveos::songaware::songAwareSuppressedReasonName(st.previousSuppressedReason),
+                  lightwaveos::synqmatrix::songAwareStateName(st.rawSongState),
+                  lightwaveos::synqmatrix::songAwareStateName(st.previousSongState),
+                  lightwaveos::synqmatrix::songAwareStateName(st.candidateSongState),
+                  lightwaveos::synqmatrix::songAwareClassificationReasonName(st.classificationReason),
+                  lightwaveos::synqmatrix::songAwareSuppressedReasonName(st.previousSuppressedReason),
                   st.selectionScore);
     Serial.printf("songAware_debug_gates: stateAgeMs=%lu candidateAgeMs=%lu candidateHoldRemainingMs=%lu bootGraceRemainingMs=%lu enableGraceRemainingMs=%lu antiThrashRemainingMs=%lu\n",
                   static_cast<unsigned long>(st.stateAgeMs),
@@ -259,41 +259,41 @@ void printSongAwareDebug() {
                   static_cast<unsigned long>(st.transitionDurationMs),
                   static_cast<unsigned long>(st.transitionRemainingMs),
                   st.transitionProgress);
-    printSongAwarePolicy();
-    printSongAwareAllowlist();
+    printSynqMatrixPolicy();
+    printSynqMatrixAllowlist();
 }
 
-void printSongAwareDebugLevel(uint8_t level) {
+void printSynqMatrixDebugLevel(uint8_t level) {
     switch (level) {
         case 0:
-            printSongAwareCompactStatus();
+            printSynqMatrixCompactStatus();
             break;
         case 1:
-            printSongAwareStatus();
+            printSynqMatrixStatus();
             break;
         case 2:
-            printSongAwarePolicy();
-            printSongAwareAllowlist();
+            printSynqMatrixPolicy();
+            printSynqMatrixAllowlist();
             break;
         case 3:
-            printSongAwareHealth();
+            printSynqMatrixHealth();
             break;
         case 4:
         default:
-            printSongAwareDebug();
+            printSynqMatrixDebug();
             break;
     }
 }
 
-void restoreSongAwareSafeBaseline(ActorSystem& actors) {
-    auto cfg = lightwaveos::songaware::SongAwareDirector::instance().getConfig();
+void restoreSynqMatrixSafeBaseline(ActorSystem& actors) {
+    auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
     cfg.enabled = false;
-    cfg.mode = lightwaveos::songaware::SongAwareMode::Off;
+    cfg.mode = lightwaveos::synqmatrix::SynqMatrixMode::Off;
     cfg.familyMorphing = false;
     cfg.constrainedSwitching = false;
     cfg.switchingEnabled = false;
-    lightwaveos::songaware::SongAwareDirector::instance().setConfig(cfg);
-    lightwaveos::songaware::SongAwareDirector::instance().resetCounters();
+    lightwaveos::synqmatrix::SynqMatrix::instance().setConfig(cfg);
+    lightwaveos::synqmatrix::SynqMatrix::instance().resetCounters();
 
     actors.setEffect(EID_SB_K1_WAVEFORM);
     actors.setBrightness(160);
@@ -308,43 +308,43 @@ void restoreSongAwareSafeBaseline(ActorSystem& actors) {
     actors.setEdgeMixerTemporal(static_cast<uint8_t>(lightwaveos::enhancement::EdgeMixerTemporal::STATIC));
 }
 
-void cycleSongAwareMode() {
-    captureSongAwareRestorePoint();
-    auto cfg = lightwaveos::songaware::SongAwareDirector::instance().getConfig();
-    if (!cfg.enabled || cfg.mode == lightwaveos::songaware::SongAwareMode::Off) {
+void cycleSynqMatrixMode() {
+    captureSynqMatrixRestorePoint();
+    auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
+    if (!cfg.enabled || cfg.mode == lightwaveos::synqmatrix::SynqMatrixMode::Off) {
         cfg.enabled = true;
-        cfg.mode = lightwaveos::songaware::SongAwareMode::Assist;
-    } else if (cfg.mode == lightwaveos::songaware::SongAwareMode::Assist) {
+        cfg.mode = lightwaveos::synqmatrix::SynqMatrixMode::Assist;
+    } else if (cfg.mode == lightwaveos::synqmatrix::SynqMatrixMode::Assist) {
         cfg.enabled = true;
-        cfg.mode = lightwaveos::songaware::SongAwareMode::Director;
+        cfg.mode = lightwaveos::synqmatrix::SynqMatrixMode::Director;
     } else {
         cfg.enabled = false;
-        cfg.mode = lightwaveos::songaware::SongAwareMode::Off;
+        cfg.mode = lightwaveos::synqmatrix::SynqMatrixMode::Off;
         cfg.switchingEnabled = false;
         cfg.constrainedSwitching = false;
     }
     cfg.familyMorphing = false;
-    lightwaveos::songaware::SongAwareDirector::instance().setConfig(cfg);
-    printSongAwareCompactStatus();
+    lightwaveos::synqmatrix::SynqMatrix::instance().setConfig(cfg);
+    printSynqMatrixCompactStatus();
 }
 
-void cycleSongAwareProfile() {
-    captureSongAwareRestorePoint();
-    auto cfg = lightwaveos::songaware::SongAwareDirector::instance().getConfig();
+void cycleSynqMatrixProfile() {
+    captureSynqMatrixRestorePoint();
+    auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
     switch (cfg.profile) {
-        case lightwaveos::songaware::SongAwareProfile::Subtle:
-            cfg.profile = lightwaveos::songaware::SongAwareProfile::Balanced;
+        case lightwaveos::synqmatrix::SynqMatrixProfile::Subtle:
+            cfg.profile = lightwaveos::synqmatrix::SynqMatrixProfile::Balanced;
             break;
-        case lightwaveos::songaware::SongAwareProfile::Balanced:
-            cfg.profile = lightwaveos::songaware::SongAwareProfile::High;
+        case lightwaveos::synqmatrix::SynqMatrixProfile::Balanced:
+            cfg.profile = lightwaveos::synqmatrix::SynqMatrixProfile::High;
             break;
-        case lightwaveos::songaware::SongAwareProfile::High:
+        case lightwaveos::synqmatrix::SynqMatrixProfile::High:
         default:
-            cfg.profile = lightwaveos::songaware::SongAwareProfile::Subtle;
+            cfg.profile = lightwaveos::synqmatrix::SynqMatrixProfile::Subtle;
             break;
     }
-    lightwaveos::songaware::SongAwareDirector::instance().setConfig(cfg);
-    printSongAwareCompactStatus();
+    lightwaveos::synqmatrix::SynqMatrix::instance().setConfig(cfg);
+    printSynqMatrixCompactStatus();
 }
 
 const char* rendererModeName(RendererMode mode) {
@@ -429,7 +429,7 @@ void printVpStackSnapshot(const RendererActor::VpStackSnapshot& snap) {
                   static_cast<unsigned long>(snap.ledStats.rmtErrors),
                   static_cast<unsigned long>(snap.ledStats.rmtUnderruns));
     Serial.print("  8 ");
-    printSongAwareStatus();
+    printSynqMatrixStatus();
 
     const auto& cfg = snap.colourConfig;
     const auto& gamma = snap.gamma;
@@ -536,9 +536,9 @@ void SerialCLI::tick() {
                 case '[': case ']':  // Speed
                 case ',': case '.':  // Palette
                 case 'e':            // EdgeMixer mode cycle
-                case 'D':            // SongAware mode cycle
-                case 'G':            // SongAware profile cycle
-                case 'Q':            // SongAware compact status
+                case 'D':            // SynqMatrix mode cycle
+                case 'G':            // SynqMatrix profile cycle
+                case 'Q':            // SynqMatrix compact status
                 case 'w': case 'W':  // EdgeMixer spread +/-
                 case '<': case '>':  // EdgeMixer strength -/+
                 case 'y':            // EdgeMixer spatial toggle
@@ -724,148 +724,148 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
         }
     }
     else
-    if (inputLower == "songaware" || inputLower == "songaware status" ||
+    if (inputLower == "synqmatrix" || inputLower == "synqmatrix status" ||
         inputLower == "sa" || inputLower == "sa status") {
         handledMulti = true;
-        printSongAwareCompactStatus();
+        printSynqMatrixCompactStatus();
     }
     else
-    if (inputLower == "songaware on" || inputLower == "sa on") {
+    if (inputLower == "synqmatrix on" || inputLower == "sa on") {
         handledMulti = true;
-        captureSongAwareRestorePoint();
-        auto cfg = lightwaveos::songaware::SongAwareDirector::instance().getConfig();
+        captureSynqMatrixRestorePoint();
+        auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
         cfg.enabled = true;
-        cfg.mode = lightwaveos::songaware::SongAwareMode::Assist;
+        cfg.mode = lightwaveos::synqmatrix::SynqMatrixMode::Assist;
         cfg.familyMorphing = false;
         cfg.constrainedSwitching = false;
         cfg.switchingEnabled = false;
-        lightwaveos::songaware::SongAwareDirector::instance().setConfig(cfg);
+        lightwaveos::synqmatrix::SynqMatrix::instance().setConfig(cfg);
         Serial.println("songAware: 'on' is deprecated; set mode=assist profile unchanged switching=false");
-        printSongAwareStatus();
+        printSynqMatrixStatus();
     }
     else
-    if (inputLower == "songaware off" || inputLower == "sa off") {
+    if (inputLower == "synqmatrix off" || inputLower == "sa off") {
         handledMulti = true;
-        captureSongAwareRestorePoint();
-        auto cfg = lightwaveos::songaware::SongAwareDirector::instance().getConfig();
+        captureSynqMatrixRestorePoint();
+        auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
         cfg.enabled = false;
-        cfg.mode = lightwaveos::songaware::SongAwareMode::Off;
+        cfg.mode = lightwaveos::synqmatrix::SynqMatrixMode::Off;
         cfg.familyMorphing = false;
         cfg.constrainedSwitching = false;
         cfg.switchingEnabled = false;
-        lightwaveos::songaware::SongAwareDirector::instance().setConfig(cfg);
+        lightwaveos::synqmatrix::SynqMatrix::instance().setConfig(cfg);
         Serial.println("songAware: OFF");
-        printSongAwareStatus();
+        printSynqMatrixStatus();
     }
     else
-    if (inputLower.startsWith("songaware mode ") || inputLower.startsWith("sa mode ")) {
+    if (inputLower.startsWith("synqmatrix mode ") || inputLower.startsWith("sa mode ")) {
         handledMulti = true;
         const int offset = inputLower.startsWith("sa mode ") ? 8 : 15;
         String modeText = inputLower.substring(offset);
         modeText.trim();
         bool ok = false;
         bool profileOk = false;
-        auto profile = lightwaveos::songaware::parseSongAwareProfile(modeText.c_str(), &profileOk);
-        auto mode = lightwaveos::songaware::parseSongAwareMode(modeText.c_str(), &ok);
+        auto profile = lightwaveos::synqmatrix::parseSynqMatrixProfile(modeText.c_str(), &profileOk);
+        auto mode = lightwaveos::synqmatrix::parseSynqMatrixMode(modeText.c_str(), &ok);
         if (!ok) {
             Serial.println("songAware mode invalid. Use: off|assist|director");
         } else {
-            captureSongAwareRestorePoint();
-            auto cfg = lightwaveos::songaware::SongAwareDirector::instance().getConfig();
+            captureSynqMatrixRestorePoint();
+            auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
             if (profileOk && (modeText == "subtle" || modeText == "balanced" || modeText == "high" ||
                               modeText == "high_energy")) {
                 cfg.profile = profile;
-                cfg.mode = lightwaveos::songaware::SongAwareMode::Assist;
+                cfg.mode = lightwaveos::synqmatrix::SynqMatrixMode::Assist;
                 cfg.enabled = true;
                 Serial.println("songAware: legacy mode token mapped to profile; mode=assist");
             } else {
                 cfg.mode = mode;
-                cfg.enabled = (mode != lightwaveos::songaware::SongAwareMode::Off);
+                cfg.enabled = (mode != lightwaveos::synqmatrix::SynqMatrixMode::Off);
                 if (modeText == "on" || modeText == "parameter") {
                     Serial.println("songAware: legacy mode token mapped to assist");
                 }
             }
             cfg.familyMorphing = false;
-            if (cfg.mode != lightwaveos::songaware::SongAwareMode::Director) {
+            if (cfg.mode != lightwaveos::synqmatrix::SynqMatrixMode::Director) {
                 cfg.constrainedSwitching = false;
                 cfg.switchingEnabled = false;
             }
-            lightwaveos::songaware::SongAwareDirector::instance().setConfig(cfg);
-            printSongAwareStatus();
+            lightwaveos::synqmatrix::SynqMatrix::instance().setConfig(cfg);
+            printSynqMatrixStatus();
         }
     }
     else
-    if (inputLower.startsWith("songaware profile ") || inputLower.startsWith("sa profile ")) {
+    if (inputLower.startsWith("synqmatrix profile ") || inputLower.startsWith("sa profile ")) {
         handledMulti = true;
         const int offset = inputLower.startsWith("sa profile ") ? 11 : 18;
         String profileText = inputLower.substring(offset);
         profileText.trim();
         bool ok = false;
-        auto profile = lightwaveos::songaware::parseSongAwareProfile(profileText.c_str(), &ok);
+        auto profile = lightwaveos::synqmatrix::parseSynqMatrixProfile(profileText.c_str(), &ok);
         if (!ok) {
             Serial.println("songAware profile invalid. Use: subtle|balanced|high");
         } else {
-            captureSongAwareRestorePoint();
-            auto cfg = lightwaveos::songaware::SongAwareDirector::instance().getConfig();
+            captureSynqMatrixRestorePoint();
+            auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
             cfg.profile = profile;
-            lightwaveos::songaware::SongAwareDirector::instance().setConfig(cfg);
-            printSongAwareStatus();
+            lightwaveos::synqmatrix::SynqMatrix::instance().setConfig(cfg);
+            printSynqMatrixStatus();
         }
     }
     else
-    if (inputLower == "songaware switch on" || inputLower == "sa switch on" ||
-        inputLower == "songaware switching on" || inputLower == "sa switching on") {
+    if (inputLower == "synqmatrix switch on" || inputLower == "sa switch on" ||
+        inputLower == "synqmatrix switching on" || inputLower == "sa switching on") {
         handledMulti = true;
-        auto cfg = lightwaveos::songaware::SongAwareDirector::instance().getConfig();
-        if (!cfg.enabled || cfg.mode != lightwaveos::songaware::SongAwareMode::Director) {
+        auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
+        if (!cfg.enabled || cfg.mode != lightwaveos::synqmatrix::SynqMatrixMode::Director) {
             Serial.println("songAware switching rejected: Director mode is required");
         } else {
-            captureSongAwareRestorePoint();
+            captureSynqMatrixRestorePoint();
             cfg.familyMorphing = false;
             cfg.constrainedSwitching = true;
             cfg.switchingEnabled = true;
-            lightwaveos::songaware::SongAwareDirector::instance().setConfig(cfg);
+            lightwaveos::synqmatrix::SynqMatrix::instance().setConfig(cfg);
             Serial.println("songAware switching: ON");
         }
-        printSongAwareStatus();
+        printSynqMatrixStatus();
     }
     else
-    if (inputLower == "songaware switch off" || inputLower == "sa switch off" ||
-        inputLower == "songaware switching off" || inputLower == "sa switching off") {
+    if (inputLower == "synqmatrix switch off" || inputLower == "sa switch off" ||
+        inputLower == "synqmatrix switching off" || inputLower == "sa switching off") {
         handledMulti = true;
-        captureSongAwareRestorePoint();
-        auto cfg = lightwaveos::songaware::SongAwareDirector::instance().getConfig();
+        captureSynqMatrixRestorePoint();
+        auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
         cfg.constrainedSwitching = false;
         cfg.switchingEnabled = false;
-        lightwaveos::songaware::SongAwareDirector::instance().setConfig(cfg);
+        lightwaveos::synqmatrix::SynqMatrix::instance().setConfig(cfg);
         Serial.println("songAware switching: OFF");
-        printSongAwareStatus();
+        printSynqMatrixStatus();
     }
     else
-    if (inputLower == "songaware wipe" || inputLower == "sa wipe" ||
-        inputLower == "songaware reset" || inputLower == "sa reset") {
+    if (inputLower == "synqmatrix wipe" || inputLower == "sa wipe" ||
+        inputLower == "synqmatrix reset" || inputLower == "sa reset") {
         handledMulti = true;
-        captureSongAwareRestorePoint();
-        lightwaveos::songaware::SongAwareDirector::instance().reset();
+        captureSynqMatrixRestorePoint();
+        lightwaveos::synqmatrix::SynqMatrix::instance().reset();
         if (inputLower.endsWith("reset")) {
             Serial.println("songAware: 'reset' is deprecated; use 'wipe'");
         }
         Serial.println("songAware: WIPE");
-        printSongAwareStatus();
+        printSynqMatrixStatus();
     }
     else
-    if (inputLower == "songaware restore" || inputLower == "sa restore") {
+    if (inputLower == "synqmatrix restore" || inputLower == "sa restore") {
         handledMulti = true;
-        restoreSongAwareSafeBaseline(actors);
+        restoreSynqMatrixSafeBaseline(actors);
         Serial.println("songAware: RESTORED safe baseline (0x1302, fixed controls, off)");
-        printSongAwareStatus();
+        printSynqMatrixStatus();
     }
     else
-    if (inputLower.startsWith("songaware dbg") || inputLower.startsWith("sa dbg") ||
-        inputLower == "songaware debug" || inputLower == "sa debug") {
+    if (inputLower.startsWith("synqmatrix dbg") || inputLower.startsWith("sa dbg") ||
+        inputLower == "synqmatrix debug" || inputLower == "sa debug") {
         handledMulti = true;
         uint8_t level = 1;
-        if (inputLower.startsWith("songaware dbg ")) {
+        if (inputLower.startsWith("synqmatrix dbg ")) {
             level = static_cast<uint8_t>(inputLower.substring(14).toInt());
         } else if (inputLower.startsWith("sa dbg ")) {
             level = static_cast<uint8_t>(inputLower.substring(7).toInt());
@@ -873,23 +873,23 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
             Serial.println("songAware: 'debug' is deprecated; use 'sa dbg 4'");
             level = 4;
         }
-        printSongAwareDebugLevel(level);
+        printSynqMatrixDebugLevel(level);
     }
     else
-    if (inputLower == "songaware policy" || inputLower == "sa policy") {
+    if (inputLower == "synqmatrix policy" || inputLower == "sa policy") {
         handledMulti = true;
         Serial.println("songAware: 'policy' is deprecated; use 'sa dbg 2'");
-        printSongAwareDebugLevel(2);
+        printSynqMatrixDebugLevel(2);
     }
     else
-    if (inputLower == "songaware allowlist" || inputLower == "sa allowlist") {
+    if (inputLower == "synqmatrix allowlist" || inputLower == "sa allowlist") {
         handledMulti = true;
         Serial.println("songAware: 'allowlist' is mutable; use 'sa allow <state> on|off' to edit");
-        printSongAwareAllowlist();
+        printSynqMatrixAllowlist();
     }
     else
-    if ((inputLower.startsWith("songaware allow ") || inputLower.startsWith("sa allow ")) &&
-        inputLower != "songaware allow reset" && inputLower != "sa allow reset") {
+    if ((inputLower.startsWith("synqmatrix allow ") || inputLower.startsWith("sa allow ")) &&
+        inputLower != "synqmatrix allow reset" && inputLower != "sa allow reset") {
         handledMulti = true;
         const int offset = inputLower.startsWith("sa allow ") ? 9 : 16;
         String args = inputLower.substring(offset);
@@ -903,38 +903,38 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
             stateText.trim();
             valueText.trim();
             bool stateOk = false;
-            const auto state = lightwaveos::songaware::parseSongAwareState(stateText.c_str(), &stateOk);
+            const auto state = lightwaveos::synqmatrix::parseSynqMatrixState(stateText.c_str(), &stateOk);
             const bool enable = (valueText == "on" || valueText == "true" || valueText == "1");
             const bool disable = (valueText == "off" || valueText == "false" || valueText == "0");
             if (!stateOk || (!enable && !disable)) {
                 Serial.println("songAware allow invalid. Use: sa allow <state> on|off");
             } else {
-                captureSongAwareRestorePoint();
-                lightwaveos::songaware::SongAwareDirector::instance().setPolicyAllowed(state, enable);
-                printSongAwareAllowlist();
+                captureSynqMatrixRestorePoint();
+                lightwaveos::synqmatrix::SynqMatrix::instance().setPolicyAllowed(state, enable);
+                printSynqMatrixAllowlist();
             }
         }
     }
     else
-    if (inputLower == "songaware allow reset" || inputLower == "sa allow reset") {
+    if (inputLower == "synqmatrix allow reset" || inputLower == "sa allow reset") {
         handledMulti = true;
-        captureSongAwareRestorePoint();
-        lightwaveos::songaware::SongAwareDirector::instance().resetPolicyAllowlist();
-        printSongAwareAllowlist();
+        captureSynqMatrixRestorePoint();
+        lightwaveos::synqmatrix::SynqMatrix::instance().resetPolicyAllowlist();
+        printSynqMatrixAllowlist();
     }
     else
-    if (inputLower == "songaware health" || inputLower == "sa health") {
+    if (inputLower == "synqmatrix health" || inputLower == "sa health") {
         handledMulti = true;
         Serial.println("songAware: 'health' is deprecated; use 'sa dbg 3'");
-        printSongAwareDebugLevel(3);
+        printSynqMatrixDebugLevel(3);
     }
     else
-    if (inputLower == "songaware counters reset" || inputLower == "sa counters reset") {
+    if (inputLower == "synqmatrix counters reset" || inputLower == "sa counters reset") {
         handledMulti = true;
-        captureSongAwareRestorePoint();
-        lightwaveos::songaware::SongAwareDirector::instance().resetCounters();
+        captureSynqMatrixRestorePoint();
+        lightwaveos::synqmatrix::SynqMatrix::instance().resetCounters();
         Serial.println("songAware counters: RESET");
-        printSongAwareHealth();
+        printSynqMatrixHealth();
     }
     else
     if (inputLower.startsWith("dither")) {
@@ -2378,15 +2378,15 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
         if (!isEffectKey)
         switch (cmd) {
         case 'D':
-            cycleSongAwareMode();
+            cycleSynqMatrixMode();
             break;
 
         case 'G':
-            cycleSongAwareProfile();
+            cycleSynqMatrixProfile();
             break;
 
         case 'Q':
-            printSongAwareCompactStatus();
+            printSynqMatrixCompactStatus();
             break;
 
 #if FEATURE_AUDIO_SYNC

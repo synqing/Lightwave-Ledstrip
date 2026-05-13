@@ -42,11 +42,13 @@
 #include <esp_heap_caps.h>
 #include <esp_timer.h>  // CLOCK SPINE FIX: Use same clock as AudioActor
 #endif
+#include <cstring>
 
 // Audio integration (Phase 2)
 #if FEATURE_AUDIO_SYNC
 #include "../../audio/AudioActor.h"
 #include "../../audio/contracts/OnsetSemantics.h"
+#include "../songaware/SongAwareDirector.h"
 #if !FEATURE_AUDIO_BACKEND_ESV11
 // TempoTracker integration (replaces K1)
 #include "../../audio/tempo/TempoTracker.h"
@@ -65,6 +67,26 @@ namespace {
 // "set and forget" feel for users who don't keep tweaking the slider
 // while preserving immediate slider responsiveness.
 constexpr uint32_t kHueAutoRotatePauseMs = 30000;
+
+#if FEATURE_AUDIO_SYNC && FEATURE_TRANSITIONS
+TransitionType songAwareTransitionForReason(const char* reason) {
+    if (reason == nullptr) {
+        return TransitionType::FADE;
+    }
+    if (strcmp(reason, "drop_impact") == 0) {
+        return TransitionType::PULSEWAVE;
+    }
+    if (strcmp(reason, "build_pressure") == 0 ||
+        strcmp(reason, "transition_bridge") == 0) {
+        return TransitionType::WIPE_OUT;
+    }
+    if (strcmp(reason, "breakdown_release") == 0 ||
+        strcmp(reason, "ambient_posture") == 0) {
+        return TransitionType::FADE;
+    }
+    return TransitionType::FADE;
+}
+#endif
 
 /// Reinhard tone-map scale LUT (knee = 1.0).
 /// lut[avg] = round(255 * 255 / (avg + 255))
@@ -649,6 +671,39 @@ void RendererActor::onStart()
 
 void RendererActor::onMessage(const Message& msg)
 {
+#if FEATURE_AUDIO_SYNC
+    switch (msg.type) {
+        case MessageType::SET_EFFECT:
+        case MessageType::SET_BRIGHTNESS:
+        case MessageType::SET_SPEED:
+        case MessageType::SET_PALETTE:
+        case MessageType::SET_INTENSITY:
+        case MessageType::SET_SATURATION:
+        case MessageType::SET_COMPLEXITY:
+        case MessageType::SET_VARIATION:
+        case MessageType::SET_HUE:
+        case MessageType::SET_MOOD:
+        case MessageType::SET_FADE_AMOUNT:
+        case MessageType::SET_EDGE_MIXER_MODE:
+        case MessageType::SET_EDGE_MIXER_SPREAD:
+        case MessageType::SET_EDGE_MIXER_STRENGTH:
+        case MessageType::SET_EDGE_MIXER_SPATIAL:
+        case MessageType::SET_EDGE_MIXER_TEMPORAL:
+        case MessageType::START_TRANSITION: {
+            const uint32_t nowMs = millis();
+            auto& director = songaware::SongAwareDirector::instance();
+            if (director.isShowOwnerActive(nowMs)) {
+                director.markShowControl(nowMs);
+            } else {
+                director.markManualControl(nowMs);
+            }
+            break;
+        }
+        default:
+            break;
+    }
+#endif
+
     switch (msg.type) {
         case MessageType::SET_EFFECT:
             // ActorSystem packs EffectId as 2 bytes: param1=low, param2=high
@@ -1548,6 +1603,135 @@ void RendererActor::initLeds()
              LedConfig::LEDS_PER_STRIP, LedConfig::STRIP1_PIN, LedConfig::STRIP2_PIN);
 }
 
+#if FEATURE_AUDIO_SYNC
+void RendererActor::queueSongAwareDirectorTransition(
+    const songaware::SongAwareSwitchRequest& request,
+    EffectId previousEffectId)
+{
+    m_songAwareDirectorTransitionQueued = true;
+    m_songAwareDirectorPreviousEffect = previousEffectId;
+    m_songAwareDirectorTargetEffect = static_cast<EffectId>(request.targetEffectId);
+    m_songAwareDirectorTargetFamily = request.targetFamily;
+    m_songAwareDirectorTargetLanguage = request.targetVisualLanguage;
+    m_songAwareDirectorTransitionReason = request.reason;
+}
+
+bool RendererActor::processSongAwareDirectorTransition(uint32_t nowMs)
+{
+    if (!m_songAwareDirectorTransitionQueued) {
+        return false;
+    }
+
+    const EffectId previousEffect = m_songAwareDirectorPreviousEffect;
+    const EffectId targetEffect = m_songAwareDirectorTargetEffect;
+    const char* targetFamily = m_songAwareDirectorTargetFamily;
+    const char* targetLanguage = m_songAwareDirectorTargetLanguage;
+    const char* reason = m_songAwareDirectorTransitionReason;
+    m_songAwareDirectorTransitionQueued = false;
+
+    auto& director = songaware::SongAwareDirector::instance();
+    if (isTransitionActive()) {
+        director.notifySwitchRejected(targetEffect, nowMs, songaware::SongAwareSuppressedReason::TransitionActive);
+        return false;
+    }
+    if (findById(targetEffect) == nullptr) {
+        director.notifySwitchRejected(targetEffect, nowMs, songaware::SongAwareSuppressedReason::TargetUnavailable);
+        return false;
+    }
+
+#if FEATURE_TRANSITIONS
+    if (!m_transitionEngine) {
+        director.notifySwitchRejected(targetEffect, nowMs, songaware::SongAwareSuppressedReason::SwitchingDisabled);
+        return false;
+    }
+
+    memcpy(m_transitionSourceBuffer, m_leds, sizeof(m_transitionSourceBuffer));
+
+    m_songAwareDirectorTransitionPreparing = true;
+    handleSetEffect(targetEffect);
+    m_songAwareDirectorTransitionPreparing = false;
+
+    const EffectId currentAfterTransitionStart =
+        m_currentEffectValid ? m_validatedEffectId : validateEffectId(m_currentEffect);
+    if (currentAfterTransitionStart != targetEffect) {
+        director.notifySwitchRejected(targetEffect, millis(), songaware::SongAwareSuppressedReason::TargetUnavailable);
+        return false;
+    }
+
+    m_songAwareDirectorTransitionPreparing = true;
+    renderFrame();
+    m_songAwareDirectorTransitionPreparing = false;
+
+    const TransitionType transitionType = songAwareTransitionForReason(reason);
+    m_transitionEngine->startTransition(m_transitionSourceBuffer,
+                                        m_leds,
+                                        m_leds,
+                                        transitionType);
+
+    const uint32_t appliedAtMs = millis();
+    director.notifySwitchApplied(previousEffect,
+                                 targetEffect,
+                                 appliedAtMs,
+                                 getEffectName(currentAfterTransitionStart));
+
+    if (m_transitionEngine->isActive()) {
+        const uint32_t elapsedMs = m_transitionEngine->getElapsedMs();
+        const uint32_t durationMs = elapsedMs + m_transitionEngine->getRemainingMs();
+        const uint32_t startedAtMs = (appliedAtMs >= elapsedMs) ? (appliedAtMs - elapsedMs) : appliedAtMs;
+        director.notifyTransitionStarted(previousEffect, targetEffect, startedAtMs, durationMs);
+        m_songAwareDirectorTransitionActiveNotified = true;
+    } else {
+        director.notifyTransitionCompleted(appliedAtMs);
+        m_songAwareDirectorTransitionActiveNotified = false;
+    }
+
+    LW_LOGI("SongAware Director transition state=%s confidence=%.3f prev=0x%04X target=0x%04X family=%s language=%s reason=%s",
+            songaware::songAwareStateName(director.getStatus().currentSongState),
+            director.getStatus().confidence,
+            previousEffect,
+            targetEffect,
+            targetFamily,
+            targetLanguage,
+            reason);
+    return true;
+#else
+    director.notifySwitchRejected(targetEffect, nowMs, songaware::SongAwareSuppressedReason::SwitchingDisabled);
+    return false;
+#endif
+}
+
+void RendererActor::syncSongAwareDirectorTransitionTelemetry(uint32_t nowMs)
+{
+#if FEATURE_TRANSITIONS
+    auto& director = songaware::SongAwareDirector::instance();
+    if (m_transitionEngine && m_transitionEngine->isActive()) {
+        if (!m_songAwareDirectorTransitionActiveNotified) {
+            const uint32_t elapsedMs = m_transitionEngine->getElapsedMs();
+            const uint32_t durationMs = elapsedMs + m_transitionEngine->getRemainingMs();
+            const uint32_t startedAtMs = (nowMs >= elapsedMs) ? (nowMs - elapsedMs) : nowMs;
+            const EffectId targetEffect =
+                m_currentEffectValid ? m_validatedEffectId : validateEffectId(m_currentEffect);
+            director.notifyTransitionStarted(m_songAwareDirectorPreviousEffect,
+                                             targetEffect,
+                                             startedAtMs,
+                                             durationMs);
+            m_songAwareDirectorTransitionActiveNotified = true;
+        }
+        return;
+    }
+
+    if (m_songAwareDirectorTransitionActiveNotified) {
+        director.notifyTransitionCompleted(nowMs);
+        m_songAwareDirectorTransitionActiveNotified = false;
+        m_songAwareDirectorPreviousEffect = INVALID_EFFECT_ID;
+        m_songAwareDirectorTargetEffect = INVALID_EFFECT_ID;
+    }
+#else
+    (void)nowMs;
+#endif
+}
+#endif
+
 void RendererActor::renderFrame()
 {
     TRACE_SCOPE("render_frame");
@@ -1598,11 +1782,30 @@ void RendererActor::renderFrame()
 #endif
     applyPendingEffectParameterUpdates();
 
+#if FEATURE_AUDIO_SYNC
+    const uint32_t songAwareNowMs = millis();
+    syncSongAwareDirectorTransitionTelemetry(songAwareNowMs);
+    if (processSongAwareDirectorTransition(songAwareNowMs)) {
+#if FEATURE_TRANSITIONS
+        if (m_transitionEngine && m_transitionEngine->isActive()) {
+            m_transitionEngine->update();
+        }
+#endif
+        syncSongAwareDirectorTransitionTelemetry(millis());
+        return;
+    }
+#endif
+
 #if FEATURE_TRANSITIONS
     // EXCLUSIVE MODE: If transition active, ONLY update transition
     // v1 pattern: effect OR transition, never both
     if (m_transitionEngine && m_transitionEngine->isActive()) {
-        m_transitionEngine->update();
+        const bool transitionStillActive = m_transitionEngine->update();
+#if FEATURE_AUDIO_SYNC
+        if (!transitionStillActive) {
+            syncSongAwareDirectorTransitionTelemetry(millis());
+        }
+#endif
         if (millis() - m_hueLastUserSetMs > kHueAutoRotatePauseMs) {
             m_hue += 1;
         }
@@ -1924,6 +2127,41 @@ void RendererActor::renderFrame()
         return;
     }
 
+#if FEATURE_AUDIO_SYNC
+    if (!m_songAwareDirectorTransitionPreparing && !m_songAwareDirectorTransitionQueued) {
+        const EffectId activeEffectForDirector =
+            m_currentEffectValid ? m_validatedEffectId : validateEffectId(m_currentEffect);
+        const auto& ledStats = m_ledDriver.getStats();
+        const uint32_t directorNowMs = millis();
+        syncSongAwareDirectorTransitionTelemetry(directorNowMs);
+        songaware::SongAwareDirectorContext directorContext;
+        directorContext.health.showSkips = ledStats.showSkips;
+        directorContext.health.failures = ledStats.ledShowFailures;
+        directorContext.health.rmtErrors = ledStats.rmtErrors;
+        directorContext.health.underruns = ledStats.rmtUnderruns;
+
+        songaware::SongAwareSwitchRequest switchRequest;
+        if (songaware::SongAwareDirector::instance().evaluateDirector(
+                *audioContextFrame,
+                m_lastMusicalGrid,
+                audioContextAvailable,
+                directorNowMs,
+                activeEffectForDirector,
+                directorContext,
+                switchRequest)) {
+            if (switchRequest.requested && findById(switchRequest.targetEffectId) != nullptr) {
+                queueSongAwareDirectorTransition(switchRequest, activeEffectForDirector);
+                return;
+            } else if (switchRequest.requested) {
+                songaware::SongAwareDirector::instance().notifySwitchRejected(
+                    switchRequest.targetEffectId,
+                    directorNowMs,
+                    songaware::SongAwareSuppressedReason::TargetUnavailable);
+            }
+        }
+    }
+#endif
+
     // Single-effect mode
     // Use cached validation result (set on effect change) to avoid per-frame linear scan
     EffectId safeEffect = m_currentEffectValid ? m_validatedEffectId : validateEffectId(m_currentEffect);
@@ -2030,6 +2268,34 @@ void RendererActor::renderFrame()
             ctx.complexity = mappedComplexity;
             ctx.variation = mappedVariation;
             ctx.gHue = mappedHue;
+        }
+
+        {
+            songaware::SongAwareParams songAwareParams;
+            songAwareParams.effectId = safeEffect;
+            songAwareParams.brightness = ctx.brightness;
+            songAwareParams.speed = ctx.speed;
+            songAwareParams.intensity = ctx.intensity;
+            songAwareParams.saturation = ctx.saturation;
+            songAwareParams.complexity = ctx.complexity;
+            songAwareParams.variation = ctx.variation;
+            songAwareParams.hue = ctx.gHue;
+
+            songaware::SongAwareDirector::instance().apply(
+                *audioContextFrame,
+                m_lastMusicalGrid,
+                audioContextAvailable,
+                static_cast<float>(deltaTimeMs) * 0.001f,
+                millis(),
+                songAwareParams);
+
+            ctx.brightness = songAwareParams.brightness;
+            ctx.speed = songAwareParams.speed;
+            ctx.intensity = songAwareParams.intensity;
+            ctx.saturation = songAwareParams.saturation;
+            ctx.complexity = songAwareParams.complexity;
+            ctx.variation = songAwareParams.variation;
+            ctx.gHue = songAwareParams.hue;
         }
 #endif
 

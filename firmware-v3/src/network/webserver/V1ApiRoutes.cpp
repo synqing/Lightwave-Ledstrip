@@ -30,6 +30,7 @@
 #include "handlers/ShowHandlers.h"
 #include "handlers/ModifierHandlers.h"
 #include "handlers/ColorCorrectionHandlers.h"
+#include "handlers/SongAwareHandlers.h"
 #include "../../effects/enhancement/EdgeMixer.h"
 #include "../../core/actors/ActorSystem.h"
 #include "handlers/StimulusHandlers.h"
@@ -255,6 +256,69 @@ void V1ApiRoutes::registerRoutes(
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
             handlers::ParameterHandlers::handleSet(request, data, len, ctx.orchestrator, broadcastStatus);
+        }
+    );
+
+    // Song-aware director config/status (runtime-only, no persistence)
+    registry.onGet("/api/v1/songAware/config", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::SongAwareHandlers::handleGetConfig(request);
+    });
+
+    registry.onPost("/api/v1/songAware/config",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::SongAwareHandlers::handleSetConfig(request, data, len);
+            broadcastStatus();
+        }
+    );
+
+    registry.onPatch("/api/v1/songAware/config",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::SongAwareHandlers::handleSetConfig(request, data, len);
+            broadcastStatus();
+        }
+    );
+
+    registry.onGet("/api/v1/songAware/status", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::SongAwareHandlers::handleGetStatus(request);
+    });
+
+    registry.onGet("/api/v1/songAware/allowlist", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::SongAwareHandlers::handleGetAllowlist(request);
+    });
+
+    registry.onPatch("/api/v1/songAware/allowlist",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::SongAwareHandlers::handleSetAllowlist(request, data, len);
+            broadcastStatus();
+        }
+    );
+
+    registry.onPost("/api/v1/songAware/allowlist/reset",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t*, size_t, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::SongAwareHandlers::handleResetAllowlist(request);
+            broadcastStatus();
         }
     );
 

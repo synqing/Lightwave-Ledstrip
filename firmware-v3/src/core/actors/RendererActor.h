@@ -83,6 +83,7 @@
 namespace lightwaveos { namespace zones { class ZoneComposer; } }
 namespace lightwaveos { namespace transitions { class TransitionEngine; enum class TransitionType : uint8_t; } }
 namespace lightwaveos { namespace plugins { class IEffect; namespace runtime { class LegacyEffectAdapter; } } }
+namespace lightwaveos { namespace songaware { struct SongAwareSwitchRequest; } }
 // Note: AudioActor forward declaration removed - use #include "../../audio/AudioActor.h" instead
 // to avoid conflict between class forward declaration and using-alias in lightwaveos::audio namespace
 
@@ -774,6 +775,10 @@ private:
                                        bool available,
                                        bool trinityActive,
                                        bool includeBehaviorContext);
+    void queueSongAwareDirectorTransition(const songaware::SongAwareSwitchRequest& request,
+                                          EffectId previousEffectId);
+    bool processSongAwareDirectorTransition(uint32_t nowMs);
+    void syncSongAwareDirectorTransitionTelemetry(uint32_t nowMs);
 #endif
 
     /**
@@ -1013,6 +1018,15 @@ public:
     // ========================================================================
 
 #if FEATURE_AUDIO_SYNC
+    bool m_songAwareDirectorTransitionQueued = false;
+    bool m_songAwareDirectorTransitionPreparing = false;
+    bool m_songAwareDirectorTransitionActiveNotified = false;
+    EffectId m_songAwareDirectorPreviousEffect = INVALID_EFFECT_ID;
+    EffectId m_songAwareDirectorTargetEffect = INVALID_EFFECT_ID;
+    const char* m_songAwareDirectorTargetFamily = "none";
+    const char* m_songAwareDirectorTargetLanguage = "none";
+    const char* m_songAwareDirectorTransitionReason = "none";
+
     /**
      * MusicalGrid PLL - owned by renderer for 120 FPS Tick()
      *

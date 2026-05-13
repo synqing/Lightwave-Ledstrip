@@ -24,6 +24,7 @@
 #include "../effects/enhancement/EdgeMixer.h"
 #include "../effects/enhancement/ColorCorrectionEngine.h"
 #include "../core/narrative/NarrativeEngine.h"
+#include "../core/songaware/SongAwareDirector.h"
 #include "../core/shows/BuiltinShows.h"
 #include "../core/shows/Prim8Adapter.h"
 #include "../core/shows/ShowBundleParser.h"
@@ -114,6 +115,226 @@ static void appendColorCorrectionConfig(JsonObject data,
     data["vClampEnabled"] = cfg.vClampEnabled;
     data["maxBrightness"] = cfg.maxBrightness;
     data["saturationBoostAmount"] = cfg.saturationBoostAmount;
+}
+
+static lightwaveos::songaware::SongAwareRuntimeState g_songAwareRestorePoint;
+static bool g_songAwareRestorePointValid = false;
+
+static void captureSongAwareRestorePoint() {
+    g_songAwareRestorePoint = lightwaveos::songaware::SongAwareDirector::instance().exportRuntimeState();
+    g_songAwareRestorePointValid = true;
+}
+
+static void appendSongAwareConfig(JsonObject data,
+                                  const lightwaveos::songaware::SongAwareConfig& config) {
+    data["enabled"] = config.enabled;
+    data["mode"] = lightwaveos::songaware::songAwareModeName(config.mode);
+    data["profile"] = lightwaveos::songaware::songAwareProfileName(config.profile);
+    data["switchingEnabled"] = config.switchingEnabled;
+    data["familyMorphing"] = config.familyMorphing;
+    data["constrainedSwitching"] = config.constrainedSwitching;
+    data["sensitivity"] = config.sensitivity;
+    data["intensityScalar"] = config.intensityScalar;
+    data["motionScalar"] = config.motionScalar;
+    data["confidenceFloor"] = config.confidenceFloor;
+}
+
+static void appendSongAwarePolicy(JsonObject data,
+                                  const lightwaveos::songaware::SongAwarePolicySnapshot& policy) {
+    data["state"] = lightwaveos::songaware::songAwareStateName(policy.state);
+    data["effectId"] = policy.effectId;
+    data["family"] = policy.family;
+    data["visualLanguage"] = policy.visualLanguage;
+    data["reason"] = lightwaveos::songaware::songAwareSwitchReasonName(policy.reason);
+    data["minConfidence"] = policy.minConfidence;
+    data["enabled"] = policy.enabled;
+}
+
+static void appendSongAwareAllowlist(JsonObject data,
+                                     const lightwaveos::songaware::SongAwareAllowlistSnapshot& allowlist) {
+    data["count"] = allowlist.count;
+    JsonArray policies = data["policies"].to<JsonArray>();
+    for (uint8_t i = 0; i < allowlist.count; ++i) {
+        JsonObject item = policies.add<JsonObject>();
+        appendSongAwarePolicy(item, allowlist.policies[i]);
+    }
+}
+
+static void appendSongAwareHealth(JsonObject data,
+                                  const lightwaveos::songaware::SongAwareStatus& status) {
+    data["healthDegraded"] = status.healthDegraded;
+    data["showSkips"] = status.showSkips;
+    data["failures"] = status.failures;
+    data["rmtErrors"] = status.rmtErrors;
+    data["underruns"] = status.underruns;
+    data["healthCleanForMs"] = status.healthCleanForMs;
+    data["healthCleanWindowRemainingMs"] = status.healthCleanWindowRemainingMs;
+}
+
+static void appendSongAwareStatus(JsonObject data,
+                                  const lightwaveos::songaware::SongAwareStatus& status) {
+    data["enabled"] = status.enabled;
+    data["mode"] = lightwaveos::songaware::songAwareModeName(status.effectiveMode);
+    data["effectiveMode"] = lightwaveos::songaware::songAwareModeName(status.effectiveMode);
+    data["profile"] = lightwaveos::songaware::songAwareProfileName(status.profile);
+    data["owner"] = lightwaveos::songaware::songAwareOwnerName(status.owner);
+    data["suppressedReason"] = lightwaveos::songaware::songAwareSuppressedReasonName(status.suppressedReason);
+    data["previousSuppressedReason"] =
+        lightwaveos::songaware::songAwareSuppressedReasonName(status.previousSuppressedReason);
+    data["classificationReason"] =
+        lightwaveos::songaware::songAwareClassificationReasonName(status.classificationReason);
+    data["rawSongState"] = lightwaveos::songaware::songAwareStateName(status.rawSongState);
+    data["previousSongState"] = lightwaveos::songaware::songAwareStateName(status.previousSongState);
+    data["currentSongState"] = lightwaveos::songaware::songAwareStateName(status.currentSongState);
+    data["candidateSongState"] = lightwaveos::songaware::songAwareStateName(status.candidateSongState);
+    data["intent"] = lightwaveos::songaware::songAwareIntentName(status.intent);
+    data["actionPlan"] = lightwaveos::songaware::songAwareActionPlanName(status.actionPlan);
+    data["boundaryGate"] = lightwaveos::songaware::songAwareBoundaryGateName(status.boundaryGate);
+    data["boundaryReady"] = status.boundaryReady;
+    data["waitingForBoundary"] = status.waitingForBoundary;
+    data["boundaryConfidence"] = status.boundaryConfidence;
+    data["confidence"] = status.confidence;
+    data["selectionScore"] = status.selectionScore;
+    data["lastAction"] = lightwaveos::songaware::songAwareLastActionName(status.lastAction);
+    data["activeEffectId"] = status.activeEffectId;
+    data["previousEffectId"] = status.previousEffectId;
+    data["selectedEffectId"] = status.selectedEffectId;
+    data["selectedFamily"] = status.selectedFamily;
+    data["selectedVisualLanguage"] = status.selectedVisualLanguage;
+    data["lastSwitchReason"] = status.lastSwitchReason;
+    data["parameterUpdates"] = status.parameterUpdates;
+    data["automaticEffectSwitches"] = status.automaticEffectSwitches;
+    data["lastDecisionAtMs"] = status.lastDecisionAtMs;
+    data["lastSwitchAtMs"] = status.lastSwitchAtMs;
+    data["stateAgeMs"] = status.stateAgeMs;
+    data["candidateAgeMs"] = status.candidateAgeMs;
+    data["candidateHoldRemainingMs"] = status.candidateHoldRemainingMs;
+    data["dwellRemainingMs"] = status.dwellRemainingMs;
+    data["cooldownRemainingMs"] = status.cooldownRemainingMs;
+    data["bootGraceRemainingMs"] = status.bootGraceRemainingMs;
+    data["enableGraceRemainingMs"] = status.enableGraceRemainingMs;
+    data["switchWindowRemainingMs"] = status.switchWindowRemainingMs;
+    data["switchesInWindow"] = status.switchesInWindow;
+    data["maxSwitchesPerWindow"] = status.maxSwitchesPerWindow;
+    data["antiThrashRemainingMs"] = status.antiThrashRemainingMs;
+    data["lastSwitchFromEffectId"] = status.lastSwitchFromEffectId;
+    data["lastSwitchToEffectId"] = status.lastSwitchToEffectId;
+    data["transitionActive"] = status.transitionActive;
+    data["transitionPreviousEffectId"] = status.transitionPreviousEffectId;
+    data["transitionTargetEffectId"] = status.transitionTargetEffectId;
+    data["transitionStartedAtMs"] = status.transitionStartedAtMs;
+    data["transitionDurationMs"] = status.transitionDurationMs;
+    data["transitionRemainingMs"] = status.transitionRemainingMs;
+    data["transitionProgress"] = status.transitionProgress;
+    data["rms"] = status.rms;
+    data["flux"] = status.flux;
+    data["bpm"] = status.bpm;
+    data["audioConfidence"] = status.audioConfidence;
+    JsonObject health = data["health"].to<JsonObject>();
+    appendSongAwareHealth(health, status);
+}
+
+static void appendSongAwareDebug(JsonObject data,
+                                 const lightwaveos::songaware::SongAwareDebugSnapshot& debug) {
+    JsonObject config = data["config"].to<JsonObject>();
+    appendSongAwareConfig(config, debug.config);
+    JsonObject status = data["status"].to<JsonObject>();
+    appendSongAwareStatus(status, debug.status);
+    JsonObject policy = data["policy"].to<JsonObject>();
+    policy["bootGraceMs"] = debug.bootGraceMs;
+    policy["postEnableGraceMs"] = debug.postEnableGraceMs;
+    policy["stableStateHoldMs"] = debug.stableStateHoldMs;
+    policy["dropStateHoldMs"] = debug.dropStateHoldMs;
+    policy["minimumDwellMs"] = debug.minimumDwellMs;
+    policy["switchCooldownMs"] = debug.switchCooldownMs;
+    policy["switchWindowMs"] = debug.switchWindowMs;
+    policy["maxSwitchesPerWindow"] = debug.maxSwitchesPerWindow;
+    policy["antiThrashWindowMs"] = debug.antiThrashWindowMs;
+    policy["healthCleanWindowMs"] = debug.healthCleanWindowMs;
+    JsonObject allowlist = data["allowlist"].to<JsonObject>();
+    appendSongAwareAllowlist(allowlist, debug.allowlist);
+}
+
+static bool applySongAwareConfigJson(JsonObjectConst root,
+                                     lightwaveos::songaware::SongAwareConfig& config,
+                                     const char** error) {
+    if (root.containsKey("enabled")) {
+        if (!root["enabled"].is<bool>()) {
+            *error = "enabled must be bool";
+            return false;
+        }
+        config.enabled = root["enabled"].as<bool>();
+    }
+    if (root.containsKey("mode")) {
+        const char* value = root["mode"].as<const char*>();
+        bool ok = false;
+        bool profileOk = false;
+        const auto legacyProfile = lightwaveos::songaware::parseSongAwareProfile(value, &profileOk);
+        config.mode = lightwaveos::songaware::parseSongAwareMode(value, &ok);
+        if (!ok) {
+            *error = "mode must be off, assist, or director";
+            return false;
+        }
+        if (profileOk && value &&
+            (strcmp(value, "subtle") == 0 || strcmp(value, "balanced") == 0 ||
+             strcmp(value, "high") == 0 || strcmp(value, "high_energy") == 0)) {
+            config.profile = legacyProfile;
+            config.mode = lightwaveos::songaware::SongAwareMode::Assist;
+        }
+    }
+    if (root.containsKey("profile")) {
+        const char* value = root["profile"].as<const char*>();
+        bool ok = false;
+        config.profile = lightwaveos::songaware::parseSongAwareProfile(value, &ok);
+        if (!ok) {
+            *error = "profile must be subtle, balanced, or high";
+            return false;
+        }
+    }
+    if (root.containsKey("familyMorphing")) {
+        if (!root["familyMorphing"].is<bool>()) {
+            *error = "familyMorphing must be bool";
+            return false;
+        }
+        config.familyMorphing = root["familyMorphing"].as<bool>();
+    }
+    if (root.containsKey("constrainedSwitching")) {
+        if (!root["constrainedSwitching"].is<bool>()) {
+            *error = "constrainedSwitching must be bool";
+            return false;
+        }
+        config.constrainedSwitching = root["constrainedSwitching"].as<bool>();
+        config.switchingEnabled = config.constrainedSwitching;
+    }
+    if (root.containsKey("switchingEnabled")) {
+        if (!root["switchingEnabled"].is<bool>()) {
+            *error = "switchingEnabled must be bool";
+            return false;
+        }
+        config.switchingEnabled = root["switchingEnabled"].as<bool>();
+        config.constrainedSwitching = config.switchingEnabled;
+    }
+
+    const char* floatFields[] = {"sensitivity", "intensityScalar", "motionScalar", "confidenceFloor"};
+    for (const char* field : floatFields) {
+        if (root.containsKey(field)) {
+            if (!root[field].is<float>()) {
+                *error = "scalar fields must be numeric";
+                return false;
+            }
+            const float value = root[field].as<float>();
+            if (value < 0.0f || value > 1.0f) {
+                *error = "scalar fields must be in range 0.0-1.0";
+                return false;
+            }
+            if (strcmp(field, "sensitivity") == 0) config.sensitivity = value;
+            else if (strcmp(field, "intensityScalar") == 0) config.intensityScalar = value;
+            else if (strcmp(field, "motionScalar") == 0) config.motionScalar = value;
+            else if (strcmp(field, "confidenceFloor") == 0) config.confidenceFloor = value;
+        }
+    }
+
+    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -622,6 +843,146 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
         char buf[32];
         snprintf(buf, sizeof(buf), "{\"enabled\":%s}", enabled ? "true" : "false");
         serialJsonResponse(type, reqId, buf);
+    }
+    // ------------------------------------------------------------------
+    // songAware.* -- runtime-only Song-Aware Director control/readback.
+    // ------------------------------------------------------------------
+    else if (strcmp(type, "songAware.config.get") == 0) {
+        const auto config = lightwaveos::songaware::SongAwareDirector::instance().getConfig();
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        appendSongAwareConfig(data, config);
+        serialJsonDocResponse("songAware.config", reqId, respDoc);
+    }
+    else if (strcmp(type, "songAware.config.set") == 0) {
+        auto config = lightwaveos::songaware::SongAwareDirector::instance().getConfig();
+        const char* error = nullptr;
+        if (!applySongAwareConfigJson(doc.as<JsonObjectConst>(), config, &error)) {
+            serialJsonError(reqId, error ? error : "invalid songAware config");
+            return;
+        }
+        captureSongAwareRestorePoint();
+        lightwaveos::songaware::SongAwareDirector::instance().setConfig(config);
+
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        appendSongAwareConfig(data, config);
+        serialJsonDocResponse("songAware.config", reqId, respDoc);
+    }
+    else if (strcmp(type, "songAware.status") == 0) {
+        const auto status = lightwaveos::songaware::SongAwareDirector::instance().getStatus();
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        appendSongAwareStatus(data, status);
+        serialJsonDocResponse(type, reqId, respDoc);
+    }
+    else if (strcmp(type, "songAware.reset") == 0) {
+        captureSongAwareRestorePoint();
+        lightwaveos::songaware::SongAwareDirector::instance().reset();
+        const auto status = lightwaveos::songaware::SongAwareDirector::instance().getStatus();
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        data["reset"] = true;
+        JsonObject statusObj = data["status"].to<JsonObject>();
+        appendSongAwareStatus(statusObj, status);
+        serialJsonDocResponse(type, reqId, respDoc);
+    }
+    else if (strcmp(type, "songAware.restore") == 0) {
+        if (!g_songAwareRestorePointValid) {
+            serialJsonError(reqId, "no restore point captured in this serial JSON session");
+            return;
+        }
+        lightwaveos::songaware::SongAwareDirector::instance().restoreRuntimeState(g_songAwareRestorePoint);
+        const auto status = lightwaveos::songaware::SongAwareDirector::instance().getStatus();
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        data["restored"] = true;
+        JsonObject statusObj = data["status"].to<JsonObject>();
+        appendSongAwareStatus(statusObj, status);
+        serialJsonDocResponse(type, reqId, respDoc);
+    }
+    else if (strcmp(type, "songAware.debug") == 0) {
+        const auto debug = lightwaveos::songaware::SongAwareDirector::instance().getDebugSnapshot();
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        appendSongAwareDebug(data, debug);
+        serialJsonDocResponse(type, reqId, respDoc);
+    }
+    else if (strcmp(type, "songAware.policy") == 0) {
+        const auto debug = lightwaveos::songaware::SongAwareDirector::instance().getDebugSnapshot();
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        data["bootGraceMs"] = debug.bootGraceMs;
+        data["postEnableGraceMs"] = debug.postEnableGraceMs;
+        data["stableStateHoldMs"] = debug.stableStateHoldMs;
+        data["dropStateHoldMs"] = debug.dropStateHoldMs;
+        data["minimumDwellMs"] = debug.minimumDwellMs;
+        data["switchCooldownMs"] = debug.switchCooldownMs;
+        data["switchWindowMs"] = debug.switchWindowMs;
+        data["maxSwitchesPerWindow"] = debug.maxSwitchesPerWindow;
+        data["antiThrashWindowMs"] = debug.antiThrashWindowMs;
+        data["healthCleanWindowMs"] = debug.healthCleanWindowMs;
+        data["allowlistCount"] = debug.allowlist.count;
+        serialJsonDocResponse(type, reqId, respDoc);
+    }
+    else if (strcmp(type, "songAware.allowlist") == 0) {
+        const auto allowlist = lightwaveos::songaware::SongAwareDirector::instance().getAllowlistSnapshot();
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        appendSongAwareAllowlist(data, allowlist);
+        serialJsonDocResponse(type, reqId, respDoc);
+    }
+    else if (strcmp(type, "songAware.allowlist.set") == 0) {
+        if (!doc["state"].is<const char*>() || !doc["enabled"].is<bool>()) {
+            serialJsonError(reqId, "state and enabled are required");
+            return;
+        }
+        bool ok = false;
+        const auto state =
+            lightwaveos::songaware::parseSongAwareState(doc["state"].as<const char*>(), &ok);
+        if (!ok) {
+            serialJsonError(reqId, "invalid SongAware state");
+            return;
+        }
+        captureSongAwareRestorePoint();
+        lightwaveos::songaware::SongAwareDirector::instance().setPolicyAllowed(
+            state,
+            doc["enabled"].as<bool>());
+        const auto allowlist = lightwaveos::songaware::SongAwareDirector::instance().getAllowlistSnapshot();
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        appendSongAwareAllowlist(data, allowlist);
+        serialJsonDocResponse("songAware.allowlist", reqId, respDoc);
+    }
+    else if (strcmp(type, "songAware.allowlist.reset") == 0) {
+        captureSongAwareRestorePoint();
+        lightwaveos::songaware::SongAwareDirector::instance().resetPolicyAllowlist();
+        const auto allowlist = lightwaveos::songaware::SongAwareDirector::instance().getAllowlistSnapshot();
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        appendSongAwareAllowlist(data, allowlist);
+        serialJsonDocResponse("songAware.allowlist", reqId, respDoc);
+    }
+    else if (strcmp(type, "songAware.health") == 0) {
+        const auto status = lightwaveos::songaware::SongAwareDirector::instance().getStatus();
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        appendSongAwareHealth(data, status);
+        serialJsonDocResponse(type, reqId, respDoc);
+    }
+    else if (strcmp(type, "songAware.counters.reset") == 0 ||
+             strcmp(type, "songAware.countersReset") == 0) {
+        captureSongAwareRestorePoint();
+        lightwaveos::songaware::SongAwareDirector::instance().resetCounters();
+        const auto status = lightwaveos::songaware::SongAwareDirector::instance().getStatus();
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        data["reset"] = true;
+        JsonObject health = data["health"].to<JsonObject>();
+        appendSongAwareHealth(health, status);
+        data["parameterUpdates"] = status.parameterUpdates;
+        data["automaticEffectSwitches"] = status.automaticEffectSwitches;
+        serialJsonDocResponse("songAware.counters.reset", reqId, respDoc);
     }
     // ------------------------------------------------------------------
     // colorCorrection.getConfig / colorCorrection.setConfig

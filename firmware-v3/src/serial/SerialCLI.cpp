@@ -24,6 +24,7 @@
 #include "core/actors/RendererActor.h"
 #include "core/narrative/NarrativeEngine.h"
 #include "core/persistence/ZoneConfigManager.h"
+#include "core/songaware/SongAwareDirector.h"
 #include "core/shows/DynamicShowStore.h"
 
 #include "effects/enhancement/EdgeMixer.h"
@@ -89,12 +90,261 @@ namespace serial {
 
 namespace {
 
+lightwaveos::songaware::SongAwareRuntimeState g_songAwareRestorePoint;
+bool g_songAwareRestorePointValid = false;
+
 const char* boolName(bool value) {
     return value ? "true" : "false";
 }
 
 const char* onOffName(bool value) {
     return value ? "on" : "off";
+}
+
+void printSongAwareStatus() {
+    const auto cfg = lightwaveos::songaware::SongAwareDirector::instance().getConfig();
+    const auto st = lightwaveos::songaware::SongAwareDirector::instance().getStatus();
+    const char* activeEffectName = st.activeEffectName;
+    RendererActor* ren = ActorSystem::instance().getRenderer();
+    if (ren != nullptr) {
+        activeEffectName = ren->getEffectName(static_cast<EffectId>(st.activeEffectId));
+    }
+    Serial.printf("songAware: enabled=%s mode=%s profile=%s switchingEnabled=%s familyMorphing=%s sensitivity=%.3f intensityScalar=%.3f motionScalar=%.3f confidenceFloor=%.3f\n",
+                  boolName(cfg.enabled),
+                  lightwaveos::songaware::songAwareModeName(cfg.mode),
+                  lightwaveos::songaware::songAwareProfileName(cfg.profile),
+                  boolName(cfg.switchingEnabled),
+                  boolName(cfg.familyMorphing),
+                  cfg.sensitivity,
+                  cfg.intensityScalar,
+                  cfg.motionScalar,
+                  cfg.confidenceFloor);
+    Serial.printf("songAware_status: mode=%s profile=%s owner=%s suppressed=%s state=%s intent=%s confidence=%.3f lastAction=%s actionPlan=%s boundary=%s ready=%s activeEffect=0x%04X activeEffectName=\"%s\" parameterUpdates=%lu automaticEffectSwitches=%lu lastDecisionAtMs=%lu\n",
+                  lightwaveos::songaware::songAwareModeName(st.effectiveMode),
+                  lightwaveos::songaware::songAwareProfileName(st.profile),
+                  lightwaveos::songaware::songAwareOwnerName(st.owner),
+                  lightwaveos::songaware::songAwareSuppressedReasonName(st.suppressedReason),
+                  lightwaveos::songaware::songAwareStateName(st.currentSongState),
+                  lightwaveos::songaware::songAwareIntentName(st.intent),
+                  st.confidence,
+                  lightwaveos::songaware::songAwareLastActionName(st.lastAction),
+                  lightwaveos::songaware::songAwareActionPlanName(st.actionPlan),
+                  lightwaveos::songaware::songAwareBoundaryGateName(st.boundaryGate),
+                  boolName(st.boundaryReady),
+                  static_cast<unsigned>(st.activeEffectId),
+                  activeEffectName,
+                  static_cast<unsigned long>(st.parameterUpdates),
+                  static_cast<unsigned long>(st.automaticEffectSwitches),
+                  static_cast<unsigned long>(st.lastDecisionAtMs));
+    Serial.printf("songAware_director: selectedEffect=0x%04X selectedFamily=%s selectedVisualLanguage=%s lastSwitchAtMs=%lu dwellRemainingMs=%lu cooldownRemainingMs=%lu lastSwitchReason=%s\n",
+                  static_cast<unsigned>(st.selectedEffectId),
+                  st.selectedFamily,
+                  st.selectedVisualLanguage,
+                  static_cast<unsigned long>(st.lastSwitchAtMs),
+                  static_cast<unsigned long>(st.dwellRemainingMs),
+                  static_cast<unsigned long>(st.cooldownRemainingMs),
+                  st.lastSwitchReason);
+    Serial.printf("songAware_health: show_skips=%lu failures=%lu rmt_errors=%lu underruns=%lu\n",
+                  static_cast<unsigned long>(st.showSkips),
+                  static_cast<unsigned long>(st.failures),
+                  static_cast<unsigned long>(st.rmtErrors),
+                  static_cast<unsigned long>(st.underruns));
+    Serial.printf("songAware_audio: RMS=%.3f flux=%.3f BPM=%.1f confidence=%.3f\n",
+                  st.rms,
+                  st.flux,
+                  st.bpm,
+                  st.audioConfidence);
+}
+
+void printSongAwareCompactStatus() {
+    const auto cfg = lightwaveos::songaware::SongAwareDirector::instance().getConfig();
+    const auto st = lightwaveos::songaware::SongAwareDirector::instance().getStatus();
+    Serial.printf("sa: enabled=%s mode=%s profile=%s switching=%s state=%s intent=%s confidence=%.2f gate=%s boundary=%s action=%s\n",
+                  boolName(cfg.enabled),
+                  lightwaveos::songaware::songAwareModeName(cfg.mode),
+                  lightwaveos::songaware::songAwareProfileName(cfg.profile),
+                  boolName(cfg.switchingEnabled),
+                  lightwaveos::songaware::songAwareStateName(st.currentSongState),
+                  lightwaveos::songaware::songAwareIntentName(st.intent),
+                  st.confidence,
+                  lightwaveos::songaware::songAwareSuppressedReasonName(st.suppressedReason),
+                  lightwaveos::songaware::songAwareBoundaryGateName(st.boundaryGate),
+                  lightwaveos::songaware::songAwareActionPlanName(st.actionPlan));
+}
+
+void captureSongAwareRestorePoint() {
+    g_songAwareRestorePoint = lightwaveos::songaware::SongAwareDirector::instance().exportRuntimeState();
+    g_songAwareRestorePointValid = true;
+}
+
+void printSongAwarePolicySnapshot(const lightwaveos::songaware::SongAwarePolicySnapshot& policy) {
+    Serial.printf("  state=%s enabled=%s effect=0x%04X family=%s visualLanguage=%s reason=%s minConfidence=%.3f\n",
+                  lightwaveos::songaware::songAwareStateName(policy.state),
+                  boolName(policy.enabled),
+                  static_cast<unsigned>(policy.effectId),
+                  policy.family,
+                  policy.visualLanguage,
+                  lightwaveos::songaware::songAwareSwitchReasonName(policy.reason),
+                  policy.minConfidence);
+}
+
+void printSongAwareAllowlist() {
+    const auto allowlist = lightwaveos::songaware::SongAwareDirector::instance().getAllowlistSnapshot();
+    Serial.printf("songAware_allowlist: count=%u\n", allowlist.count);
+    for (uint8_t i = 0; i < allowlist.count; ++i) {
+        printSongAwarePolicySnapshot(allowlist.policies[i]);
+    }
+}
+
+void printSongAwarePolicy() {
+    const auto debug = lightwaveos::songaware::SongAwareDirector::instance().getDebugSnapshot();
+    Serial.println("songAware_policy:");
+    Serial.printf("  bootGraceMs=%lu postEnableGraceMs=%lu stableStateHoldMs=%lu dropStateHoldMs=%lu\n",
+                  static_cast<unsigned long>(debug.bootGraceMs),
+                  static_cast<unsigned long>(debug.postEnableGraceMs),
+                  static_cast<unsigned long>(debug.stableStateHoldMs),
+                  static_cast<unsigned long>(debug.dropStateHoldMs));
+    Serial.printf("  minimumDwellMs=%lu switchCooldownMs=%lu switchWindowMs=%lu maxSwitchesPerWindow=%u\n",
+                  static_cast<unsigned long>(debug.minimumDwellMs),
+                  static_cast<unsigned long>(debug.switchCooldownMs),
+                  static_cast<unsigned long>(debug.switchWindowMs),
+                  debug.maxSwitchesPerWindow);
+    Serial.printf("  antiThrashWindowMs=%lu healthCleanWindowMs=%lu allowlistCount=%u\n",
+                  static_cast<unsigned long>(debug.antiThrashWindowMs),
+                  static_cast<unsigned long>(debug.healthCleanWindowMs),
+                  debug.allowlist.count);
+}
+
+void printSongAwareHealth() {
+    const auto st = lightwaveos::songaware::SongAwareDirector::instance().getStatus();
+    Serial.printf("songAware_health: degraded=%s show_skips=%lu failures=%lu rmt_errors=%lu underruns=%lu cleanForMs=%lu cleanWindowRemainingMs=%lu\n",
+                  boolName(st.healthDegraded),
+                  static_cast<unsigned long>(st.showSkips),
+                  static_cast<unsigned long>(st.failures),
+                  static_cast<unsigned long>(st.rmtErrors),
+                  static_cast<unsigned long>(st.underruns),
+                  static_cast<unsigned long>(st.healthCleanForMs),
+                  static_cast<unsigned long>(st.healthCleanWindowRemainingMs));
+}
+
+void printSongAwareDebug() {
+    const auto st = lightwaveos::songaware::SongAwareDirector::instance().getStatus();
+    printSongAwareStatus();
+    Serial.printf("songAware_debug: rawState=%s previousState=%s candidateState=%s classificationReason=%s previousSuppressed=%s selectionScore=%.3f\n",
+                  lightwaveos::songaware::songAwareStateName(st.rawSongState),
+                  lightwaveos::songaware::songAwareStateName(st.previousSongState),
+                  lightwaveos::songaware::songAwareStateName(st.candidateSongState),
+                  lightwaveos::songaware::songAwareClassificationReasonName(st.classificationReason),
+                  lightwaveos::songaware::songAwareSuppressedReasonName(st.previousSuppressedReason),
+                  st.selectionScore);
+    Serial.printf("songAware_debug_gates: stateAgeMs=%lu candidateAgeMs=%lu candidateHoldRemainingMs=%lu bootGraceRemainingMs=%lu enableGraceRemainingMs=%lu antiThrashRemainingMs=%lu\n",
+                  static_cast<unsigned long>(st.stateAgeMs),
+                  static_cast<unsigned long>(st.candidateAgeMs),
+                  static_cast<unsigned long>(st.candidateHoldRemainingMs),
+                  static_cast<unsigned long>(st.bootGraceRemainingMs),
+                  static_cast<unsigned long>(st.enableGraceRemainingMs),
+                  static_cast<unsigned long>(st.antiThrashRemainingMs));
+    Serial.printf("songAware_debug_switching: switchesInWindow=%u maxSwitchesPerWindow=%u switchWindowRemainingMs=%lu previousEffect=0x%04X lastFrom=0x%04X lastTo=0x%04X\n",
+                  st.switchesInWindow,
+                  st.maxSwitchesPerWindow,
+                  static_cast<unsigned long>(st.switchWindowRemainingMs),
+                  static_cast<unsigned>(st.previousEffectId),
+                  static_cast<unsigned>(st.lastSwitchFromEffectId),
+                  static_cast<unsigned>(st.lastSwitchToEffectId));
+    Serial.printf("songAware_debug_transition: active=%s previous=0x%04X target=0x%04X startedAtMs=%lu durationMs=%lu remainingMs=%lu progress=%.3f\n",
+                  boolName(st.transitionActive),
+                  static_cast<unsigned>(st.transitionPreviousEffectId),
+                  static_cast<unsigned>(st.transitionTargetEffectId),
+                  static_cast<unsigned long>(st.transitionStartedAtMs),
+                  static_cast<unsigned long>(st.transitionDurationMs),
+                  static_cast<unsigned long>(st.transitionRemainingMs),
+                  st.transitionProgress);
+    printSongAwarePolicy();
+    printSongAwareAllowlist();
+}
+
+void printSongAwareDebugLevel(uint8_t level) {
+    switch (level) {
+        case 0:
+            printSongAwareCompactStatus();
+            break;
+        case 1:
+            printSongAwareStatus();
+            break;
+        case 2:
+            printSongAwarePolicy();
+            printSongAwareAllowlist();
+            break;
+        case 3:
+            printSongAwareHealth();
+            break;
+        case 4:
+        default:
+            printSongAwareDebug();
+            break;
+    }
+}
+
+void restoreSongAwareSafeBaseline(ActorSystem& actors) {
+    auto cfg = lightwaveos::songaware::SongAwareDirector::instance().getConfig();
+    cfg.enabled = false;
+    cfg.mode = lightwaveos::songaware::SongAwareMode::Off;
+    cfg.familyMorphing = false;
+    cfg.constrainedSwitching = false;
+    cfg.switchingEnabled = false;
+    lightwaveos::songaware::SongAwareDirector::instance().setConfig(cfg);
+    lightwaveos::songaware::SongAwareDirector::instance().resetCounters();
+
+    actors.setEffect(EID_SB_K1_WAVEFORM);
+    actors.setBrightness(160);
+    actors.setSpeed(27);
+    actors.setIntensity(128);
+    actors.setSaturation(128);
+    actors.setComplexity(128);
+    actors.setVariation(0);
+    actors.setPalette(10);
+    actors.setEdgeMixerMode(static_cast<uint8_t>(lightwaveos::enhancement::EdgeMixerMode::MIRROR));
+    actors.setEdgeMixerSpatial(static_cast<uint8_t>(lightwaveos::enhancement::EdgeMixerSpatial::UNIFORM));
+    actors.setEdgeMixerTemporal(static_cast<uint8_t>(lightwaveos::enhancement::EdgeMixerTemporal::STATIC));
+}
+
+void cycleSongAwareMode() {
+    captureSongAwareRestorePoint();
+    auto cfg = lightwaveos::songaware::SongAwareDirector::instance().getConfig();
+    if (!cfg.enabled || cfg.mode == lightwaveos::songaware::SongAwareMode::Off) {
+        cfg.enabled = true;
+        cfg.mode = lightwaveos::songaware::SongAwareMode::Assist;
+    } else if (cfg.mode == lightwaveos::songaware::SongAwareMode::Assist) {
+        cfg.enabled = true;
+        cfg.mode = lightwaveos::songaware::SongAwareMode::Director;
+    } else {
+        cfg.enabled = false;
+        cfg.mode = lightwaveos::songaware::SongAwareMode::Off;
+        cfg.switchingEnabled = false;
+        cfg.constrainedSwitching = false;
+    }
+    cfg.familyMorphing = false;
+    lightwaveos::songaware::SongAwareDirector::instance().setConfig(cfg);
+    printSongAwareCompactStatus();
+}
+
+void cycleSongAwareProfile() {
+    captureSongAwareRestorePoint();
+    auto cfg = lightwaveos::songaware::SongAwareDirector::instance().getConfig();
+    switch (cfg.profile) {
+        case lightwaveos::songaware::SongAwareProfile::Subtle:
+            cfg.profile = lightwaveos::songaware::SongAwareProfile::Balanced;
+            break;
+        case lightwaveos::songaware::SongAwareProfile::Balanced:
+            cfg.profile = lightwaveos::songaware::SongAwareProfile::High;
+            break;
+        case lightwaveos::songaware::SongAwareProfile::High:
+        default:
+            cfg.profile = lightwaveos::songaware::SongAwareProfile::Subtle;
+            break;
+    }
+    lightwaveos::songaware::SongAwareDirector::instance().setConfig(cfg);
+    printSongAwareCompactStatus();
 }
 
 const char* rendererModeName(RendererMode mode) {
@@ -178,6 +428,8 @@ void printVpStackSnapshot(const RendererActor::VpStackSnapshot& snap) {
                   static_cast<unsigned long>(snap.ledStats.ledShowFailures),
                   static_cast<unsigned long>(snap.ledStats.rmtErrors),
                   static_cast<unsigned long>(snap.ledStats.rmtUnderruns));
+    Serial.print("  8 ");
+    printSongAwareStatus();
 
     const auto& cfg = snap.colourConfig;
     const auto& gamma = snap.gamma;
@@ -284,6 +536,9 @@ void SerialCLI::tick() {
                 case '[': case ']':  // Speed
                 case ',': case '.':  // Palette
                 case 'e':            // EdgeMixer mode cycle
+                case 'D':            // SongAware mode cycle
+                case 'G':            // SongAware profile cycle
+                case 'Q':            // SongAware compact status
                 case 'w': case 'W':  // EdgeMixer spread +/-
                 case '<': case '>':  // EdgeMixer strength -/+
                 case 'y':            // EdgeMixer spatial toggle
@@ -467,6 +722,219 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
         } else {
             printVpStackSnapshot(ren->getVpStackSnapshot());
         }
+    }
+    else
+    if (inputLower == "songaware" || inputLower == "songaware status" ||
+        inputLower == "sa" || inputLower == "sa status") {
+        handledMulti = true;
+        printSongAwareCompactStatus();
+    }
+    else
+    if (inputLower == "songaware on" || inputLower == "sa on") {
+        handledMulti = true;
+        captureSongAwareRestorePoint();
+        auto cfg = lightwaveos::songaware::SongAwareDirector::instance().getConfig();
+        cfg.enabled = true;
+        cfg.mode = lightwaveos::songaware::SongAwareMode::Assist;
+        cfg.familyMorphing = false;
+        cfg.constrainedSwitching = false;
+        cfg.switchingEnabled = false;
+        lightwaveos::songaware::SongAwareDirector::instance().setConfig(cfg);
+        Serial.println("songAware: 'on' is deprecated; set mode=assist profile unchanged switching=false");
+        printSongAwareStatus();
+    }
+    else
+    if (inputLower == "songaware off" || inputLower == "sa off") {
+        handledMulti = true;
+        captureSongAwareRestorePoint();
+        auto cfg = lightwaveos::songaware::SongAwareDirector::instance().getConfig();
+        cfg.enabled = false;
+        cfg.mode = lightwaveos::songaware::SongAwareMode::Off;
+        cfg.familyMorphing = false;
+        cfg.constrainedSwitching = false;
+        cfg.switchingEnabled = false;
+        lightwaveos::songaware::SongAwareDirector::instance().setConfig(cfg);
+        Serial.println("songAware: OFF");
+        printSongAwareStatus();
+    }
+    else
+    if (inputLower.startsWith("songaware mode ") || inputLower.startsWith("sa mode ")) {
+        handledMulti = true;
+        const int offset = inputLower.startsWith("sa mode ") ? 8 : 15;
+        String modeText = inputLower.substring(offset);
+        modeText.trim();
+        bool ok = false;
+        bool profileOk = false;
+        auto profile = lightwaveos::songaware::parseSongAwareProfile(modeText.c_str(), &profileOk);
+        auto mode = lightwaveos::songaware::parseSongAwareMode(modeText.c_str(), &ok);
+        if (!ok) {
+            Serial.println("songAware mode invalid. Use: off|assist|director");
+        } else {
+            captureSongAwareRestorePoint();
+            auto cfg = lightwaveos::songaware::SongAwareDirector::instance().getConfig();
+            if (profileOk && (modeText == "subtle" || modeText == "balanced" || modeText == "high" ||
+                              modeText == "high_energy")) {
+                cfg.profile = profile;
+                cfg.mode = lightwaveos::songaware::SongAwareMode::Assist;
+                cfg.enabled = true;
+                Serial.println("songAware: legacy mode token mapped to profile; mode=assist");
+            } else {
+                cfg.mode = mode;
+                cfg.enabled = (mode != lightwaveos::songaware::SongAwareMode::Off);
+                if (modeText == "on" || modeText == "parameter") {
+                    Serial.println("songAware: legacy mode token mapped to assist");
+                }
+            }
+            cfg.familyMorphing = false;
+            if (cfg.mode != lightwaveos::songaware::SongAwareMode::Director) {
+                cfg.constrainedSwitching = false;
+                cfg.switchingEnabled = false;
+            }
+            lightwaveos::songaware::SongAwareDirector::instance().setConfig(cfg);
+            printSongAwareStatus();
+        }
+    }
+    else
+    if (inputLower.startsWith("songaware profile ") || inputLower.startsWith("sa profile ")) {
+        handledMulti = true;
+        const int offset = inputLower.startsWith("sa profile ") ? 11 : 18;
+        String profileText = inputLower.substring(offset);
+        profileText.trim();
+        bool ok = false;
+        auto profile = lightwaveos::songaware::parseSongAwareProfile(profileText.c_str(), &ok);
+        if (!ok) {
+            Serial.println("songAware profile invalid. Use: subtle|balanced|high");
+        } else {
+            captureSongAwareRestorePoint();
+            auto cfg = lightwaveos::songaware::SongAwareDirector::instance().getConfig();
+            cfg.profile = profile;
+            lightwaveos::songaware::SongAwareDirector::instance().setConfig(cfg);
+            printSongAwareStatus();
+        }
+    }
+    else
+    if (inputLower == "songaware switch on" || inputLower == "sa switch on" ||
+        inputLower == "songaware switching on" || inputLower == "sa switching on") {
+        handledMulti = true;
+        auto cfg = lightwaveos::songaware::SongAwareDirector::instance().getConfig();
+        if (!cfg.enabled || cfg.mode != lightwaveos::songaware::SongAwareMode::Director) {
+            Serial.println("songAware switching rejected: Director mode is required");
+        } else {
+            captureSongAwareRestorePoint();
+            cfg.familyMorphing = false;
+            cfg.constrainedSwitching = true;
+            cfg.switchingEnabled = true;
+            lightwaveos::songaware::SongAwareDirector::instance().setConfig(cfg);
+            Serial.println("songAware switching: ON");
+        }
+        printSongAwareStatus();
+    }
+    else
+    if (inputLower == "songaware switch off" || inputLower == "sa switch off" ||
+        inputLower == "songaware switching off" || inputLower == "sa switching off") {
+        handledMulti = true;
+        captureSongAwareRestorePoint();
+        auto cfg = lightwaveos::songaware::SongAwareDirector::instance().getConfig();
+        cfg.constrainedSwitching = false;
+        cfg.switchingEnabled = false;
+        lightwaveos::songaware::SongAwareDirector::instance().setConfig(cfg);
+        Serial.println("songAware switching: OFF");
+        printSongAwareStatus();
+    }
+    else
+    if (inputLower == "songaware wipe" || inputLower == "sa wipe" ||
+        inputLower == "songaware reset" || inputLower == "sa reset") {
+        handledMulti = true;
+        captureSongAwareRestorePoint();
+        lightwaveos::songaware::SongAwareDirector::instance().reset();
+        if (inputLower.endsWith("reset")) {
+            Serial.println("songAware: 'reset' is deprecated; use 'wipe'");
+        }
+        Serial.println("songAware: WIPE");
+        printSongAwareStatus();
+    }
+    else
+    if (inputLower == "songaware restore" || inputLower == "sa restore") {
+        handledMulti = true;
+        restoreSongAwareSafeBaseline(actors);
+        Serial.println("songAware: RESTORED safe baseline (0x1302, fixed controls, off)");
+        printSongAwareStatus();
+    }
+    else
+    if (inputLower.startsWith("songaware dbg") || inputLower.startsWith("sa dbg") ||
+        inputLower == "songaware debug" || inputLower == "sa debug") {
+        handledMulti = true;
+        uint8_t level = 1;
+        if (inputLower.startsWith("songaware dbg ")) {
+            level = static_cast<uint8_t>(inputLower.substring(14).toInt());
+        } else if (inputLower.startsWith("sa dbg ")) {
+            level = static_cast<uint8_t>(inputLower.substring(7).toInt());
+        } else {
+            Serial.println("songAware: 'debug' is deprecated; use 'sa dbg 4'");
+            level = 4;
+        }
+        printSongAwareDebugLevel(level);
+    }
+    else
+    if (inputLower == "songaware policy" || inputLower == "sa policy") {
+        handledMulti = true;
+        Serial.println("songAware: 'policy' is deprecated; use 'sa dbg 2'");
+        printSongAwareDebugLevel(2);
+    }
+    else
+    if (inputLower == "songaware allowlist" || inputLower == "sa allowlist") {
+        handledMulti = true;
+        Serial.println("songAware: 'allowlist' is mutable; use 'sa allow <state> on|off' to edit");
+        printSongAwareAllowlist();
+    }
+    else
+    if ((inputLower.startsWith("songaware allow ") || inputLower.startsWith("sa allow ")) &&
+        inputLower != "songaware allow reset" && inputLower != "sa allow reset") {
+        handledMulti = true;
+        const int offset = inputLower.startsWith("sa allow ") ? 9 : 16;
+        String args = inputLower.substring(offset);
+        args.trim();
+        int split = args.indexOf(' ');
+        if (split <= 0) {
+            Serial.println("songAware allow invalid. Use: sa allow <state> on|off");
+        } else {
+            String stateText = args.substring(0, split);
+            String valueText = args.substring(split + 1);
+            stateText.trim();
+            valueText.trim();
+            bool stateOk = false;
+            const auto state = lightwaveos::songaware::parseSongAwareState(stateText.c_str(), &stateOk);
+            const bool enable = (valueText == "on" || valueText == "true" || valueText == "1");
+            const bool disable = (valueText == "off" || valueText == "false" || valueText == "0");
+            if (!stateOk || (!enable && !disable)) {
+                Serial.println("songAware allow invalid. Use: sa allow <state> on|off");
+            } else {
+                captureSongAwareRestorePoint();
+                lightwaveos::songaware::SongAwareDirector::instance().setPolicyAllowed(state, enable);
+                printSongAwareAllowlist();
+            }
+        }
+    }
+    else
+    if (inputLower == "songaware allow reset" || inputLower == "sa allow reset") {
+        handledMulti = true;
+        captureSongAwareRestorePoint();
+        lightwaveos::songaware::SongAwareDirector::instance().resetPolicyAllowlist();
+        printSongAwareAllowlist();
+    }
+    else
+    if (inputLower == "songaware health" || inputLower == "sa health") {
+        handledMulti = true;
+        Serial.println("songAware: 'health' is deprecated; use 'sa dbg 3'");
+        printSongAwareDebugLevel(3);
+    }
+    else
+    if (inputLower == "songaware counters reset" || inputLower == "sa counters reset") {
+        handledMulti = true;
+        captureSongAwareRestorePoint();
+        lightwaveos::songaware::SongAwareDirector::instance().resetCounters();
+        Serial.println("songAware counters: RESET");
+        printSongAwareHealth();
     }
     else
     if (inputLower.startsWith("dither")) {
@@ -1909,6 +2377,18 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
 
         if (!isEffectKey)
         switch (cmd) {
+        case 'D':
+            cycleSongAwareMode();
+            break;
+
+        case 'G':
+            cycleSongAwareProfile();
+            break;
+
+        case 'Q':
+            printSongAwareCompactStatus();
+            break;
+
 #if FEATURE_AUDIO_SYNC
         case 'x': case 'X':
             // Bands observability (same as top-level "x" / "bands")

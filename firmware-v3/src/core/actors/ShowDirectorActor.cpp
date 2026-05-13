@@ -8,6 +8,7 @@
 #include "ShowDirectorActor.h"
 #include "ActorSystem.h"
 #include "RendererActor.h"
+#include "../songaware/SongAwareDirector.h"
 #include "../shows/BuiltinShows.h"
 #include "../narrative/NarrativeEngine.h"
 #include "../../config/effect_ids.h"
@@ -343,6 +344,9 @@ void ShowDirectorActor::onMessage(const Message& msg) {
 void ShowDirectorActor::onTick() {
     // Update show playback (called at 20Hz)
     if (m_state.playing && !m_state.paused) {
+#if FEATURE_AUDIO_SYNC
+        lightwaveos::songaware::SongAwareDirector::instance().markShowControl(millis());
+#endif
         updateShow();
     }
 
@@ -796,6 +800,11 @@ void ShowDirectorActor::setNarrativePhase(lightwaveos::effects::NarrativePhase p
 
 void ShowDirectorActor::sendToRenderer(const Message& msg) {
     if (m_rendererActor) {
+#if FEATURE_AUDIO_SYNC
+        if (m_state.playing && !m_state.paused) {
+            lightwaveos::songaware::SongAwareDirector::instance().markShowControl(millis());
+        }
+#endif
         m_rendererActor->send(msg, pdMS_TO_TICKS(10));
     }
 }

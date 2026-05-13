@@ -72,12 +72,15 @@
 
 #include <FastLED.h>
 
+#include "effects/PerceptualJND.h"
+
 namespace lightwaveos {
 namespace effects {
 namespace persistence {
 
 /// @brief Total framebuffer length (2 × 160 LED dual strip = 320 LEDs).
 static constexpr int kFramebufferLen = 320;
+using lightwaveos::effects::perceptual::kFramebufferLpfMinimumCutoffHz;
 
 class FramebufferLPF {
 public:
@@ -90,7 +93,7 @@ public:
     inline void setSoftness(float softness01) {
         if (softness01 < 0.0f) softness01 = 0.0f;
         if (softness01 > 1.0f) softness01 = 1.0f;
-        cutoffHz_ = 0.5f + (1.0f - sqrtf(softness01)) * 14.5f;
+        cutoffHz_ = kFramebufferLpfMinimumCutoffHz + (1.0f - sqrtf(softness01)) * 14.5f;
     }
 
     /// @brief Direct cutoff override (bypasses the softness curve).

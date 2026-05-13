@@ -180,6 +180,7 @@ final class RESTClientTests: XCTestCase {
             .decodingError(NSError(domain: "decode", code: -1)),
             .rateLimited,
             .encodingError,
+            .invalidZoneId(0),
         ]
 
         for error in cases {
@@ -188,6 +189,18 @@ final class RESTClientTests: XCTestCase {
             XCTAssertFalse(error.errorDescription?.isEmpty ?? true,
                            "\(error) should have a non-empty error description")
         }
+    }
+
+    /// `invalidZoneId` description should mention the offending zoneId
+    /// and the 1..3 wire range so users can diagnose protocol drift.
+    func testInvalidZoneIdErrorDescription() {
+        let error = APIClientError.invalidZoneId(0)
+        let description = error.errorDescription ?? ""
+
+        XCTAssertTrue(description.contains("0"),
+                      "invalidZoneId description should include the offending zoneId")
+        XCTAssertTrue(description.contains("1..3") || description.contains("1...3"),
+                      "invalidZoneId description should mention the 1..3 wire range")
     }
 
     /// HTTP error should include the status code in its description.

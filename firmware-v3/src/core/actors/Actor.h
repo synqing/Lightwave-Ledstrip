@@ -69,6 +69,7 @@ enum class MessageType : uint8_t {
 
     // Input Merge Layer (0x11-0x1F)
     MERGE_SUBMIT            = 0x11,  // param1=sourceId, param2=paramIndex, param3=value
+    SET_LED_DITHERING       = 0x12,  // param1 = 0 off, 1 on
 
     // Zone commands (0x20-0x3F)
     ZONE_ENABLE         = 0x20,

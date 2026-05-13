@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LightwaveOS</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.iconify.design/3/3.1.0/iconify.min.js"></script>
+
+    <style>
+        /* ═══════════════════════════════════════════════════════════════════════════
+           K1 DESIGN TOKENS — From SpectraSynq Landing Page
+           ═══════════════════════════════════════════════════════════════════════════ */
+        :root {
+            --gold: #FFB84D;
+            --gold-dim: rgba(255, 184, 77, 0.3);
+            --gold-glow: rgba(255, 184, 77, 0.15);
+            --gold-highlight: #FFE5B4;
+            
+            --bg-base: #000000;
+            --bg-surface: #111111;
+            --bg-overlay: #1A1A1A;
+            --bg-elevated: #222222;
+            
+            --text-primary: #F2F2F2;
+            --text-secondary: #888888;
+            --text-muted: #444444;
+            
+            --success: #4DFFB8;
+            --error: #FF4D4D;
+            --info: #4D88FF;
+            
+            --zone-1: #4DFFB8;
+            --zone-2: #FFB84D;
+            --zone-3: #4D88FF;
+            --zone-4: #FF4D88;
+            
+            --font-display: 'Space Grotesk', system-ui, sans-serif;
+            --font-body: 'Inter', system-ui, sans-serif;
+            --font-tech: 'Manrope', system-ui, sans-serif;
+        }
+
+        * { box-sizing: border-box; }
+        
+        body {
+            background-color: var(--bg-base);
+            color: var(--text-primary);
+            font-family: var(--font-body);
+            -webkit-font-smoothing: antialiased;
+            margin: 0;
+            min-height: 100vh;
+        }
+
+        ::selection {
+            background: var(--gold-dim);
+            color: black;
+        }
+
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--bg-elevated); border-radius: 2px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        :focus-visible {
+            outline: 2px solid var(--gold);
+            outline-offset: 2px;
+        }
+
+        .font-display { font-family: var(--font-display); }
+        .font-body { font-family: var(--font-body); }
+        .font-tech { font-family: var(--font-tech); }
+        
+        .tracking-k1 { letter-spacing: 0.16em; }
+        .tracking-wide { letter-spacing: 0.12em; }
+
+        /* ═══════════════════════════════════════════════════════════════════════════
+           COMPONENTS
+           ═══════════════════════════════════════════════════════════════════════════ */
+        .glass-panel {
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 1.25rem;
+        }
+
+        .card {
+            background: var(--bg-surface);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 1rem;
+        }
+
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+            height: 24px;
+            cursor: pointer;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 3px;
+            background: var(--bg-elevated);
+            border-radius: 2px;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 14px;
+            width: 14px;
+            border-radius: 50%;
+            background: var(--text-primary);
+            margin-top: -5.5px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+            transition: transform 0.15s ease;
+        }
+        input[type=range]::-webkit-slider-thumb:hover {
+            transform: scale(1.15);
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            transition: all 0.2s ease;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            font-family: var(--font-display);
+            position: relative;
+        }
+        .nav-item:hover {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+        }
+        .nav-item.active {
+            background: var(--gold-glow);
+            color: var(--gold);
+        }
+        .nav-item.active::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 2px;
+            height: 60%;
+            background: var(--gold);
+            border-radius: 0 2px 2px 0;
+        }
+
+        .effect-item {
+            padding: 0.875rem 1rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            border-left: 2px solid transparent;
+        }
+        .effect-item:hover { background: var(--bg-elevated); }
+        .effect-item.active {
+            background: var(--gold-glow);
+            border-left-color: var(--gold);
+        }
+
+        .palette-swatch {
+            height: 40px;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            border: 2px solid transparent;
+            position: relative;
+            overflow: hidden;
+        }
+        .palette-swatch:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+        }
+        .palette-swatch.selected {
+            border-color: var(--gold);
+            box-shadow: 0 0 0 2px var(--gold-dim);
+        }
+        .palette-swatch .palette-name {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 2px 6px;
+            font-size: 9px;
+            font-family: var(--font-tech);
+            background: rgba(0,0,0,0.7);
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+        .palette-swatch:hover .palette-name { opacity: 1; }
+
+        .preset-btn {
+            width: 44px;
+            height: 44px;
+            border-radius: 0.5rem;
+            background: var(--bg-surface);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            font-family: var(--font-tech);
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        .preset-btn:hover {
+            border-color: var(--gold-dim);
+            color: var(--text-primary);
+        }
+        .preset-btn.active {
+            background: var(--gold);
+            border-color: var(--gold);
+            color: var(--bg-base);
+            box-shadow: 0 0 20px var(--gold-dim);
+        }
+
+        .transition-card {
+            padding: 1rem;
+            border-radius: 0.75rem;
+            background: var(--bg-elevated);
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+        }
+        .transition-card:hover {
+            border-color: rgba(255,255,255,0.1);
+        }
+        .transition-card.selected {
+            border-color: var(--gold);
+            background: var(--gold-glow);
+        }
+
+        .stat-gauge {
+            position: relative;
+            width: 80px;
+            height: 80px;
+        }
+        .stat-gauge svg {
+            transform: rotate(-90deg);
+        }
+        .stat-gauge .value {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .glow-gold { box-shadow: 0 0 60px var(--gold-glow); }
+        .glow-subtle { box-shadow: 0 0 40px rgba(0, 0, 0, 0.8); }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.375rem;
+            padding: 0.375rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.6875rem;
+            font-family: var(--font-display);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            border: 1px solid transparent;
+        }
+        .chip.active {
+            background: var(--gold);
+            color: black;
+        }
+        .chip:not(.active) {
+            color: var(--text-secondary);
+            border-color: rgba(255,255,255,0.08);
+        }
+        .chip:not(.active):hover {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+        }
+
+        .toggle {
+            position: relative;
+            width: 44px;
+            height: 24px;
+            background: var(--bg-elevated);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+        .toggle.active { background: var(--gold); }
+        .toggle::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 18px;
+            height: 18px;
+            background: white;
+            border-radius: 50%;
+            transition: transform 0.2s ease;
+        }
+        .toggle.active::after { transform: translateX(20px); }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="flex min-h-screen">
+        
+        <!-- ═══════════════════════════════════════════════════════════════════════════
+             LEFT SIDEBAR
+             ═══════════════════════════════════════════════════════════════════════════ -->
+        <aside class="w-56 flex-shrink-0 border-r border-white/5 flex flex-col" style="background: linear-gradient(180deg, #0a0a0a 0%, #000 100%);">
+            
+            <div class="p-5 border-b border-white/5">
+                <div class="font-display text-sm tracking-k1 uppercase">
+                    <span class="text-[var(--gold)]">K</span><span class="text-[var(--text-muted)]">-</span><span class="text-[var(--text-primary)]">1</span>
+                </div>
+                <div class="text-[10px] tracking-wide uppercase text-[var(--text-muted)] mt-1">Lightwave OS</div>
+            </div>
+
+            <div class="px-5 py-3 border-b border-white/5">
+                <div class="flex items-center gap-2">
+                    <span class="connection-indicator w-1.5 h-1.5 rounded-full bg-[var(--success)] animate-pulse"></span>
+                    <span class="connection-text text-xs text-[var(--text-secondary)]">Connecting...</span>
+                </div>
+                <div class="text-[10px] text-[var(--text-muted)] mt-0.5 font-tech" id="device-ip">lightwaveos.local</div>
+            </div>
+
+            <nav class="flex-1 p-3 space-y-1">
+                <div class="nav-item active" data-tab="composer">
+                    <span class="iconify" data-icon="lucide:sliders-horizontal" data-width="16"></span>
+                    <span>Composer</span>
+                </div>
+                <div class="nav-item" data-tab="effects">
+                    <span class="iconify" data-icon="lucide:sparkles" data-width="16"></span>
+                    <span>Effects</span>
+                </div>
+                <div class="nav-item" data-tab="palettes">
+                    <span class="iconify" data-icon="lucide:palette" data-width="16"></span>
+                    <span>Palettes</span>
+                </div>
+                <div class="nav-item" data-tab="transitions">
+                    <span class="iconify" data-icon="lucide:shuffle" data-width="16"></span>
+                    <span>Transitions</span>
+                </div>
+                
+                <div class="pt-4 pb-2">
+                    <div class="text-[9px] uppercase tracking-k1 text-[var(--text-muted)] px-1">System</div>
+                </div>
+                
+                <div class="nav-item" data-tab="performance">
+                    <span class="iconify" data-icon="lucide:activity" data-width="16"></span>
+                    <span>Performance</span>
+                </div>
+                <div class="nav-item" data-tab="network">
+                    <span class="iconify" data-icon="lucide:wifi" data-width="16"></span>
+                    <span>Network</span>
+                </div>
+                <div class="nav-item" data-tab="firmware">
+                    <span class="iconify" data-icon="lucide:download" data-width="16"></span>
+                    <span>Firmware</span>
+                </div>
+            </nav>
+
+            <div class="p-4 border-t border-white/5">
+                <div class="grid grid-cols-2 gap-3 text-center">
+                    <div>
+                        <div class="text-lg font-semibold font-tech text-[var(--text-primary)]" id="stat-fps">120</div>
+                        <div class="text-[9px] uppercase tracking-wide text-[var(--text-muted)]">FPS</div>
+                    </div>
+                    <div>
+                        <div class="text-lg font-semibold font-tech text-[var(--text-primary)]"><span id="stat-cpu">42</span><span class="text-xs text-[var(--text-muted)]">%</span></div>
+                        <div class="text-[9px] uppercase tracking-wide text-[var(--text-muted)]">CPU</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- ═══════════════════════════════════════════════════════════════════════════
+             MAIN CONTENT
+             ═══════════════════════════════════════════════════════════════════════════ -->
+        <main class="flex-1 flex flex-col overflow-hidden">
+            
+            <!-- LED Visualization - CENTER ORIGIN -->
+            <div class="relative w-full" style="background: linear-gradient(180deg, #0a0a0a 0%, #000 100%);">
+                <div class="max-w-5xl mx-auto px-6 py-6">
+                    <div class="relative rounded-2xl overflow-hidden glow-subtle" style="border: 1px solid rgba(255,255,255,0.05);">
+                        <canvas id="viz-canvas" class="w-full block" style="height: 100px;"></canvas>
+                        <div class="absolute bottom-2 left-3 text-[9px] font-tech uppercase tracking-wide text-[var(--text-muted)]">LED 0</div>
+                        <div class="absolute bottom-2 right-3 text-[9px] font-tech uppercase tracking-wide text-[var(--text-muted)]">LED 159</div>
+                        <div class="absolute top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded text-[9px] font-tech uppercase tracking-wide bg-black/60 text-[var(--zone-1)]">Center Origin</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Content Area -->
+            <div class="flex-1 overflow-y-auto">
+                <div class="max-w-5xl mx-auto px-6 py-6">
+                    
+                    <!-- ═══════════════════════════════════════════════════════════════
+                         TAB: COMPOSER
+                         ═══════════════════════════════════════════════════════════════ -->
+                    <div id="tab-composer" class="tab-content active">
+                        <div class="grid grid-cols-12 gap-5">
+                            <div class="col-span-7 space-y-5">
+                                
+                                <!-- Now Playing -->
+                                <div class="card p-5">
+                                    <div class="flex items-start justify-between mb-5">
+                                        <div>
+                                            <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)] mb-1">Now Playing</div>
+                                            <div class="text-xl font-semibold font-tech text-[var(--gold)]" id="current-effect">Aurora</div>
+                                            <div class="text-xs text-[var(--text-secondary)] mt-0.5" id="current-category">LGP Advanced</div>
+                                        </div>
+                                        <div class="text-right">
+                                            <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)] mb-1">Palette</div>
+                                            <div class="text-sm font-medium text-[var(--text-primary)]" id="current-palette">Ocean Breeze</div>
+                                            <div id="current-palette-preview" class="h-2 w-24 rounded-full mt-1.5" style="background: linear-gradient(90deg, #0a0607, #016f8f, #91d1ff);"></div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="space-y-4">
+                                        <div>
+                                            <div class="flex justify-between text-xs mb-2">
+                                                <span class="font-display uppercase tracking-wide text-[var(--text-muted)]">Master Brightness</span>
+                                                <span class="font-tech text-[var(--text-primary)]" id="brightness-value">128</span>
+                                            </div>
+                                            <input type="range" min="0" max="255" value="128" id="brightness-slider">
+                                        </div>
+                                        <div>
+                                            <div class="flex justify-between text-xs mb-2">
+                                                <span class="font-display uppercase tracking-wide text-[var(--text-muted)]">Global Speed</span>
+                                                <span class="font-tech text-[var(--text-primary)]" id="speed-value">25</span>
+                                            </div>
+                                            <input type="range" min="1" max="50" value="25" id="speed-slider">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Zone Mixer -->
+                                <div class="card p-5">
+                                    <div class="flex items-center justify-between mb-4">
+                                        <div class="flex items-center gap-3">
+                                            <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)]">Zone Mixer</div>
+                                            <div class="toggle" id="zone-system-toggle"></div>
+                                        </div>
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-[9px] text-[var(--text-muted)] uppercase">Zones:</span>
+                                            <div class="flex gap-1" id="zone-count-selector">
+                                                <button class="w-6 h-6 text-xs rounded bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:bg-white/10" data-count="1">1</button>
+                                                <button class="w-6 h-6 text-xs rounded bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:bg-white/10" data-count="2">2</button>
+                                                <button class="w-6 h-6 text-xs rounded bg-[var(--gold)] text-black font-semibold" data-count="3">3</button>
+                                                <button class="w-6 h-6 text-xs rounded bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:bg-white/10" data-count="4">4</button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="grid grid-cols-4 gap-4" id="zone-mixer-grid">
+                                        <div class="text-center zone-channel" data-zone="0">
+                                            <div class="relative h-16 flex items-end justify-center mb-2">
+                                                <div class="w-3 rounded-t-sm transition-all zone-bar" data-zone="0" style="height: 75%; background: var(--zone-1);"></div>
+                                            </div>
+                                            <div class="w-2 h-2 rounded-full mx-auto mb-1" style="background: var(--zone-1); box-shadow: 0 0 8px var(--zone-1);"></div>
+                                            <div class="text-[10px] font-semibold">Center</div>
+                                            <div class="text-[8px] text-[var(--text-muted)] font-tech">Z0</div>
+                                        </div>
+                                        <div class="text-center zone-channel" data-zone="1">
+                                            <div class="relative h-16 flex items-end justify-center mb-2">
+                                                <div class="w-3 rounded-t-sm transition-all zone-bar" data-zone="1" style="height: 55%; background: var(--zone-2);"></div>
+                                            </div>
+                                            <div class="w-2 h-2 rounded-full mx-auto mb-1" style="background: var(--zone-2); box-shadow: 0 0 8px var(--zone-2);"></div>
+                                            <div class="text-[10px] font-semibold">Middle</div>
+                                            <div class="text-[8px] text-[var(--text-muted)] font-tech">Z1</div>
+                                        </div>
+                                        <div class="text-center zone-channel" data-zone="2">
+                                            <div class="relative h-16 flex items-end justify-center mb-2">
+                                                <div class="w-3 rounded-t-sm transition-all zone-bar" data-zone="2" style="height: 35%; background: var(--zone-3);"></div>
+                                            </div>
+                                            <div class="w-2 h-2 rounded-full mx-auto mb-1" style="background: var(--zone-3); box-shadow: 0 0 8px var(--zone-3);"></div>
+                                            <div class="text-[10px] font-semibold">Outer</div>
+                                            <div class="text-[8px] text-[var(--text-muted)] font-tech">Z2</div>
+                                        </div>
+                                        <div class="text-center zone-channel opacity-30" data-zone="3">
+                                            <div class="relative h-16 flex items-end justify-center mb-2">
+                                                <div class="w-3 rounded-t-sm transition-all zone-bar" data-zone="3" style="height: 25%; background: var(--zone-4, #FF4D88);"></div>
+                                            </div>
+                                            <div class="w-2 h-2 rounded-full mx-auto mb-1" style="background: var(--zone-4, #FF4D88); box-shadow: 0 0 8px var(--zone-4, #FF4D88);"></div>
+                                            <div class="text-[10px] font-semibold">Edge</div>
+                                            <div class="text-[8px] text-[var(--text-muted)] font-tech">Z3</div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Per-Zone Controls (expanded on zone click) -->
+                                    <div class="mt-4 pt-4 border-t border-white/5" id="zone-controls">
+                                        <div class="flex items-center justify-between mb-3">
+                                            <div class="flex items-center gap-2">
+                                                <div class="w-2 h-2 rounded-full" id="selected-zone-dot" style="background: var(--zone-1);"></div>
+                                                <span class="text-xs font-semibold" id="selected-zone-name">Zone 0</span>
+                                            </div>
+                                            <select class="text-xs bg-[var(--bg-elevated)] border border-white/5 rounded px-2 py-1 text-[var(--text-secondary)] font-tech" id="zone-effect-select">
+                                                <!-- Populated by JS -->
+                                            </select>
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <div class="flex justify-between text-[9px] mb-1">
+                                                    <span class="text-[var(--text-muted)] uppercase">Brightness</span>
+                                                    <span class="font-tech" id="zone-brightness-value">255</span>
+                                                </div>
+                                                <input type="range" min="0" max="255" value="255" id="zone-brightness-slider">
+                                            </div>
+                                            <div>
+                                                <div class="flex justify-between text-[9px] mb-1">
+                                                    <span class="text-[var(--text-muted)] uppercase">Speed</span>
+                                                    <span class="font-tech" id="zone-speed-value">25</span>
+                                                </div>
+                                                <input type="range" min="1" max="50" value="25" id="zone-speed-slider">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Visual Pipeline -->
+                                <details class="card overflow-hidden group" open>
+                                    <summary class="flex items-center justify-between p-5 cursor-pointer select-none list-none hover:bg-white/[0.02] transition-colors">
+                                        <span class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)]">Visual Pipeline</span>
+                                        <span class="iconify text-[var(--text-muted)] group-open:rotate-180 transition-transform" data-icon="lucide:chevron-down" data-width="14"></span>
+                                    </summary>
+                                    <div class="px-5 pb-5 grid grid-cols-2 gap-4">
+                                        <div>
+                                            <div class="flex justify-between text-[10px] mb-1.5">
+                                                <span class="font-display uppercase tracking-wide text-[var(--text-muted)]">Intensity</span>
+                                                <span class="font-tech text-[var(--text-secondary)]">1.00</span>
+                                            </div>
+                                            <input type="range" min="0" max="200" value="100">
+                                        </div>
+                                        <div>
+                                            <div class="flex justify-between text-[10px] mb-1.5">
+                                                <span class="font-display uppercase tracking-wide text-[var(--text-muted)]">Saturation</span>
+                                                <span class="font-tech text-[var(--text-secondary)]">1.00</span>
+                                            </div>
+                                            <input type="range" min="0" max="200" value="100">
+                                        </div>
+                                        <div>
+                                            <div class="flex justify-between text-[10px] mb-1.5">
+                                                <span class="font-display uppercase tracking-wide text-[var(--text-muted)]">Complexity</span>
+                                                <span class="font-tech text-[var(--text-secondary)]">0.50</span>
+                                            </div>
+                                            <input type="range" min="0" max="100" value="50">
+                                        </div>
+                                        <div>
+                                            <div class="flex justify-between text-[10px] mb-1.5">
+                                                <span class="font-display uppercase tracking-wide text-[var(--text-muted)]">Variation</span>
+                                                <span class="font-tech text-[var(--text-secondary)]">0.50</span>
+                                            </div>
+                                            <input type="range" min="0" max="100" value="50">
+                                        </div>
+                                    </div>
+                                </details>
+                            </div>
+
+                            <!-- Quick Access & Effect Browser -->
+                            <div class="col-span-5 space-y-5">
+                                <div class="card p-4">
+                                    <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)] mb-3">Quick Access</div>
+                                    <div class="grid grid-cols-5 gap-2">
+                                        <button class="flex flex-col items-center gap-1.5 p-2.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-white/[0.06] transition-colors group">
+                                            <span class="iconify text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]" data-icon="lucide:heart-pulse" data-width="18"></span>
+                                            <span class="text-[9px] text-[var(--text-muted)]">Pulse</span>
+                                        </button>
+                                        <button class="flex flex-col items-center gap-1.5 p-2.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-white/[0.06] transition-colors group">
+                                            <span class="iconify text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]" data-icon="lucide:waves" data-width="18"></span>
+                                            <span class="text-[9px] text-[var(--text-muted)]">Wave</span>
+                                        </button>
+                                        <button class="flex flex-col items-center gap-1.5 p-2.5 rounded-lg bg-[var(--gold-glow)] border border-[var(--gold)]/30 transition-colors">
+                                            <span class="iconify text-[var(--gold)]" data-icon="lucide:sparkles" data-width="18"></span>
+                                            <span class="text-[9px] text-[var(--gold)]">Aurora</span>
+                                        </button>
+                                        <button class="flex flex-col items-center gap-1.5 p-2.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-white/[0.06] transition-colors group">
+                                            <span class="iconify text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]" data-icon="lucide:flame" data-width="18"></span>
+                                            <span class="text-[9px] text-[var(--text-muted)]">Fire</span>
+                                        </button>
+                                        <button class="flex flex-col items-center gap-1.5 p-2.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-white/[0.06] transition-colors group">
+                                            <span class="iconify text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]" data-icon="lucide:scan-line" data-width="18"></span>
+                                            <span class="text-[9px] text-[var(--text-muted)]">Scan</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="card p-4 flex flex-col" style="height: 340px;">
+                                    <div class="flex items-center gap-2 mb-3 flex-wrap">
+                                        <span class="chip active" data-category="all">All</span>
+                                        <span class="chip" data-category="classic">Classic</span>
+                                        <span class="chip" data-category="lgp">LGP</span>
+                                        <span class="chip" data-category="physics">Physics</span>
+                                        <span class="chip" data-category="quantum">Quantum</span>
+                                    </div>
+                                    
+                                    <div class="flex-1 overflow-y-auto space-y-0.5" id="effect-list">
+                                        <!-- Effects populated by JS -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════════════════════════════════════════════════════
+                         TAB: EFFECTS
+                         ═══════════════════════════════════════════════════════════════ -->
+                    <div id="tab-effects" class="tab-content">
+                        <div class="mb-6">
+                            <h2 class="text-lg font-semibold font-tech mb-1">Effect Library</h2>
+                            <p class="text-sm text-[var(--text-secondary)]">50+ effects across 6 categories</p>
+                        </div>
+                        
+                        <div class="flex items-center gap-2 mb-5 flex-wrap">
+                            <span class="chip active" data-category="all">All · 50</span>
+                            <span class="chip" data-category="classic">Classic · 5</span>
+                            <span class="chip" data-category="lgp">LGP · 20</span>
+                            <span class="chip" data-category="physics">Physics · 10</span>
+                            <span class="chip" data-category="quantum">Quantum · 9</span>
+                            <span class="chip" data-category="audio">Audio · 6</span>
+                        </div>
+
+                        <div class="grid grid-cols-3 gap-3" id="effects-grid">
+                            <!-- Effects populated by JS -->
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════════════════════════════════════════════════════
+                         TAB: PALETTES
+                         ═══════════════════════════════════════════════════════════════ -->
+                    <div id="tab-palettes" class="tab-content">
+                        <div class="flex items-start justify-between mb-6">
+                            <div>
+                                <h2 class="text-lg font-semibold font-tech mb-1">Color Palettes</h2>
+                                <p class="text-sm text-[var(--text-secondary)]">33 gradient palettes</p>
+                            </div>
+                            <div class="card p-4 flex items-center gap-4">
+                                <div>
+                                    <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)] mb-1">Auto Cycle</div>
+                                    <div class="toggle active" id="palette-autocycle"></div>
+                                </div>
+                                <div>
+                                    <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)] mb-1">Interval</div>
+                                    <select class="text-xs bg-[var(--bg-elevated)] border border-white/5 rounded px-2 py-1 text-[var(--text-secondary)] font-tech">
+                                        <option>5s</option>
+                                        <option>10s</option>
+                                        <option>30s</option>
+                                        <option>60s</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-4 gap-3" id="palette-grid">
+                            <!-- Palettes populated by JS -->
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════════════════════════════════════════════════════
+                         TAB: TRANSITIONS
+                         ═══════════════════════════════════════════════════════════════ -->
+                    <div id="tab-transitions" class="tab-content">
+                        <div class="flex items-start justify-between mb-6">
+                            <div>
+                                <h2 class="text-lg font-semibold font-tech mb-1">Transitions</h2>
+                                <p class="text-sm text-[var(--text-secondary)]">12 CENTER ORIGIN transition types</p>
+                            </div>
+                            <div class="card p-4 flex items-center gap-4">
+                                <div>
+                                    <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)] mb-1">Random</div>
+                                    <div class="toggle" id="transition-random"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-12 gap-5">
+                            <div class="col-span-8">
+                                <div class="grid grid-cols-4 gap-3" id="transition-grid">
+                                    <!-- Transitions populated by JS -->
+                                </div>
+                            </div>
+                            <div class="col-span-4 space-y-4">
+                                <div class="card p-5">
+                                    <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)] mb-4">Settings</div>
+                                    <div class="space-y-4">
+                                        <div>
+                                            <div class="flex justify-between text-xs mb-2">
+                                                <span class="font-display uppercase tracking-wide text-[var(--text-muted)]">Duration</span>
+                                                <span class="font-tech text-[var(--text-primary)]" id="transition-duration-value">2000ms</span>
+                                            </div>
+                                            <input type="range" min="500" max="5000" value="2000" step="100" id="transition-duration" oninput="setTransitionDuration(this.value)">
+                                        </div>
+                                        <div>
+                                            <div class="text-[10px] font-display uppercase tracking-wide text-[var(--text-muted)] mb-2">Easing Curve</div>
+                                            <select class="w-full text-xs bg-[var(--bg-elevated)] border border-white/5 rounded px-3 py-2 text-[var(--text-secondary)] font-tech" id="transition-easing" onchange="setTransitionEasing(this.value)">
+                                                <option value="linear">Linear</option>
+                                                <option value="ease-in-quad">Ease In Quad</option>
+                                                <option value="ease-out-quad">Ease Out Quad</option>
+                                                <option value="ease-in-out-quad">Ease In Out Quad</option>
+                                                <option value="ease-in-cubic">Ease In Cubic</option>
+                                                <option value="ease-out-cubic">Ease Out Cubic</option>
+                                                <option value="ease-out-elastic" selected>Ease Out Elastic</option>
+                                                <option value="ease-out-bounce">Ease Out Bounce</option>
+                                                <option value="ease-in-back">Ease In Back</option>
+                                                <option value="ease-out-back">Ease Out Back</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="card p-5">
+                                    <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)] mb-3">Preview</div>
+                                    <div class="h-16 rounded-lg bg-[var(--bg-elevated)] relative overflow-hidden" id="transition-preview">
+                                        <div class="absolute inset-0 flex items-center justify-center">
+                                            <div class="w-1 h-full bg-[var(--gold)] transition-preview-line"></div>
+                                        </div>
+                                    </div>
+                                    <button onclick="testTransition()" class="w-full mt-3 py-2 rounded-lg bg-[var(--bg-elevated)] text-xs font-display uppercase tracking-wide text-[var(--text-secondary)] hover:bg-white/[0.06] transition-colors">
+                                        Test Transition
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════════════════════════════════════════════════════
+                         TAB: PERFORMANCE
+                         ═══════════════════════════════════════════════════════════════ -->
+                    <div id="tab-performance" class="tab-content">
+                        <div class="mb-6">
+                            <h2 class="text-lg font-semibold font-tech mb-1">Performance Monitor</h2>
+                            <p class="text-sm text-[var(--text-secondary)]">Real-time system metrics</p>
+                        </div>
+
+                        <div class="grid grid-cols-4 gap-4 mb-6">
+                            <div class="card p-5 text-center">
+                                <div class="stat-gauge mx-auto mb-3" id="perf-fps-gauge">
+                                    <svg width="80" height="80" viewBox="0 0 80 80">
+                                        <circle cx="40" cy="40" r="35" fill="none" stroke="var(--bg-elevated)" stroke-width="6"/>
+                                        <circle cx="40" cy="40" r="35" fill="none" stroke="var(--success)" stroke-width="6" stroke-dasharray="220" stroke-dashoffset="44" stroke-linecap="round"/>
+                                    </svg>
+                                    <div class="value">
+                                        <span class="text-2xl font-bold font-tech" id="perf-fps-value">120</span>
+                                    </div>
+                                </div>
+                                <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)]">FPS</div>
+                            </div>
+                            <div class="card p-5 text-center">
+                                <div class="stat-gauge mx-auto mb-3" id="perf-cpu-gauge">
+                                    <svg width="80" height="80" viewBox="0 0 80 80">
+                                        <circle cx="40" cy="40" r="35" fill="none" stroke="var(--bg-elevated)" stroke-width="6"/>
+                                        <circle cx="40" cy="40" r="35" fill="none" stroke="var(--gold)" stroke-width="6" stroke-dasharray="220" stroke-dashoffset="127" stroke-linecap="round"/>
+                                    </svg>
+                                    <div class="value">
+                                        <span class="text-2xl font-bold font-tech" id="perf-cpu-value">42</span>
+                                        <span class="text-xs text-[var(--text-muted)]">%</span>
+                                    </div>
+                                </div>
+                                <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)]">CPU</div>
+                            </div>
+                            <div class="card p-5 text-center">
+                                <div class="stat-gauge mx-auto mb-3" id="perf-heap-gauge">
+                                    <svg width="80" height="80" viewBox="0 0 80 80">
+                                        <circle cx="40" cy="40" r="35" fill="none" stroke="var(--bg-elevated)" stroke-width="6"/>
+                                        <circle cx="40" cy="40" r="35" fill="none" stroke="var(--info)" stroke-width="6" stroke-dasharray="220" stroke-dashoffset="88" stroke-linecap="round"/>
+                                    </svg>
+                                    <div class="value">
+                                        <span class="text-2xl font-bold font-tech" id="perf-heap-value">156</span>
+                                        <span class="text-[9px] text-[var(--text-muted)]">KB</span>
+                                    </div>
+                                </div>
+                                <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)]">Free Heap</div>
+                            </div>
+                            <div class="card p-5 text-center">
+                                <div class="stat-gauge mx-auto mb-3" id="perf-frag-gauge">
+                                    <svg width="80" height="80" viewBox="0 0 80 80">
+                                        <circle cx="40" cy="40" r="35" fill="none" stroke="var(--bg-elevated)" stroke-width="6"/>
+                                        <circle cx="40" cy="40" r="35" fill="none" stroke="var(--success)" stroke-width="6" stroke-dasharray="220" stroke-dashoffset="198" stroke-linecap="round"/>
+                                    </svg>
+                                    <div class="value">
+                                        <span class="text-2xl font-bold font-tech" id="perf-frag-value">12</span>
+                                        <span class="text-xs text-[var(--text-muted)]">%</span>
+                                    </div>
+                                </div>
+                                <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)]">Fragmentation</div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-5">
+                            <div class="card p-5">
+                                <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)] mb-4">Timing Metrics</div>
+                                <div class="space-y-3">
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-[var(--text-secondary)]">Effect Processing</span>
+                                        <span class="font-tech text-sm">1,234 µs</span>
+                                    </div>
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-[var(--text-secondary)]">FastLED Show</span>
+                                        <span class="font-tech text-sm">3,200 µs</span>
+                                    </div>
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-[var(--text-secondary)]">Frame Budget</span>
+                                        <span class="font-tech text-sm">8,333 µs</span>
+                                    </div>
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-[var(--text-secondary)]">Data Rate</span>
+                                        <span class="font-tech text-sm">7.68 Mbps</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card p-5">
+                                <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)] mb-4">Health Status</div>
+                                <div class="space-y-3">
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-[var(--text-secondary)]">Dropped Frames</span>
+                                        <span class="font-tech text-sm text-[var(--success)]">0</span>
+                                    </div>
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-[var(--text-secondary)]">Min Free Heap</span>
+                                        <span class="font-tech text-sm">85,420 bytes</span>
+                                    </div>
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-[var(--text-secondary)]">Uptime</span>
+                                        <span class="font-tech text-sm">4h 32m</span>
+                                    </div>
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-[var(--text-secondary)]">Temperature</span>
+                                        <span class="font-tech text-sm">42°C</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════════════════════════════════════════════════════
+                         TAB: NETWORK
+                         ═══════════════════════════════════════════════════════════════ -->
+                    <div id="tab-network" class="tab-content">
+                        <div class="mb-6">
+                            <h2 class="text-lg font-semibold font-tech mb-1">Network Settings</h2>
+                            <p class="text-sm text-[var(--text-secondary)]">WiFi configuration and diagnostics</p>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-5">
+                            <div class="card p-5">
+                                <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)] mb-4">Current Connection</div>
+                                <div class="space-y-4">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-10 h-10 rounded-lg bg-[var(--success)]/20 flex items-center justify-center">
+                                            <span class="iconify text-[var(--success)]" data-icon="lucide:wifi" data-width="20"></span>
+                                        </div>
+                                        <div>
+                                            <div class="font-medium">HomeNetwork_5G</div>
+                                            <div class="text-xs text-[var(--text-secondary)]">Connected · -42 dBm</div>
+                                        </div>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-4 pt-2 border-t border-white/5">
+                                        <div>
+                                            <div class="text-[10px] text-[var(--text-muted)] uppercase tracking-wide mb-1">IP Address</div>
+                                            <div class="font-tech text-sm">192.168.1.42</div>
+                                        </div>
+                                        <div>
+                                            <div class="text-[10px] text-[var(--text-muted)] uppercase tracking-wide mb-1">mDNS</div>
+                                            <div class="font-tech text-sm">lightwaveos.local</div>
+                                        </div>
+                                        <div>
+                                            <div class="text-[10px] text-[var(--text-muted)] uppercase tracking-wide mb-1">MAC Address</div>
+                                            <div class="font-tech text-sm">A4:CF:12:8B:3E:F1</div>
+                                        </div>
+                                        <div>
+                                            <div class="text-[10px] text-[var(--text-muted)] uppercase tracking-wide mb-1">Gateway</div>
+                                            <div class="font-tech text-sm">192.168.1.1</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card p-5">
+                                <div class="flex items-center justify-between mb-4">
+                                    <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)]">Available Networks</div>
+                                    <button onclick="scanNetworks()" class="text-xs font-display uppercase tracking-wide text-[var(--gold)] hover:text-[var(--gold-highlight)] flex items-center gap-1">
+                                        <span class="iconify" data-icon="lucide:refresh-cw" data-width="12"></span>
+                                        Scan
+                                    </button>
+                                </div>
+                                <div class="space-y-2" id="network-list">
+                                    <div class="text-sm text-[var(--text-muted)] text-center py-4">Click Scan to search for networks</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════════════════════════════════════════════════════
+                         TAB: FIRMWARE
+                         ═══════════════════════════════════════════════════════════════ -->
+                    <div id="tab-firmware" class="tab-content">
+                        <div class="mb-6">
+                            <h2 class="text-lg font-semibold font-tech mb-1">Firmware</h2>
+                            <p class="text-sm text-[var(--text-secondary)]">Device information and updates</p>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-5">
+                            <div class="card p-5">
+                                <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)] mb-4">Device Info</div>
+                                <div class="space-y-3">
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-[var(--text-secondary)]">Device</span>
+                                        <span class="font-tech text-sm">K1-Lightwave</span>
+                                    </div>
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-[var(--text-secondary)]">Firmware</span>
+                                        <span class="font-tech text-sm">v1.4.2</span>
+                                    </div>
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-[var(--text-secondary)]">Build Date</span>
+                                        <span class="font-tech text-sm">2025-12-10</span>
+                                    </div>
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-[var(--text-secondary)]">Platform</span>
+                                        <span class="font-tech text-sm">ESP32-S3</span>
+                                    </div>
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-[var(--text-secondary)]">Flash Size</span>
+                                        <span class="font-tech text-sm">16 MB</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card p-5">
+                                <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)] mb-4">Feature Flags</div>
+                                <div class="space-y-2">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-sm text-[var(--text-secondary)]">Dual Strip</span>
+                                        <span class="text-xs font-tech px-2 py-0.5 rounded bg-[var(--success)]/20 text-[var(--success)]">Enabled</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-sm text-[var(--text-secondary)]">Physics Sim</span>
+                                        <span class="text-xs font-tech px-2 py-0.5 rounded bg-[var(--success)]/20 text-[var(--success)]">Enabled</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-sm text-[var(--text-secondary)]">Enhancement Engines</span>
+                                        <span class="text-xs font-tech px-2 py-0.5 rounded bg-[var(--text-muted)]/20 text-[var(--text-muted)]">Disabled</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-sm text-[var(--text-secondary)]">Audio Effects</span>
+                                        <span class="text-xs font-tech px-2 py-0.5 rounded bg-[var(--text-muted)]/20 text-[var(--text-muted)]">Awaiting HW</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-sm text-[var(--text-secondary)]">Performance Monitor</span>
+                                        <span class="text-xs font-tech px-2 py-0.5 rounded bg-[var(--success)]/20 text-[var(--success)]">Enabled</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card p-5 mt-5">
+                            <div class="flex items-center justify-between mb-4">
+                                <div>
+                                    <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)] mb-1">OTA Update</div>
+                                    <div class="text-sm text-[var(--text-secondary)]">Upload new firmware via browser</div>
+                                </div>
+                                <label class="px-4 py-2 rounded-lg bg-[var(--bg-elevated)] text-sm font-display uppercase tracking-wide text-[var(--text-secondary)] hover:bg-white/[0.06] cursor-pointer transition-colors">
+                                    <input type="file" class="hidden" accept=".bin" id="ota-file-input">
+                                    Select File
+                                </label>
+                            </div>
+                            <!-- OTA Progress Bar -->
+                            <div id="ota-progress" class="hidden">
+                                <div class="flex items-center justify-between text-xs mb-2">
+                                    <span class="text-[var(--text-muted)]">Uploading firmware...</span>
+                                    <span class="font-tech" id="ota-progress-text">0%</span>
+                                </div>
+                                <div class="h-2 bg-[var(--bg-elevated)] rounded-full overflow-hidden">
+                                    <div id="ota-progress-bar" class="h-full bg-[var(--gold)] transition-all duration-200" style="width: 0%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Preset Bar -->
+            <div class="border-t border-white/5 px-6 py-4" style="background: linear-gradient(180deg, #0a0a0a 0%, #000 100%);">
+                <div class="max-w-5xl mx-auto flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <button class="preset-btn" title="Unified">P0</button>
+                        <button class="preset-btn" title="Dual Split">P1</button>
+                        <button class="preset-btn active" title="Triple Rings">P2</button>
+                        <button class="preset-btn" title="Quad Active">P3</button>
+                        <button class="preset-btn" title="LGP Showcase">P4</button>
+                        <button class="preset-btn ml-2 flex items-center justify-center" title="Save Preset">
+                            <span class="iconify" data-icon="lucide:save" data-width="14"></span>
+                        </button>
+                    </div>
+
+                    <div class="hidden md:flex items-center gap-4 text-[9px] text-[var(--text-muted)] font-tech uppercase tracking-wide">
+                        <span><kbd class="px-1 py-0.5 bg-[var(--bg-elevated)] rounded text-[8px]">?</kbd> Shortcuts</span>
+                        <span><kbd class="px-1 py-0.5 bg-[var(--bg-elevated)] rounded text-[8px]">Space</kbd> Zone</span>
+                        <span><kbd class="px-1 py-0.5 bg-[var(--bg-elevated)] rounded text-[8px]">←→</kbd> Effects</span>
+                    </div>
+
+                    <button onclick="toggleZoneSystem()" class="w-12 h-12 rounded-xl flex items-center justify-center bg-[var(--gold)] text-black glow-gold transition-transform hover:scale-105" aria-label="Power" title="Toggle Zone System">
+                        <span class="iconify" data-icon="lucide:power" data-width="20"></span>
+                    </button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="app-v3.js"></script>
+</body>
+</html>

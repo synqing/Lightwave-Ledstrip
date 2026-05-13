@@ -81,6 +81,21 @@ struct ColorCorrectionConfig {
 };
 
 /**
+ * @brief Runtime proof that gamma config and LUT state agree.
+ */
+struct GammaLutStatus {
+    bool gammaEnabled = true;
+    float gammaValue = 2.2f;
+    uint32_t lutGenerationId = 0;
+    uint8_t lut0 = 0;
+    uint8_t lut32 = 0;
+    uint8_t lut64 = 0;
+    uint8_t lut128 = 0;
+    uint8_t lut192 = 0;
+    uint8_t lut255 = 255;
+};
+
+/**
  * @class ColorCorrectionEngine
  * @brief Singleton for comprehensive color correction
  *
@@ -107,14 +122,24 @@ public:
     void setConfig(const ColorCorrectionConfig& config);
 
     /**
-     * @brief Get mutable reference to configuration
-     */
-    ColorCorrectionConfig& getConfig();
-
-    /**
      * @brief Get read-only configuration
      */
     const ColorCorrectionConfig& getConfig() const;
+
+    /**
+     * @brief Get gamma LUT status proof for diagnostics.
+     */
+    GammaLutStatus getGammaLutStatus() const;
+
+    /**
+     * @brief Read one gamma LUT sample.
+     */
+    uint8_t getGammaLutSample(uint8_t input) const;
+
+    /**
+     * @brief Monotonic counter incremented each time the gamma LUT rebuilds.
+     */
+    uint32_t getGammaLutGenerationId() const;
 
     // ========================================================================
     // MODE CONTROL (Shortcuts)
@@ -264,11 +289,17 @@ private:
     static uint8_t s_gammaLUT[256];       ///< Gamma correction table
     static uint8_t s_srgbLinearLUT[256];  ///< sRGB to linear conversion
     static bool s_lutsInitialized;
+    static uint32_t s_gammaLutGenerationId;
 
     /**
      * @brief Initialize LUTs (called once on first use)
      */
     void initLUTs();
+
+    /**
+     * @brief Rebuild gamma LUT from the current config.
+     */
+    void rebuildGammaLUT();
 
     // ========================================================================
     // HELPER FUNCTIONS

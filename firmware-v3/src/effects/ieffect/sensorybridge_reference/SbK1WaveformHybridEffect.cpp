@@ -10,9 +10,9 @@
  *      making dominant notes visibly brighter. K1 original is missing this.
  *
  *   2. led_share scaling — SB divides brightness budget by 12 (chroma bins)
- *      so individual bins contribute proportionally. 12 bins at full = white.
- *      K1 original passes full brightness per bin → overflows immediately,
- *      soft-knee cap always engages, losing relative dynamics.
+ *      so individual bins contribute proportionally. K1 keeps that
+ *      proportional model but widens the share for the LGP fixture because
+ *      exact SB scaling is too dim at normal PHOTONS brightness.
  *
  *   3. Temporal RGB smoothing — SB applies a heavy 0.05/0.95 EMA on the
  *      output colour (~20-frame inertia at 120 FPS). Produces smooth,
@@ -154,10 +154,10 @@ void SbK1WaveformHybridEffect::renderEffect(plugins::EffectContext& ctx) {
     CRGB_F dotColor = {0.0f, 0.0f, 0.0f};
     float totalMag = 0.0f;
 
-    // SB parity: led_share distributes brightness budget across 12 bins.
-    // In SB: led_share = 255.0/12.0 = 21.25 (on 0-255 scale).
-    // Float equivalent: 1.0/12.0 ≈ 0.0833.
-    static constexpr float kLedShare = 1.0f / 12.0f;
+    // K1 LGP tuning: SB's exact 1/12 led_share is too dim on the acrylic
+    // fixture unless PHOTONS is maxed. Keep proportional chroma mixing, but
+    // give dominant notes enough native colour budget at normal brightness.
+    static constexpr float kLedShare = 1.0f / 4.0f;
 
     for (uint8_t c = 0; c < 12; ++c) {
         float bin = m_chromaSmooth[c];
@@ -199,8 +199,12 @@ void SbK1WaveformHybridEffect::renderEffect(plugins::EffectContext& ctx) {
         dotColor = paletteColorF(ctx.palette, forcedPos, fminf(totalMag * kLedShare, 1.0f));
     }
 
-    // Apply PHOTONS brightness
-    float photons = (float)ctx.brightness / 255.0f;
+    // Apply PHOTONS brightness. K1 LGP fixture tuning: Captain's visual
+    // calibration puts Hybrid's useful colour-saturation ceiling around
+    // brightness 200, with <150 still too dim. Compress this effect's local
+    // brightness response toward that range without changing global PHOTONS.
+    static constexpr float kPhotonsCompensation = 1.30f;
+    float photons = fminf(((float)ctx.brightness / 255.0f) * kPhotonsCompensation, 1.0f);
     dotColor *= photons;
     dotColor.clip();
 
@@ -251,9 +255,13 @@ void SbK1WaveformHybridEffect::renderEffect(plugins::EffectContext& ctx) {
     // SHIFT (dt-corrected sub-pixel scroll) — identical to K1 Waveform
     // =====================================================================
 
+    // Captain's K1v2 visual calibration locks this waveform family at native
+    // speed 27; lower values look sluggish and out of sync with music.
     static constexpr float kBaseScrollRate = 150.0f;
     static constexpr float kSpeedMidpoint = 10.0f;
-    float scrollRate = kBaseScrollRate * (static_cast<float>(ctx.speed) / kSpeedMidpoint);
+    static constexpr uint8_t kNativeSpeedFloor = 27;
+    const uint8_t effectiveSpeed = (ctx.speed < kNativeSpeedFloor) ? kNativeSpeedFloor : ctx.speed;
+    float scrollRate = kBaseScrollRate * (static_cast<float>(effectiveSpeed) / kSpeedMidpoint);
     m_ps->scrollAccum += scrollRate * m_dt;
     int pixelsToScroll = static_cast<int>(m_ps->scrollAccum);
     m_ps->scrollAccum -= static_cast<float>(pixelsToScroll);

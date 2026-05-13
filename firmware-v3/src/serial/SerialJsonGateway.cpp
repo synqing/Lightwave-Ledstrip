@@ -19,9 +19,12 @@
 #include "../plugins/api/IEffect.h"
 #include "../effects/zones/ZoneComposer.h"
 #include "../effects/zones/BlendMode.h"
+#include "../network/RequestValidator.h"  // wireZoneIdToInternal (2026-05-02 migration)
 #include "../effects/PatternRegistry.h"
 #include "../effects/enhancement/EdgeMixer.h"
+#include "../effects/enhancement/ColorCorrectionEngine.h"
 #include "../core/narrative/NarrativeEngine.h"
+#include "../core/synqmatrix/SynqMatrix.h"
 #include "../core/shows/BuiltinShows.h"
 #include "../core/shows/Prim8Adapter.h"
 #include "../core/shows/ShowBundleParser.h"
@@ -74,6 +77,264 @@ static void serialJsonResponse(const char* type, const char* reqId, const char* 
 static void serialJsonError(const char* reqId, const char* error) {
     Serial.printf("{\"type\":\"error\",\"requestId\":\"%s\",\"success\":false,\"error\":\"%s\"}\n",
                   reqId, error);
+}
+
+static void serialJsonDocResponse(const char* type, const char* reqId, const JsonDocument& data) {
+    Serial.printf("{\"type\":\"%s\",\"requestId\":\"%s\",\"success\":true,\"data\":", type, reqId);
+    serializeJson(data, Serial);
+    Serial.println("}");
+}
+
+static void appendGammaLutStatus(JsonObject data,
+                                 const lightwaveos::enhancement::GammaLutStatus& status) {
+    data["gammaEnabled"] = status.gammaEnabled;
+    data["gammaValue"] = status.gammaValue;
+    data["lutGenerationId"] = status.lutGenerationId;
+    JsonObject gammaLut = data["gammaLut"].to<JsonObject>();
+    gammaLut["0"] = status.lut0;
+    gammaLut["32"] = status.lut32;
+    gammaLut["64"] = status.lut64;
+    gammaLut["128"] = status.lut128;
+    gammaLut["192"] = status.lut192;
+    gammaLut["255"] = status.lut255;
+}
+
+static void appendColorCorrectionConfig(JsonObject data,
+                                        const lightwaveos::enhancement::ColorCorrectionConfig& cfg,
+                                        const lightwaveos::enhancement::GammaLutStatus& gammaStatus) {
+    data["mode"] = static_cast<uint8_t>(cfg.mode);
+    data["hsvMinSaturation"] = cfg.hsvMinSaturation;
+    data["rgbWhiteThreshold"] = cfg.rgbWhiteThreshold;
+    data["rgbTargetMin"] = cfg.rgbTargetMin;
+    data["autoExposureEnabled"] = cfg.autoExposureEnabled;
+    data["autoExposureTarget"] = cfg.autoExposureTarget;
+    appendGammaLutStatus(data, gammaStatus);
+    data["brownGuardrailEnabled"] = cfg.brownGuardrailEnabled;
+    data["maxGreenPercentOfRed"] = cfg.maxGreenPercentOfRed;
+    data["maxBluePercentOfRed"] = cfg.maxBluePercentOfRed;
+    data["vClampEnabled"] = cfg.vClampEnabled;
+    data["maxBrightness"] = cfg.maxBrightness;
+    data["saturationBoostAmount"] = cfg.saturationBoostAmount;
+}
+
+static lightwaveos::synqmatrix::SynqMatrixRuntimeState g_synqMatrixRestorePoint;
+static bool g_synqMatrixRestorePointValid = false;
+
+static void captureSynqMatrixRestorePoint() {
+    g_synqMatrixRestorePoint = lightwaveos::synqmatrix::SynqMatrix::instance().exportRuntimeState();
+    g_synqMatrixRestorePointValid = true;
+}
+
+static void appendSynqMatrixConfig(JsonObject data,
+                                  const lightwaveos::synqmatrix::SynqMatrixConfig& config) {
+    data["enabled"] = config.enabled;
+    data["mode"] = lightwaveos::synqmatrix::synqMatrixModeName(config.mode);
+    data["profile"] = lightwaveos::synqmatrix::synqMatrixProfileName(config.profile);
+    data["switchingEnabled"] = config.switchingEnabled;
+    data["familyMorphing"] = config.familyMorphing;
+    data["constrainedSwitching"] = config.constrainedSwitching;
+    data["sensitivity"] = config.sensitivity;
+    data["intensityScalar"] = config.intensityScalar;
+    data["motionScalar"] = config.motionScalar;
+    data["confidenceFloor"] = config.confidenceFloor;
+}
+
+static void appendSynqMatrixPolicy(JsonObject data,
+                                  const lightwaveos::synqmatrix::SynqMatrixPolicySnapshot& policy) {
+    data["state"] = lightwaveos::synqmatrix::synqMatrixStateName(policy.state);
+    data["effectId"] = policy.effectId;
+    data["family"] = policy.family;
+    data["visualLanguage"] = policy.visualLanguage;
+    data["reason"] = lightwaveos::synqmatrix::synqMatrixSwitchReasonName(policy.reason);
+    data["minConfidence"] = policy.minConfidence;
+    data["enabled"] = policy.enabled;
+}
+
+static void appendSynqMatrixAllowlist(JsonObject data,
+                                     const lightwaveos::synqmatrix::SynqMatrixAllowlistSnapshot& allowlist) {
+    data["count"] = allowlist.count;
+    JsonArray policies = data["policies"].to<JsonArray>();
+    for (uint8_t i = 0; i < allowlist.count; ++i) {
+        JsonObject item = policies.add<JsonObject>();
+        appendSynqMatrixPolicy(item, allowlist.policies[i]);
+    }
+}
+
+static void appendSynqMatrixHealth(JsonObject data,
+                                  const lightwaveos::synqmatrix::SynqMatrixStatus& status) {
+    data["healthDegraded"] = status.healthDegraded;
+    data["showSkips"] = status.showSkips;
+    data["failures"] = status.failures;
+    data["rmtErrors"] = status.rmtErrors;
+    data["underruns"] = status.underruns;
+    data["healthCleanForMs"] = status.healthCleanForMs;
+    data["healthCleanWindowRemainingMs"] = status.healthCleanWindowRemainingMs;
+}
+
+static void appendSynqMatrixStatus(JsonObject data,
+                                  const lightwaveos::synqmatrix::SynqMatrixStatus& status) {
+    data["enabled"] = status.enabled;
+    data["mode"] = lightwaveos::synqmatrix::synqMatrixModeName(status.effectiveMode);
+    data["effectiveMode"] = lightwaveos::synqmatrix::synqMatrixModeName(status.effectiveMode);
+    data["profile"] = lightwaveos::synqmatrix::synqMatrixProfileName(status.profile);
+    data["owner"] = lightwaveos::synqmatrix::synqMatrixOwnerName(status.owner);
+    data["suppressedReason"] = lightwaveos::synqmatrix::synqMatrixSuppressedReasonName(status.suppressedReason);
+    data["previousSuppressedReason"] =
+        lightwaveos::synqmatrix::synqMatrixSuppressedReasonName(status.previousSuppressedReason);
+    data["classificationReason"] =
+        lightwaveos::synqmatrix::synqMatrixClassificationReasonName(status.classificationReason);
+    data["rawState"] = lightwaveos::synqmatrix::synqMatrixStateName(status.rawState);
+    data["previousState"] = lightwaveos::synqmatrix::synqMatrixStateName(status.previousState);
+    data["currentState"] = lightwaveos::synqmatrix::synqMatrixStateName(status.currentState);
+    data["candidateState"] = lightwaveos::synqmatrix::synqMatrixStateName(status.candidateState);
+    data["intent"] = lightwaveos::synqmatrix::synqMatrixIntentName(status.intent);
+    data["actionPlan"] = lightwaveos::synqmatrix::synqMatrixActionPlanName(status.actionPlan);
+    data["boundaryGate"] = lightwaveos::synqmatrix::synqMatrixBoundaryGateName(status.boundaryGate);
+    data["boundaryReady"] = status.boundaryReady;
+    data["waitingForBoundary"] = status.waitingForBoundary;
+    data["boundaryConfidence"] = status.boundaryConfidence;
+    data["confidence"] = status.confidence;
+    data["selectionScore"] = status.selectionScore;
+    data["lastAction"] = lightwaveos::synqmatrix::synqMatrixLastActionName(status.lastAction);
+    data["activeEffectId"] = status.activeEffectId;
+    data["previousEffectId"] = status.previousEffectId;
+    data["selectedEffectId"] = status.selectedEffectId;
+    data["selectedFamily"] = status.selectedFamily;
+    data["selectedVisualLanguage"] = status.selectedVisualLanguage;
+    data["lastSwitchReason"] = status.lastSwitchReason;
+    data["parameterUpdates"] = status.parameterUpdates;
+    data["automaticEffectSwitches"] = status.automaticEffectSwitches;
+    data["lastDecisionAtMs"] = status.lastDecisionAtMs;
+    data["lastSwitchAtMs"] = status.lastSwitchAtMs;
+    data["stateAgeMs"] = status.stateAgeMs;
+    data["candidateAgeMs"] = status.candidateAgeMs;
+    data["candidateHoldRemainingMs"] = status.candidateHoldRemainingMs;
+    data["dwellRemainingMs"] = status.dwellRemainingMs;
+    data["cooldownRemainingMs"] = status.cooldownRemainingMs;
+    data["bootGraceRemainingMs"] = status.bootGraceRemainingMs;
+    data["enableGraceRemainingMs"] = status.enableGraceRemainingMs;
+    data["switchWindowRemainingMs"] = status.switchWindowRemainingMs;
+    data["switchesInWindow"] = status.switchesInWindow;
+    data["maxSwitchesPerWindow"] = status.maxSwitchesPerWindow;
+    data["antiThrashRemainingMs"] = status.antiThrashRemainingMs;
+    data["lastSwitchFromEffectId"] = status.lastSwitchFromEffectId;
+    data["lastSwitchToEffectId"] = status.lastSwitchToEffectId;
+    data["transitionActive"] = status.transitionActive;
+    data["transitionPreviousEffectId"] = status.transitionPreviousEffectId;
+    data["transitionTargetEffectId"] = status.transitionTargetEffectId;
+    data["transitionStartedAtMs"] = status.transitionStartedAtMs;
+    data["transitionDurationMs"] = status.transitionDurationMs;
+    data["transitionRemainingMs"] = status.transitionRemainingMs;
+    data["transitionProgress"] = status.transitionProgress;
+    data["rms"] = status.rms;
+    data["flux"] = status.flux;
+    data["bpm"] = status.bpm;
+    data["audioConfidence"] = status.audioConfidence;
+    JsonObject health = data["health"].to<JsonObject>();
+    appendSynqMatrixHealth(health, status);
+}
+
+static void appendSynqMatrixDebug(JsonObject data,
+                                 const lightwaveos::synqmatrix::SynqMatrixDebugSnapshot& debug) {
+    JsonObject config = data["config"].to<JsonObject>();
+    appendSynqMatrixConfig(config, debug.config);
+    JsonObject status = data["status"].to<JsonObject>();
+    appendSynqMatrixStatus(status, debug.status);
+    JsonObject policy = data["policy"].to<JsonObject>();
+    policy["bootGraceMs"] = debug.bootGraceMs;
+    policy["postEnableGraceMs"] = debug.postEnableGraceMs;
+    policy["stableStateHoldMs"] = debug.stableStateHoldMs;
+    policy["dropStateHoldMs"] = debug.dropStateHoldMs;
+    policy["minimumDwellMs"] = debug.minimumDwellMs;
+    policy["switchCooldownMs"] = debug.switchCooldownMs;
+    policy["switchWindowMs"] = debug.switchWindowMs;
+    policy["maxSwitchesPerWindow"] = debug.maxSwitchesPerWindow;
+    policy["antiThrashWindowMs"] = debug.antiThrashWindowMs;
+    policy["healthCleanWindowMs"] = debug.healthCleanWindowMs;
+    JsonObject allowlist = data["allowlist"].to<JsonObject>();
+    appendSynqMatrixAllowlist(allowlist, debug.allowlist);
+}
+
+static bool applySynqMatrixConfigJson(JsonObjectConst root,
+                                     lightwaveos::synqmatrix::SynqMatrixConfig& config,
+                                     const char** error) {
+    if (root.containsKey("enabled")) {
+        if (!root["enabled"].is<bool>()) {
+            *error = "enabled must be bool";
+            return false;
+        }
+        config.enabled = root["enabled"].as<bool>();
+    }
+    if (root.containsKey("mode")) {
+        const char* value = root["mode"].as<const char*>();
+        bool ok = false;
+        bool profileOk = false;
+        const auto legacyProfile = lightwaveos::synqmatrix::parseSynqMatrixProfile(value, &profileOk);
+        config.mode = lightwaveos::synqmatrix::parseSynqMatrixMode(value, &ok);
+        if (!ok) {
+            *error = "mode must be off, assist, or director";
+            return false;
+        }
+        if (profileOk && value &&
+            (strcmp(value, "subtle") == 0 || strcmp(value, "balanced") == 0 ||
+             strcmp(value, "high") == 0 || strcmp(value, "high_energy") == 0)) {
+            config.profile = legacyProfile;
+            config.mode = lightwaveos::synqmatrix::SynqMatrixMode::Assist;
+        }
+    }
+    if (root.containsKey("profile")) {
+        const char* value = root["profile"].as<const char*>();
+        bool ok = false;
+        config.profile = lightwaveos::synqmatrix::parseSynqMatrixProfile(value, &ok);
+        if (!ok) {
+            *error = "profile must be subtle, balanced, or high";
+            return false;
+        }
+    }
+    if (root.containsKey("familyMorphing")) {
+        if (!root["familyMorphing"].is<bool>()) {
+            *error = "familyMorphing must be bool";
+            return false;
+        }
+        config.familyMorphing = root["familyMorphing"].as<bool>();
+    }
+    if (root.containsKey("constrainedSwitching")) {
+        if (!root["constrainedSwitching"].is<bool>()) {
+            *error = "constrainedSwitching must be bool";
+            return false;
+        }
+        config.constrainedSwitching = root["constrainedSwitching"].as<bool>();
+        config.switchingEnabled = config.constrainedSwitching;
+    }
+    if (root.containsKey("switchingEnabled")) {
+        if (!root["switchingEnabled"].is<bool>()) {
+            *error = "switchingEnabled must be bool";
+            return false;
+        }
+        config.switchingEnabled = root["switchingEnabled"].as<bool>();
+        config.constrainedSwitching = config.switchingEnabled;
+    }
+
+    const char* floatFields[] = {"sensitivity", "intensityScalar", "motionScalar", "confidenceFloor"};
+    for (const char* field : floatFields) {
+        if (root.containsKey(field)) {
+            if (!root[field].is<float>()) {
+                *error = "scalar fields must be numeric";
+                return false;
+            }
+            const float value = root[field].as<float>();
+            if (value < 0.0f || value > 1.0f) {
+                *error = "scalar fields must be in range 0.0-1.0";
+                return false;
+            }
+            if (strcmp(field, "sensitivity") == 0) config.sensitivity = value;
+            else if (strcmp(field, "intensityScalar") == 0) config.intensityScalar = value;
+            else if (strcmp(field, "motionScalar") == 0) config.motionScalar = value;
+            else if (strcmp(field, "confidenceFloor") == 0) config.confidenceFloor = value;
+        }
+    }
+
+    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -317,6 +578,10 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
     // ------------------------------------------------------------------
     // zones.list
     // ------------------------------------------------------------------
+    // Wire-format migration (2026-05-02): every emitted zoneId is 1-indexed
+    // (1..3); internal storage is 0-indexed.
+    // B5 SerialJSON parity gap #5: each row now also includes `zoneId`
+    // (1-indexed) and `effectName` (string), matching REST `GET /api/v1/zones`.
     else if (strcmp(type, "zones.list") == 0) {
         bool enabled = zoneComposer.isEnabled();
         uint8_t count = zoneComposer.getZoneCount();
@@ -326,11 +591,19 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
         JsonArray arr = respDoc["zones"].to<JsonArray>();
         for (uint8_t i = 0; i < count; i++) {
             JsonObject obj = arr.add<JsonObject>();
-            obj["id"] = i;
-            obj["effectId"] = zoneComposer.getZoneEffect(i);
+            const uint8_t wireZoneId = static_cast<uint8_t>(i + 1);
+            obj["id"] = wireZoneId;
+            obj["zoneId"] = wireZoneId;
+            EffectId eid = zoneComposer.getZoneEffect(i);
+            obj["effectId"] = eid;
+            if (renderer) {
+                const char* name = renderer->getEffectName(eid);
+                if (name) obj["effectName"] = name;
+            }
             obj["brightness"] = zoneComposer.getZoneBrightness(i);
             obj["speed"] = zoneComposer.getZoneSpeed(i);
             obj["palette"] = zoneComposer.getZonePalette(i);
+            obj["paletteId"] = zoneComposer.getZonePalette(i);  // alias matching REST
             obj["enabled"] = zoneComposer.isZoneEnabled(i);
         }
         Serial.printf("{\"type\":\"%s\",\"requestId\":\"%s\",\"success\":true,\"data\":", type, reqId);
@@ -552,6 +825,249 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
         serialJsonResponse(type, reqId, buf);
     }
     // ------------------------------------------------------------------
+    // render.dithering.get / render.dithering.set
+    // ------------------------------------------------------------------
+    else if (strcmp(type, "render.dithering.get") == 0) {
+        const bool enabled = renderer ? renderer->isLedDitheringEnabled() : true;
+        char buf[32];
+        snprintf(buf, sizeof(buf), "{\"enabled\":%s}", enabled ? "true" : "false");
+        serialJsonResponse(type, reqId, buf);
+    }
+    else if (strcmp(type, "render.dithering.set") == 0) {
+        if (!doc["enabled"].is<bool>()) { serialJsonError(reqId, "missing enabled"); return; }
+        const bool enabled = doc["enabled"].as<bool>();
+        if (!actors.setLedDithering(enabled)) {
+            serialJsonError(reqId, "renderer queue saturated");
+            return;
+        }
+        char buf[32];
+        snprintf(buf, sizeof(buf), "{\"enabled\":%s}", enabled ? "true" : "false");
+        serialJsonResponse(type, reqId, buf);
+    }
+    // ------------------------------------------------------------------
+    // synqMatrix.* (canonical) / songAware.* (legacy alias) --
+    // runtime-only SynqMatrix Director control/readback. Canonical arms
+    // take precedence in matching; both invoke the same logic with
+    // envelope-type echoed back to the caller.
+    // ------------------------------------------------------------------
+    else if (strcmp(type, "synqMatrix.config.get") == 0 ||
+             strcmp(type, "songAware.config.get") == 0) {
+        const char* envelope =
+            (strcmp(type, "synqMatrix.config.get") == 0) ? "synqMatrix.config" : "songAware.config";
+        const auto config = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        appendSynqMatrixConfig(data, config);
+        serialJsonDocResponse(envelope, reqId, respDoc);
+    }
+    else if (strcmp(type, "synqMatrix.config.set") == 0 ||
+             strcmp(type, "songAware.config.set") == 0) {
+        const char* envelope =
+            (strcmp(type, "synqMatrix.config.set") == 0) ? "synqMatrix.config" : "songAware.config";
+        auto config = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
+        const char* error = nullptr;
+        if (!applySynqMatrixConfigJson(doc.as<JsonObjectConst>(), config, &error)) {
+            serialJsonError(reqId, error ? error : "invalid SynqMatrix config");
+            return;
+        }
+        captureSynqMatrixRestorePoint();
+        lightwaveos::synqmatrix::SynqMatrix::instance().setConfig(config);
+
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        appendSynqMatrixConfig(data, config);
+        serialJsonDocResponse(envelope, reqId, respDoc);
+    }
+    else if (strcmp(type, "synqMatrix.status") == 0 ||
+             strcmp(type, "songAware.status") == 0) {
+        const auto status = lightwaveos::synqmatrix::SynqMatrix::instance().getStatus();
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        appendSynqMatrixStatus(data, status);
+        serialJsonDocResponse(type, reqId, respDoc);
+    }
+    else if (strcmp(type, "synqMatrix.reset") == 0 ||
+             strcmp(type, "songAware.reset") == 0) {
+        captureSynqMatrixRestorePoint();
+        lightwaveos::synqmatrix::SynqMatrix::instance().reset();
+        const auto status = lightwaveos::synqmatrix::SynqMatrix::instance().getStatus();
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        data["reset"] = true;
+        JsonObject statusObj = data["status"].to<JsonObject>();
+        appendSynqMatrixStatus(statusObj, status);
+        serialJsonDocResponse(type, reqId, respDoc);
+    }
+    else if (strcmp(type, "synqMatrix.restore") == 0 ||
+             strcmp(type, "songAware.restore") == 0) {
+        if (!g_synqMatrixRestorePointValid) {
+            serialJsonError(reqId, "no restore point captured in this serial JSON session");
+            return;
+        }
+        lightwaveos::synqmatrix::SynqMatrix::instance().restoreRuntimeState(g_synqMatrixRestorePoint);
+        const auto status = lightwaveos::synqmatrix::SynqMatrix::instance().getStatus();
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        data["restored"] = true;
+        JsonObject statusObj = data["status"].to<JsonObject>();
+        appendSynqMatrixStatus(statusObj, status);
+        serialJsonDocResponse(type, reqId, respDoc);
+    }
+    else if (strcmp(type, "synqMatrix.debug") == 0 ||
+             strcmp(type, "songAware.debug") == 0) {
+        const auto debug = lightwaveos::synqmatrix::SynqMatrix::instance().getDebugSnapshot();
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        appendSynqMatrixDebug(data, debug);
+        serialJsonDocResponse(type, reqId, respDoc);
+    }
+    else if (strcmp(type, "synqMatrix.policy") == 0 ||
+             strcmp(type, "songAware.policy") == 0) {
+        const auto debug = lightwaveos::synqmatrix::SynqMatrix::instance().getDebugSnapshot();
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        data["bootGraceMs"] = debug.bootGraceMs;
+        data["postEnableGraceMs"] = debug.postEnableGraceMs;
+        data["stableStateHoldMs"] = debug.stableStateHoldMs;
+        data["dropStateHoldMs"] = debug.dropStateHoldMs;
+        data["minimumDwellMs"] = debug.minimumDwellMs;
+        data["switchCooldownMs"] = debug.switchCooldownMs;
+        data["switchWindowMs"] = debug.switchWindowMs;
+        data["maxSwitchesPerWindow"] = debug.maxSwitchesPerWindow;
+        data["antiThrashWindowMs"] = debug.antiThrashWindowMs;
+        data["healthCleanWindowMs"] = debug.healthCleanWindowMs;
+        data["allowlistCount"] = debug.allowlist.count;
+        serialJsonDocResponse(type, reqId, respDoc);
+    }
+    else if (strcmp(type, "synqMatrix.allowlist") == 0 ||
+             strcmp(type, "songAware.allowlist") == 0) {
+        const auto allowlist = lightwaveos::synqmatrix::SynqMatrix::instance().getAllowlistSnapshot();
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        appendSynqMatrixAllowlist(data, allowlist);
+        serialJsonDocResponse(type, reqId, respDoc);
+    }
+    else if (strcmp(type, "synqMatrix.allowlist.set") == 0 ||
+             strcmp(type, "songAware.allowlist.set") == 0) {
+        const char* envelope =
+            (strcmp(type, "synqMatrix.allowlist.set") == 0) ? "synqMatrix.allowlist" : "songAware.allowlist";
+        if (!doc["state"].is<const char*>() || !doc["enabled"].is<bool>()) {
+            serialJsonError(reqId, "state and enabled are required");
+            return;
+        }
+        bool ok = false;
+        const auto state =
+            lightwaveos::synqmatrix::parseSynqMatrixState(doc["state"].as<const char*>(), &ok);
+        if (!ok) {
+            serialJsonError(reqId, "invalid SynqMatrix state");
+            return;
+        }
+        captureSynqMatrixRestorePoint();
+        lightwaveos::synqmatrix::SynqMatrix::instance().setPolicyAllowed(
+            state,
+            doc["enabled"].as<bool>());
+        const auto allowlist = lightwaveos::synqmatrix::SynqMatrix::instance().getAllowlistSnapshot();
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        appendSynqMatrixAllowlist(data, allowlist);
+        serialJsonDocResponse(envelope, reqId, respDoc);
+    }
+    else if (strcmp(type, "synqMatrix.allowlist.reset") == 0 ||
+             strcmp(type, "songAware.allowlist.reset") == 0) {
+        const char* envelope =
+            (strcmp(type, "synqMatrix.allowlist.reset") == 0) ? "synqMatrix.allowlist" : "songAware.allowlist";
+        captureSynqMatrixRestorePoint();
+        lightwaveos::synqmatrix::SynqMatrix::instance().resetPolicyAllowlist();
+        const auto allowlist = lightwaveos::synqmatrix::SynqMatrix::instance().getAllowlistSnapshot();
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        appendSynqMatrixAllowlist(data, allowlist);
+        serialJsonDocResponse(envelope, reqId, respDoc);
+    }
+    else if (strcmp(type, "synqMatrix.health") == 0 ||
+             strcmp(type, "songAware.health") == 0) {
+        const auto status = lightwaveos::synqmatrix::SynqMatrix::instance().getStatus();
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        appendSynqMatrixHealth(data, status);
+        serialJsonDocResponse(type, reqId, respDoc);
+    }
+    else if (strcmp(type, "synqMatrix.counters.reset") == 0 ||
+             strcmp(type, "synqMatrix.countersReset") == 0 ||
+             strcmp(type, "songAware.counters.reset") == 0 ||
+             strcmp(type, "songAware.countersReset") == 0) {
+        const bool canonical =
+            (strcmp(type, "synqMatrix.counters.reset") == 0) ||
+            (strcmp(type, "synqMatrix.countersReset") == 0);
+        const char* envelope = canonical ? "synqMatrix.counters.reset" : "songAware.counters.reset";
+        captureSynqMatrixRestorePoint();
+        lightwaveos::synqmatrix::SynqMatrix::instance().resetCounters();
+        const auto status = lightwaveos::synqmatrix::SynqMatrix::instance().getStatus();
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        data["reset"] = true;
+        JsonObject health = data["health"].to<JsonObject>();
+        appendSynqMatrixHealth(health, status);
+        data["parameterUpdates"] = status.parameterUpdates;
+        data["automaticEffectSwitches"] = status.automaticEffectSwitches;
+        serialJsonDocResponse(envelope, reqId, respDoc);
+    }
+    // ------------------------------------------------------------------
+    // colorCorrection.getConfig / colorCorrection.setConfig
+    // ------------------------------------------------------------------
+    else if (strcmp(type, "colorCorrection.getConfig") == 0) {
+        using lightwaveos::enhancement::ColorCorrectionEngine;
+        auto& engine = ColorCorrectionEngine::getInstance();
+        const auto cfg = engine.getConfig();
+        const auto gammaStatus = engine.getGammaLutStatus();
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        appendColorCorrectionConfig(data, cfg, gammaStatus);
+        serialJsonDocResponse(type, reqId, respDoc);
+    }
+    else if (strcmp(type, "colorCorrection.setConfig") == 0) {
+        using lightwaveos::enhancement::ColorCorrectionConfig;
+        using lightwaveos::enhancement::ColorCorrectionEngine;
+        using lightwaveos::enhancement::CorrectionMode;
+        auto& engine = ColorCorrectionEngine::getInstance();
+        ColorCorrectionConfig cfg = engine.getConfig();
+
+        if (doc.containsKey("mode")) {
+            uint8_t mode = doc["mode"] | 0;
+            if (mode > 3) { serialJsonError(reqId, "mode must be 0-3"); return; }
+            cfg.mode = static_cast<CorrectionMode>(mode);
+        }
+        if (doc.containsKey("hsvMinSaturation")) cfg.hsvMinSaturation = doc["hsvMinSaturation"].as<uint8_t>();
+        if (doc.containsKey("rgbWhiteThreshold")) cfg.rgbWhiteThreshold = doc["rgbWhiteThreshold"].as<uint8_t>();
+        if (doc.containsKey("rgbTargetMin")) cfg.rgbTargetMin = doc["rgbTargetMin"].as<uint8_t>();
+        if (doc.containsKey("autoExposureEnabled")) cfg.autoExposureEnabled = doc["autoExposureEnabled"].as<bool>();
+        if (doc.containsKey("autoExposureTarget")) cfg.autoExposureTarget = doc["autoExposureTarget"].as<uint8_t>();
+        if (doc.containsKey("gammaEnabled")) cfg.gammaEnabled = doc["gammaEnabled"].as<bool>();
+        if (doc.containsKey("gammaValue")) {
+            float gammaValue = doc["gammaValue"].as<float>();
+            if (gammaValue < 1.0f || gammaValue > 3.0f) {
+                serialJsonError(reqId, "gammaValue must be 1.0-3.0");
+                return;
+            }
+            cfg.gammaValue = gammaValue;
+        }
+        if (doc.containsKey("brownGuardrailEnabled")) cfg.brownGuardrailEnabled = doc["brownGuardrailEnabled"].as<bool>();
+        if (doc.containsKey("maxGreenPercentOfRed")) cfg.maxGreenPercentOfRed = doc["maxGreenPercentOfRed"].as<uint8_t>();
+        if (doc.containsKey("maxBluePercentOfRed")) cfg.maxBluePercentOfRed = doc["maxBluePercentOfRed"].as<uint8_t>();
+        if (doc.containsKey("vClampEnabled")) cfg.vClampEnabled = doc["vClampEnabled"].as<bool>();
+        if (doc.containsKey("maxBrightness")) cfg.maxBrightness = doc["maxBrightness"].as<uint8_t>();
+        if (doc.containsKey("saturationBoostAmount")) cfg.saturationBoostAmount = doc["saturationBoostAmount"].as<uint8_t>();
+
+        engine.setConfig(cfg);
+        const auto updated = engine.getConfig();
+        const auto gammaStatus = engine.getGammaLutStatus();
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        data["updated"] = true;
+        appendColorCorrectionConfig(data, updated, gammaStatus);
+        serialJsonDocResponse(type, reqId, respDoc);
+    }
+    // ------------------------------------------------------------------
     // saveEdgeMixer
     // ------------------------------------------------------------------
     else if (strcmp(type, "saveEdgeMixer") == 0) {
@@ -612,18 +1128,23 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
     // ------------------------------------------------------------------
     // zone.setEffect  (set effect on a specific zone)
     // ------------------------------------------------------------------
+    // Wire-format migration (2026-05-02): zoneId on the wire is 1-indexed
+    // (1..3); translate to 0-indexed internal index. Reject wire 0 / out-of-range.
     else if (strcmp(type, "zone.setEffect") == 0) {
         if (!doc["zoneId"].is<int>()) { serialJsonError(reqId, "missing zoneId"); return; }
         if (!doc["effectId"].is<int>()) { serialJsonError(reqId, "missing effectId"); return; }
-        uint8_t zoneId = doc["zoneId"];
+        uint8_t wireZoneId = doc["zoneId"];
         EffectId effectId = doc["effectId"];
 
+        bool zoneIdValid = false;
+        uint8_t zoneId = lightwaveos::network::wireZoneIdToInternal(wireZoneId, zoneIdValid);
+        if (!zoneIdValid) { serialJsonError(reqId, "zoneId out of range (must be 1-3)"); return; }
         if (zoneId >= zoneComposer.getZoneCount()) { serialJsonError(reqId, "zoneId out of range"); return; }
         if (renderer && !renderer->isEffectRegistered(effectId)) { serialJsonError(reqId, "effectId not registered"); return; }
 
         zoneComposer.setZoneEffect(zoneId, effectId);
         char buf[96];
-        snprintf(buf, sizeof(buf), "{\"zoneId\":%u,\"effectId\":%u}", (unsigned)zoneId, (unsigned)effectId);
+        snprintf(buf, sizeof(buf), "{\"zoneId\":%u,\"effectId\":%u}", (unsigned)wireZoneId, (unsigned)effectId);
         serialJsonResponse(type, reqId, buf);
     }
     // ------------------------------------------------------------------
@@ -632,14 +1153,17 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
     else if (strcmp(type, "zone.setBrightness") == 0) {
         if (!doc["zoneId"].is<int>()) { serialJsonError(reqId, "missing zoneId"); return; }
         if (!doc["brightness"].is<int>()) { serialJsonError(reqId, "missing brightness"); return; }
-        uint8_t zoneId = doc["zoneId"];
+        uint8_t wireZoneId = doc["zoneId"];
         uint8_t brightness = doc["brightness"];
 
+        bool zoneIdValid = false;
+        uint8_t zoneId = lightwaveos::network::wireZoneIdToInternal(wireZoneId, zoneIdValid);
+        if (!zoneIdValid) { serialJsonError(reqId, "zoneId out of range (must be 1-3)"); return; }
         if (zoneId >= zoneComposer.getZoneCount()) { serialJsonError(reqId, "zoneId out of range"); return; }
 
         zoneComposer.setZoneBrightness(zoneId, brightness);
         char buf[96];
-        snprintf(buf, sizeof(buf), "{\"zoneId\":%u,\"brightness\":%u}", (unsigned)zoneId, (unsigned)brightness);
+        snprintf(buf, sizeof(buf), "{\"zoneId\":%u,\"brightness\":%u}", (unsigned)wireZoneId, (unsigned)brightness);
         serialJsonResponse(type, reqId, buf);
     }
     // ------------------------------------------------------------------
@@ -648,14 +1172,17 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
     else if (strcmp(type, "zone.setSpeed") == 0) {
         if (!doc["zoneId"].is<int>()) { serialJsonError(reqId, "missing zoneId"); return; }
         if (!doc["speed"].is<int>()) { serialJsonError(reqId, "missing speed"); return; }
-        uint8_t zoneId = doc["zoneId"];
+        uint8_t wireZoneId = doc["zoneId"];
         uint8_t speed = doc["speed"];
 
+        bool zoneIdValid = false;
+        uint8_t zoneId = lightwaveos::network::wireZoneIdToInternal(wireZoneId, zoneIdValid);
+        if (!zoneIdValid) { serialJsonError(reqId, "zoneId out of range (must be 1-3)"); return; }
         if (zoneId >= zoneComposer.getZoneCount()) { serialJsonError(reqId, "zoneId out of range"); return; }
 
         zoneComposer.setZoneSpeed(zoneId, speed);
         char buf[96];
-        snprintf(buf, sizeof(buf), "{\"zoneId\":%u,\"speed\":%u}", (unsigned)zoneId, (unsigned)speed);
+        snprintf(buf, sizeof(buf), "{\"zoneId\":%u,\"speed\":%u}", (unsigned)wireZoneId, (unsigned)speed);
         serialJsonResponse(type, reqId, buf);
     }
     // ------------------------------------------------------------------
@@ -664,14 +1191,17 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
     else if (strcmp(type, "zone.setPalette") == 0) {
         if (!doc["zoneId"].is<int>()) { serialJsonError(reqId, "missing zoneId"); return; }
         if (!doc["paletteId"].is<int>()) { serialJsonError(reqId, "missing paletteId"); return; }
-        uint8_t zoneId = doc["zoneId"];
+        uint8_t wireZoneId = doc["zoneId"];
         uint8_t paletteId = doc["paletteId"];
 
+        bool zoneIdValid = false;
+        uint8_t zoneId = lightwaveos::network::wireZoneIdToInternal(wireZoneId, zoneIdValid);
+        if (!zoneIdValid) { serialJsonError(reqId, "zoneId out of range (must be 1-3)"); return; }
         if (zoneId >= zoneComposer.getZoneCount()) { serialJsonError(reqId, "zoneId out of range"); return; }
 
         zoneComposer.setZonePalette(zoneId, paletteId);
         char buf[96];
-        snprintf(buf, sizeof(buf), "{\"zoneId\":%u,\"paletteId\":%u}", (unsigned)zoneId, (unsigned)paletteId);
+        snprintf(buf, sizeof(buf), "{\"zoneId\":%u,\"paletteId\":%u}", (unsigned)wireZoneId, (unsigned)paletteId);
         serialJsonResponse(type, reqId, buf);
     }
     // ------------------------------------------------------------------
@@ -680,15 +1210,18 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
     else if (strcmp(type, "zone.setBlend") == 0) {
         if (!doc["zoneId"].is<int>()) { serialJsonError(reqId, "missing zoneId"); return; }
         if (!doc["blendMode"].is<int>()) { serialJsonError(reqId, "missing blendMode"); return; }
-        uint8_t zoneId = doc["zoneId"];
+        uint8_t wireZoneId = doc["zoneId"];
         uint8_t blendModeVal = doc["blendMode"];
 
+        bool zoneIdValid = false;
+        uint8_t zoneId = lightwaveos::network::wireZoneIdToInternal(wireZoneId, zoneIdValid);
+        if (!zoneIdValid) { serialJsonError(reqId, "zoneId out of range (must be 1-3)"); return; }
         if (zoneId >= zoneComposer.getZoneCount()) { serialJsonError(reqId, "zoneId out of range"); return; }
 
         lightwaveos::zones::BlendMode blendMode = static_cast<lightwaveos::zones::BlendMode>(blendModeVal);
         zoneComposer.setZoneBlendMode(zoneId, blendMode);
         char buf[96];
-        snprintf(buf, sizeof(buf), "{\"zoneId\":%u,\"blendMode\":%u}", (unsigned)zoneId, (unsigned)blendModeVal);
+        snprintf(buf, sizeof(buf), "{\"zoneId\":%u,\"blendMode\":%u}", (unsigned)wireZoneId, (unsigned)blendModeVal);
         serialJsonResponse(type, reqId, buf);
     }
     // ------------------------------------------------------------------
@@ -696,8 +1229,11 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
     // ------------------------------------------------------------------
     else if (strcmp(type, "zones.update") == 0) {
         if (!doc["zoneId"].is<int>()) { serialJsonError(reqId, "missing zoneId"); return; }
-        uint8_t zoneId = doc["zoneId"];
+        uint8_t wireZoneId = doc["zoneId"];
 
+        bool zoneIdValid = false;
+        uint8_t zoneId = lightwaveos::network::wireZoneIdToInternal(wireZoneId, zoneIdValid);
+        if (!zoneIdValid) { serialJsonError(reqId, "zoneId out of range (must be 1-3)"); return; }
         if (zoneId >= zoneComposer.getZoneCount()) { serialJsonError(reqId, "zoneId out of range"); return; }
 
         if (doc.containsKey("effectId") && renderer) {
@@ -721,7 +1257,7 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
         }
 
         char buf[48];
-        snprintf(buf, sizeof(buf), "{\"zoneId\":%u,\"updated\":true}", (unsigned)zoneId);
+        snprintf(buf, sizeof(buf), "{\"zoneId\":%u,\"updated\":true}", (unsigned)wireZoneId);
         serialJsonResponse(type, reqId, buf);
     }
     // ------------------------------------------------------------------

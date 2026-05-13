@@ -7,8 +7,8 @@
  *
  * Hardware config extracted from firmware-v3:
  *   - ESP32-S3 N16R8
- *   - Strip 1: GPIO 4, 160 LEDs, WS2812 GRB
- *   - Strip 2: GPIO 5, 160 LEDs, WS2812 GRB
+ *   - Strip 1: K1_LED_STRIP1_DATA, 160 LEDs, WS2812 GRB
+ *   - Strip 2: K1_LED_STRIP2_DATA, 160 LEDs, WS2812 GRB
  *   - Power:   5V / 3000mA max
  *   - Color correction: TypicalLEDStrip
  *   - RMT driver: Custom (FASTLED_RMT_BUILTIN_DRIVER=0)
@@ -44,8 +44,16 @@
 // Hardware Configuration (from firmware-v3 chip_esp32s3.h + RendererActor.h)
 // ============================================================================
 
-static constexpr uint8_t  STRIP1_PIN       = 4;   // chip::gpio::LED_STRIP1_DATA
-static constexpr uint8_t  STRIP2_PIN       = 5;   // chip::gpio::LED_STRIP2_DATA
+#ifdef K1_LED_STRIP1_DATA
+static constexpr uint8_t  STRIP1_PIN       = K1_LED_STRIP1_DATA;
+#else
+static constexpr uint8_t  STRIP1_PIN       = 4;
+#endif
+#ifdef K1_LED_STRIP2_DATA
+static constexpr uint8_t  STRIP2_PIN       = K1_LED_STRIP2_DATA;
+#else
+static constexpr uint8_t  STRIP2_PIN       = 5;
+#endif
 static constexpr uint16_t LEDS_PER_STRIP   = 160;  // LedConfig::LEDS_PER_STRIP
 static constexpr uint16_t TOTAL_LEDS       = LEDS_PER_STRIP * 2;  // 320
 

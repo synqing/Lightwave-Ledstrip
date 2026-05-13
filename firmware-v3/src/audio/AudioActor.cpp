@@ -20,12 +20,14 @@
 #include <cstring>
 #include <cmath>
 #include <algorithm>
+#include <cstdint>
 
 #ifndef NATIVE_BUILD
 #include <Arduino.h>  // For Serial in one-shot debug methods
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <esp_task_wdt.h>  // Task Watchdog subscription/feed for audio tick liveness
+#include <soc/soc_memory_types.h>
 #endif
 
 // AudioMath::retunedAlpha for hop-rate-aware AGC/noise-floor alphas
@@ -38,6 +40,7 @@
 // No-ops when FEATURE_MABUTRACE is disabled
 #include "AudioBenchmarkTrace.h"
 #include "pipeline/FFT.h"
+#include "utils/BenchRegistry.h"
 
 // Unified logging system (preserves colored output conventions)
 #define LW_LOG_TAG "Audio"
@@ -305,6 +308,69 @@ inline uint32_t esp_log_timestamp() { return 0; }
 namespace lightwaveos {
 namespace audio {
 
+namespace {
+inline void applyControlBusBenchToggles(ControlBus& controlBus) {
+    controlBus.setBenchAudioToggles(
+        ::lightwaveos::bench::isToggleEnabled(&::lightwaveos::bench::g_bench_audio_lookahead),
+        ::lightwaveos::bench::isToggleEnabled(&::lightwaveos::bench::g_bench_audio_zone_agc),
+        ::lightwaveos::bench::isToggleEnabled(&::lightwaveos::bench::g_bench_audio_chroma_zone_agc)
+    );
+}
+
+#ifndef NATIVE_BUILD
+inline const char* memoryRegionName(const void* ptr) {
+    if (esp_ptr_in_dram(ptr)) {
+        return "DRAM";
+    }
+    if (esp_ptr_external_ram(ptr)) {
+        return "PSRAM";
+    }
+    return "OTHER";
+}
+
+inline int memoryRegionCode(const void* ptr) {
+    if (esp_ptr_in_dram(ptr)) {
+        return 1;
+    }
+    if (esp_ptr_external_ram(ptr)) {
+        return 2;
+    }
+    return 0;
+}
+#endif
+} // namespace
+
+void AudioActor::logControlBusBufferPlacement() const {
+#ifndef NATIVE_BUILD
+    if (!m_controlBusBuffer.IsReady()) {
+        TRACE_COUNTER("audio_snapshot_storage_region", 0);
+        LW_LOGE("ControlBusFrame snapshot storage: unavailable");
+        return;
+    }
+
+    const void* actorStorage = static_cast<const void*>(this);
+    const void* payloadStorage = m_controlBusBuffer->StorageAddressForDiagnostics();
+    const unsigned frameBytes = static_cast<unsigned>(sizeof(ControlBusFrame));
+    const unsigned payloadBytes =
+        static_cast<unsigned>(m_controlBusBuffer->PayloadBytesForDiagnostics());
+    const unsigned objectBytes =
+        static_cast<unsigned>(m_controlBusBuffer->ObjectBytesForDiagnostics());
+
+    TRACE_COUNTER("audio_actor_storage_region", memoryRegionCode(actorStorage));
+    TRACE_COUNTER("audio_snapshot_storage_region", memoryRegionCode(payloadStorage));
+    TRACE_COUNTER("audio_snapshot_payload_bytes", static_cast<int>(payloadBytes));
+
+    LW_LOGI("ControlBusFrame snapshot storage: actor=%p(%s) payload=%p(%s) frame=%u payload=%u object=%u",
+            actorStorage,
+            memoryRegionName(actorStorage),
+            payloadStorage,
+            memoryRegionName(payloadStorage),
+            frameBytes,
+            payloadBytes,
+            objectBytes);
+#endif
+}
+
 #if !FEATURE_AUDIO_BACKEND_ESV11
 AudioActor::ZoneAgcSnapshot AudioActor::getZoneAgcSnapshot() const {
     ZoneAgcSnapshot snapshot;
@@ -452,7 +518,7 @@ void AudioActor::printStatus()
 {
 #ifndef NATIVE_BUILD
     ControlBusFrame latest{};
-    m_controlBusBuffer.ReadLatest(latest);
+    m_controlBusBuffer->ReadLatest(latest);
     Serial.println("=== Audio Status (ES v1.1 backend) ===");
     Serial.printf("  RMS: %.3f  Flux: %.3f\n", latest.rms, latest.flux);
     Serial.printf("  BPM: %.1f  Conf: %.3f  BeatTick: %d\n",
@@ -479,7 +545,7 @@ void AudioActor::printSpectrum()
 {
 #ifndef NATIVE_BUILD
     ControlBusFrame latest{};
-    m_controlBusBuffer.ReadLatest(latest);
+    m_controlBusBuffer->ReadLatest(latest);
     Serial.println("=== Spectrum (ES v1.1 backend) ===");
     Serial.print("  Bands:");
     for (int i = 0; i < CONTROLBUS_NUM_BANDS; ++i) {
@@ -493,7 +559,7 @@ void AudioActor::printBeat()
 {
 #ifndef NATIVE_BUILD
     ControlBusFrame latest{};
-    m_controlBusBuffer.ReadLatest(latest);
+    m_controlBusBuffer->ReadLatest(latest);
     Serial.println("=== Beat (ES v1.1 backend) ===");
     Serial.printf("  BPM: %.1f  Conf: %.3f  Phase01@t: %.3f  BeatInBar: %u\n",
                   latest.es_bpm, latest.es_tempo_confidence, latest.es_phase01_at_audio_t,
@@ -602,9 +668,13 @@ void AudioActor::onTick()
         static_cast<uint32_t>((static_cast<uint64_t>(audio::ESV11_CHUNK_SIZE) * 1000000ULL) /
                               static_cast<uint64_t>(audio::SAMPLE_RATE));
     m_diag.captureAttempts++;
+#if FEATURE_TRACE_AUDIO_DSP
     TRACE_BEGIN("i2s_dma_read");
+#endif
     if (!m_esBackend.readAndProcessChunk(now_us)) {
+#if FEATURE_TRACE_AUDIO_DSP
         TRACE_END();
+#endif
         const uint32_t chunkWallUs = static_cast<uint32_t>(esp_timer_get_time() - chunkStartUs);
         TRACE_COUNTER("audio_chunk_wall_us", static_cast<int32_t>(chunkWallUs));
         TRACE_COUNTER("audio_chunk_work_us", static_cast<int32_t>(chunkWallUs));
@@ -618,7 +688,9 @@ void AudioActor::onTick()
         vTaskDelay(1);  // Block to let IDLE0 feed watchdog (taskYIELD insufficient - only yields to equal/higher priority)
         return;
     }
+#if FEATURE_TRACE_AUDIO_DSP
     TRACE_END();  // i2s_dma_read
+#endif
     const uint32_t chunkWallUs = static_cast<uint32_t>(esp_timer_get_time() - chunkStartUs);
     const auto chunkTiming = m_esBackend.lastChunkTiming();
     const uint32_t chunkWorkUs = chunkTiming.dsp_us;
@@ -649,7 +721,9 @@ void AudioActor::onTick()
     m_esChunkCounter = 0;
 
     const uint64_t controlBuildStartUs = esp_timer_get_time();
+#if FEATURE_TRACE_AUDIO_DSP
     TRACE_BEGIN("controlbus_build");
+#endif
     esv11::EsV11Outputs es{};
     m_esBackend.getLatestOutputs(es);
     m_sampleIndex = es.sample_index;
@@ -672,8 +746,15 @@ void AudioActor::onTick()
         if (history != nullptr && histLen >= kStmFftSize) {
             const float* tail = history + histLen - kStmFftSize;
             std::memcpy(m_stmFftBuffer, tail, sizeof(m_stmFftBuffer));
+#if FEATURE_TRACE_AUDIO_DSP
+            {
+                TRACE_SCOPE("stm_rfft_256");
+#endif
             fft::rfft(m_stmFftBuffer, kStmFftSize);
             fft::magnitudes(m_stmFftBuffer, m_stmBins256, kStmFftSize);
+#if FEATURE_TRACE_AUDIO_DSP
+            }
+#endif
 
             float peak = 0.0f;
             m_stmBins256[0] = 0.0f;
@@ -693,7 +774,14 @@ void AudioActor::onTick()
             }
 
             std::memcpy(frame.bins256, m_stmBins256, sizeof(frame.bins256));
+#if FEATURE_TRACE_AUDIO_DSP
+            {
+                TRACE_SCOPE("stm_extract");
+#endif
             frame.stmReady = m_stmExtractor.process(frame.bins256, frame.stmTemporal, frame.stmSpectral);
+#if FEATURE_TRACE_AUDIO_DSP
+            }
+#endif
             float temporalEnergy = 0.0f;
             float spectralEnergy = 0.0f;
             for (uint8_t i = 0; i < STMExtractor::MEL_BANDS; ++i) {
@@ -745,43 +833,50 @@ void AudioActor::onTick()
             // Point to last 1024 contiguous samples in the history buffer
             const float* tail = history + histLen - ONSET_FFT_SIZE;
 
-            TRACE_SCOPE("onset_detect");
-            OnsetResult onset = m_onsetDetector.process(tail, rawHopRms);
-            TRACE_COUNTER("onset_input_rms", static_cast<int32_t>(onset.input_rms * 1000000.0f));
-            TRACE_COUNTER("onset_noise_floor", static_cast<int32_t>(onset.noise_floor * 1000000.0f));
-            TRACE_COUNTER("onset_activity", static_cast<int32_t>(onset.activity * 1000.0f));
-            TRACE_COUNTER("onset_gate_flags", static_cast<int32_t>(onset.gate_flags));
-            TRACE_COUNTER("onset_flux", static_cast<int32_t>(onset.flux * 1000.0f));
-            TRACE_COUNTER("onset_env", static_cast<int32_t>(onset.onset_env * 1000.0f));
-            TRACE_COUNTER("onset_event_strength", static_cast<int32_t>(onset.onset_event * 1000.0f));
-            TRACE_COUNTER("onset_bass_flux", static_cast<int32_t>(onset.bass_flux * 1000.0f));
-            TRACE_COUNTER("onset_mid_flux", static_cast<int32_t>(onset.mid_flux * 1000.0f));
-            TRACE_COUNTER("onset_high_flux", static_cast<int32_t>(onset.high_flux * 1000.0f));
-            TRACE_COUNTER("onset_process_us", static_cast<int32_t>(onset.process_us));
-            TRACE_COUNTER("onset_fft_frontend_us", static_cast<int32_t>(onset.fft_frontend_us));
-            TRACE_COUNTER("onset_decision_us", static_cast<int32_t>(onset.decision_us));
-            TRACE_COUNTER("onset_flux_us", static_cast<int32_t>(onset.flux_us));
-            if (onset.onset_event > 0.0f) TRACE_INSTANT("ONSET_EVENT");
-            if (onset.kick_trigger) TRACE_INSTANT("ONSET_KICK");
-            if (onset.snare_trigger) TRACE_INSTANT("ONSET_SNARE");
-            if (onset.hihat_trigger) TRACE_INSTANT("ONSET_HIHAT");
+#if FEATURE_TRACE_AUDIO_DSP
+            TRACE_SCOPE("onset_detect_span");
+#endif
+            {
+#if FEATURE_TRACE_AUDIO_DSP
+                TRACE_SCOPE("onset_detect");
+#endif
+                OnsetResult onset = m_onsetDetector.process(tail, rawHopRms);
+                TRACE_COUNTER("onset_input_rms", static_cast<int32_t>(onset.input_rms * 1000000.0f));
+                TRACE_COUNTER("onset_noise_floor", static_cast<int32_t>(onset.noise_floor * 1000000.0f));
+                TRACE_COUNTER("onset_activity", static_cast<int32_t>(onset.activity * 1000.0f));
+                TRACE_COUNTER("onset_gate_flags", static_cast<int32_t>(onset.gate_flags));
+                TRACE_COUNTER("onset_flux", static_cast<int32_t>(onset.flux * 1000.0f));
+                TRACE_COUNTER("onset_env", static_cast<int32_t>(onset.onset_env * 1000.0f));
+                TRACE_COUNTER("onset_event_strength", static_cast<int32_t>(onset.onset_event * 1000.0f));
+                TRACE_COUNTER("onset_bass_flux", static_cast<int32_t>(onset.bass_flux * 1000.0f));
+                TRACE_COUNTER("onset_mid_flux", static_cast<int32_t>(onset.mid_flux * 1000.0f));
+                TRACE_COUNTER("onset_high_flux", static_cast<int32_t>(onset.high_flux * 1000.0f));
+                TRACE_COUNTER("onset_process_us", static_cast<int32_t>(onset.process_us));
+                TRACE_COUNTER("onset_fft_frontend_us", static_cast<int32_t>(onset.fft_frontend_us));
+                TRACE_COUNTER("onset_decision_us", static_cast<int32_t>(onset.decision_us));
+                TRACE_COUNTER("onset_flux_us", static_cast<int32_t>(onset.flux_us));
+                if (onset.onset_event > 0.0f) TRACE_INSTANT("ONSET_EVENT");
+                if (onset.kick_trigger) TRACE_INSTANT("ONSET_KICK");
+                if (onset.snare_trigger) TRACE_INSTANT("ONSET_SNARE");
+                if (onset.hihat_trigger) TRACE_INSTANT("ONSET_HIHAT");
 
-            m_lastOnsetInputRms = onset.input_rms;
-            m_lastOnsetNoiseFloor = onset.noise_floor;
-            m_lastOnsetActivity = onset.activity;
-            m_lastOnsetGateFlags = onset.gate_flags;
+                m_lastOnsetInputRms = onset.input_rms;
+                m_lastOnsetNoiseFloor = onset.noise_floor;
+                m_lastOnsetActivity = onset.activity;
+                m_lastOnsetGateFlags = onset.gate_flags;
 
-            // Merge onset results into ControlBusFrame
-            frame.onsetFlux      = onset.flux;
-            frame.onsetEnv       = onset.onset_env;
-            frame.onsetEvent     = onset.onset_event;
-            frame.onsetBassFlux  = onset.bass_flux;
-            frame.onsetMidFlux   = onset.mid_flux;
-            frame.onsetHighFlux  = onset.high_flux;
-            frame.onsetProcessUs = onset.process_us;
+                // Merge onset results into ControlBusFrame
+                frame.onsetFlux      = onset.flux;
+                frame.onsetEnv       = onset.onset_env;
+                frame.onsetEvent     = onset.onset_event;
+                frame.onsetBassFlux  = onset.bass_flux;
+                frame.onsetMidFlux   = onset.mid_flux;
+                frame.onsetHighFlux  = onset.high_flux;
+                frame.onsetProcessUs = onset.process_us;
 
-            // FFT onset triggers demoted to telemetry — NOT published to ControlBus.
-            // Band-energy ratio detector below is the live trigger source.
+                // FFT onset triggers demoted to telemetry — NOT published to ControlBus.
+                // Band-energy ratio detector below is the live trigger source.
+            }
         }
     }
 
@@ -800,7 +895,9 @@ void AudioActor::onTick()
     // ========================================================================
     {
         const uint64_t brStartUs = esp_timer_get_time();
+#if FEATURE_TRACE_AUDIO_DSP
         TRACE_SCOPE("band_ratio_detect");
+#endif
         const float kickEnergy  = frame.bands[0] + frame.bands[1];
         const float snareEnergy = frame.bands[2] + frame.bands[3];
         const float hihatEnergy = frame.bands[5] + frame.bands[6] + frame.bands[7];
@@ -936,8 +1033,13 @@ void AudioActor::onTick()
     // Estimate hop dt from configured frame rate
     constexpr float ES_HOP_DT = audio::HOP_DURATION_MS / 1000.0f;
 
-    m_controlBus.applyStmSmoothing(frame);
-    m_controlBus.applyDerivedFeatures(frame, ES_HOP_DT, rmsUngated);
+    {
+#if FEATURE_TRACE_AUDIO_DSP
+        TRACE_SCOPE("controlbus_update_stage_b");
+#endif
+        m_controlBus.applyStmSmoothing(frame);
+        m_controlBus.applyDerivedFeatures(frame, ES_HOP_DT, rmsUngated);
+    }
 #if FEATURE_TRANSLATION_ENGINE
     {
         AudioFeatures translated = buildTranslationFeatures(frame);
@@ -1009,15 +1111,24 @@ void AudioActor::onTick()
 #else
     frame.scene = kDefaultSceneParameters;
 #endif
+#if FEATURE_TRACE_AUDIO_DSP
     TRACE_END();  // controlbus_build
+#endif
     const uint32_t controlBuildUs = static_cast<uint32_t>(esp_timer_get_time() - controlBuildStartUs);
     m_hopAccumWorkUs += controlBuildUs;
     TRACE_COUNTER("audio_rms", static_cast<int32_t>(frame.rms * 10000));
 
     const uint64_t snapshotPublishStartUs = esp_timer_get_time();
+#if FEATURE_TRACE_AUDIO_DSP
     TRACE_BEGIN("snapshot_publish");
+#endif
     const uint64_t publishCopyStartUs = esp_timer_get_time();
-    m_controlBusBuffer.Publish(frame);
+    {
+#if FEATURE_TRACE_AUDIO_DSP
+        TRACE_SCOPE("controlbus_publish");
+#endif
+        m_controlBusBuffer->Publish(frame);
+    }
     TRACE_COUNTER("controlbus_publish_copy_us",
                   static_cast<int32_t>(esp_timer_get_time() - publishCopyStartUs));
 
@@ -1031,7 +1142,9 @@ void AudioActor::onTick()
         m_diag.publishSeqGaps++;
     }
     m_diag.lastPublishSeq = frame.hop_seq;
+#if FEATURE_TRACE_AUDIO_DSP
     TRACE_END();  // snapshot_publish
+#endif
     const uint32_t snapshotPublishUs = static_cast<uint32_t>(esp_timer_get_time() - snapshotPublishStartUs);
     m_hopAccumWorkUs += snapshotPublishUs;
 
@@ -1066,12 +1179,38 @@ void AudioActor::onTick()
         m_lastHopEndUs = hop_end_us;
         TRACE_COUNTER("audio_silence_scale",
                       static_cast<int32_t>(frame.silentScale * 1000.0f));
+        TRACE_COUNTER("audio_is_silent",
+                      frame.isSilent ? 1 : 0);
         TRACE_COUNTER("audio_rms_x1000",
                       static_cast<int32_t>(frame.rms * 1000.0f));
+        TRACE_COUNTER("audio_waveform_peak_scaled",
+                      static_cast<int32_t>(frame.sb_waveform_peak_scaled * 1000.0f));
+        TRACE_COUNTER("audio_waveform_peak_scaled_last",
+                      static_cast<int32_t>(frame.sb_waveform_peak_scaled_last * 1000.0f));
         TRACE_COUNTER("audio_hop_count",
                       static_cast<int32_t>(m_hopCount));
         // (onset_process_us already emitted at line 728 in onset block.)
     }
+
+#if defined(FEATURE_C1_ENVELOPE_SERIAL) && FEATURE_C1_ENVELOPE_SERIAL
+    {
+        static uint64_t s_lastC1EnvelopeLogUs = 0;
+        const uint64_t c1NowUs = esp_timer_get_time();
+        constexpr uint64_t kC1EnvelopeLogIntervalUs = 100000ULL;
+        if (c1NowUs - s_lastC1EnvelopeLogUs >= kC1EnvelopeLogIntervalUs) {
+            s_lastC1EnvelopeLogUs = c1NowUs;
+            Serial.printf("[C1] t_us=%llu raw=%.6f frame=%.6f conf=%.3f sil=%.3f silent=%u peak=%.3f peakLast=%.3f\n",
+                          static_cast<unsigned long long>(c1NowUs),
+                          static_cast<double>(rawHopRms),
+                          static_cast<double>(frame.rms),
+                          static_cast<double>(frame.audioConfidence),
+                          static_cast<double>(frame.silentScale),
+                          frame.isSilent ? 1u : 0u,
+                          static_cast<double>(frame.sb_waveform_peak_scaled),
+                          static_cast<double>(frame.sb_waveform_peak_scaled_last));
+        }
+    }
+#endif
 
     // GROUND-TRUTH DIAGNOSTIC: 2-second periodic translator field dump.
     // Shows raw vs smoothed confidence + translator state.
@@ -1172,7 +1311,7 @@ void AudioActor::printStatus()
                   frame.tempoLocked ? "YES" : "no");
 
     const CaptureStats& cstats = m_capture.getStats();
-    Serial.printf("  Captures: %lu (failed: %lu)\n", cstats.hopsCapured, m_stats.captureFailCount);
+    Serial.printf("  Captures: %lu (failed: %lu)\n", cstats.hopsCaptured, m_stats.captureFailCount);
     Serial.printf("  Hops: %lu\n", (unsigned long)m_hopCount);
 
     // Spike stats
@@ -1811,6 +1950,7 @@ void AudioActor::processHop()
 #else
     m_controlBus.setSilenceParameters(tuning.silenceThreshold, tuning.silenceHysteresisMs);
 #endif
+    applyControlBusBenchToggles(m_controlBus);
     m_controlBus.UpdateFromHop(now, raw);
 
     TRACE_END();  // controlbus_build
@@ -1924,7 +2064,7 @@ void AudioActor::processHop()
 #else
         frameToPublish.scene = kDefaultSceneParameters;
 #endif
-        m_controlBusBuffer.Publish(frameToPublish);
+        m_controlBusBuffer->Publish(frameToPublish);
 
         // Track publish statistics
         m_diag.publishCount++;
@@ -2377,7 +2517,7 @@ void AudioActor::printStatus()
     Serial.printf("  DC Estimate: %.1f\n", m_lastDcEstimate);
     Serial.printf("  Noise Floor: %.5f\n", m_noiseFloor);
     Serial.printf("  Clips: %u\n", (unsigned)m_lastClipCount);
-    Serial.printf("  Captures: %lu (failed: %lu)\n", cstats.hopsCapured, m_stats.captureFailCount);
+    Serial.printf("  Captures: %lu (failed: %lu)\n", cstats.hopsCaptured, m_stats.captureFailCount);
     Serial.printf("  Peak: %d (centered: %d)\n", cstats.peakSample, m_lastPeakCentered);
     Serial.printf("  Onset: in=%.5f floor=%.5f act=%.3f gate[abs=%u act=%u prev=%u warm=%u] flux=%.3f env=%.3f evt=%.3f k/s/h=%u/%u/%u us=%u\n",
                   m_lastOnsetInputRms,
@@ -3561,6 +3701,7 @@ void AudioActor::processHop()
 #else
     m_controlBus.setSilenceParameters(tuning.silenceThreshold, tuning.silenceHysteresisMs);
 #endif
+    applyControlBusBenchToggles(m_controlBus);
     m_controlBus.UpdateFromHop(now, raw);
 
     TRACE_END();  // controlbus_build
@@ -3675,7 +3816,7 @@ void AudioActor::processHop()
 #else
         frameToPublish.scene = kDefaultSceneParameters;
 #endif
-        m_controlBusBuffer.Publish(frameToPublish);
+        m_controlBusBuffer->Publish(frameToPublish);
         
         // Phase 1.2: Track publish statistics
         m_diag.publishCount++;

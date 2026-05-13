@@ -233,12 +233,14 @@ void SbK1WaveformEffect::renderEffect(plugins::EffectContext& ctx) {
     }
 
     // --- SHIFT (dt-corrected sub-pixel scroll) ---
-    // Scroll speed in pixels/second, decoupled from frame rate.
-    // At 120 FPS this produces ~0.5 pixels/frame (vs old 1.0 px/frame),
-    // giving trails roughly twice the visual persistence on the strip.
+    // Scroll speed in pixels/second, decoupled from frame rate. Captain's
+    // K1v2 visual calibration locks this waveform family at native speed 27;
+    // lower values look sluggish and out of sync with music.
     static constexpr float kBaseScrollRate = 150.0f;
     static constexpr float kSpeedMidpoint = 10.0f;  // DEFAULT_SPEED from RendererActor
-    float scrollRate = kBaseScrollRate * (static_cast<float>(ctx.speed) / kSpeedMidpoint);
+    static constexpr uint8_t kNativeSpeedFloor = 27;
+    const uint8_t effectiveSpeed = (ctx.speed < kNativeSpeedFloor) ? kNativeSpeedFloor : ctx.speed;
+    float scrollRate = kBaseScrollRate * (static_cast<float>(effectiveSpeed) / kSpeedMidpoint);
     m_ps->scrollAccum += scrollRate * m_dt;
     int pixelsToScroll = static_cast<int>(m_ps->scrollAccum);
     m_ps->scrollAccum -= static_cast<float>(pixelsToScroll);

@@ -30,12 +30,14 @@
 
 #include "Actor.h"
 #include "../bus/MessageBus.h"
+#include "../diagnostics/VpStackIntrospection.h"
 #include "../../effects/enhancement/ColorCorrectionEngine.h"
 #include "../../effects/enhancement/EdgeMixer.h"
 #include "../../config/features.h"
 #include "../../config/limits.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../../plugins/api/IEffectRegistry.h"
+#include "../../effects/zones/ZoneEffectPool.h"
 
 #include <atomic>
 
@@ -81,6 +83,7 @@
 namespace lightwaveos { namespace zones { class ZoneComposer; } }
 namespace lightwaveos { namespace transitions { class TransitionEngine; enum class TransitionType : uint8_t; } }
 namespace lightwaveos { namespace plugins { class IEffect; namespace runtime { class LegacyEffectAdapter; } } }
+namespace lightwaveos { namespace synqmatrix { struct SynqMatrixSwitchRequest; } }
 // Note: AudioActor forward declaration removed - use #include "../../audio/AudioActor.h" instead
 // to avoid conflict between class forward declaration and using-alias in lightwaveos::audio namespace
 
@@ -203,7 +206,9 @@ using EffectRenderFn = void (*)(RenderContext& ctx);
  * State changes (effect, brightness, etc.) are received as messages
  * and applied atomically before the next frame.
  */
-class RendererActor : public Actor, public plugins::IEffectRegistry {
+class RendererActor : public Actor,
+                      public plugins::IEffectRegistry,
+                      public lightwaveos::zones::IZoneEffectSource {
 public:
     /**
      * @brief Construct the RendererActor
@@ -248,6 +253,68 @@ public:
     const RenderStats& getStats() const { return m_stats; }
     bool isLedOutputBusy() const { return m_ledDriver.isShowInProgress(); }
     const hal::LedDriverStats& getLedDriverStats() const { return m_ledDriver.getStats(); }
+    bool isLedDitheringEnabled() const { return m_ledDriver.isDitheringEnabled(); }
+
+    struct VpStackSnapshot {
+        EffectId effectId = INVALID_EFFECT_ID;
+        const char* effectName = "Unknown";
+        uint8_t paletteId = 0;
+        const char* paletteName = "Unknown";
+        uint8_t brightness = 0;
+        uint8_t speed = 0;
+        uint8_t intensity = 0;
+        uint8_t saturation = 0;
+        uint8_t complexity = 0;
+        uint8_t variation = 0;
+        uint8_t hue = 0;
+        uint8_t mood = 0;
+        RendererMode rendererMode = RendererMode::Unified;
+        diagnostics::VpTopology topology = diagnostics::VpTopology::Unified;
+        diagnostics::VpSurfaceState surfaces{};
+        RenderStats renderStats{};
+        hal::LedDriverStats ledStats{};
+        uint32_t lastEffectRenderUs = 0;
+        uint32_t avgEffectRenderUs = 0;
+        uint32_t lastColourCorrectionUs = 0;
+        uint32_t avgColourCorrectionUs = 0;
+        uint32_t lastShowLedsUs = 0;
+        uint32_t avgShowLedsUs = 0;
+        uint32_t lastOutputPrepUs = 0;
+        uint32_t avgOutputPrepUs = 0;
+        uint32_t lastPrePacingWorkUs = 0;
+        uint32_t avgPrePacingWorkUs = 0;
+        bool ledDitheringEnabled = true;
+        bool colourCorrectionToggleEnabled = false;
+        bool colourCorrectionSkippedByEffect = false;
+        bool colourCorrectionApplied = false;
+        uint32_t correctionApplyCount = 0;
+        uint32_t correctionSkipCount = 0;
+        enhancement::ColorCorrectionConfig colourConfig{};
+        enhancement::GammaLutStatus gamma{};
+        bool toneMapNeeded = false;
+        bool audioAvailable = false;
+        bool globalSilenceBypassed = false;
+        bool globalSilenceScaleActive = false;
+        bool hardSilenceGateEffect = false;
+        float silentScale = 1.0f;
+        enhancement::EdgeMixerMode edgeMode = enhancement::EdgeMixerMode::MIRROR;
+        enhancement::EdgeMixerSpatial edgeSpatial = enhancement::EdgeMixerSpatial::UNIFORM;
+        enhancement::EdgeMixerTemporal edgeTemporal = enhancement::EdgeMixerTemporal::STATIC;
+        uint8_t edgeSpread = 0;
+        uint8_t edgeStrength = 0;
+        bool captureEnabled = false;
+        uint8_t captureTapMask = 0;
+        EffectId captureEffectId = INVALID_EFFECT_ID;
+        uint8_t capturePaletteId = 0;
+        uint8_t captureBrightness = 0;
+        uint8_t captureSpeed = 0;
+        uint32_t captureFrameIndex = 0;
+        uint32_t captureTimestampUs = 0;
+        bool wireFenceActive = true;
+        uint32_t expectedWireTimeUs = 0;
+    };
+
+    VpStackSnapshot getVpStackSnapshot() const;
 
     /**
      * @brief Get a copy of the current LED buffer
@@ -283,6 +350,26 @@ public:
      * @return true if registered successfully
      */
     bool registerEffect(EffectId id, plugins::IEffect* effect) override;
+
+    /**
+     * @brief Register a per-zone instance factory (D-1 keystone).
+     *
+     * Effects opt in to per-zone state isolation by registering a factory
+     * function alongside their singleton. ZoneComposer's pool calls the
+     * factory once per `(effectId, zoneSlot)` pair to construct a fresh
+     * instance with independent internal state.
+     *
+     * Effects WITHOUT a factory continue to use the shared singleton in
+     * the zone path — for multi-zone use of the same effectId this
+     * preserves the pre-D-1 known-bad behaviour. See ADR D-1 for the
+     * migration plan.
+     *
+     * @param id Stable namespaced EffectId
+     * @param factory Factory function (returns a heap-allocated IEffect*)
+     * @return true if registered (effect was already known to the registry)
+     */
+    bool registerEffectFactory(EffectId id,
+                               lightwaveos::zones::EffectFactoryFn factory);
 
     // ========================================================================
     // IEffectRegistry Implementation
@@ -323,7 +410,15 @@ public:
      * @param id Effect ID
      * @return IEffect pointer, or nullptr if not found
      */
-    plugins::IEffect* getEffectInstance(EffectId id) const;
+    plugins::IEffect* getEffectInstance(EffectId id) const override;
+
+    /**
+     * @brief Get registered factory for an effect ID (IZoneEffectSource).
+     * @param id Effect ID
+     * @return Factory function, or nullptr if no factory was registered.
+     */
+    lightwaveos::zones::EffectFactoryFn
+        getEffectFactory(EffectId id) const override;
 
     /**
      * @brief Validate effect ID exists in registry
@@ -593,12 +688,12 @@ public:
      * @brief Get capture metadata (effect ID, palette ID, frame index, timestamp)
      */
     struct CaptureMetadata {
-        EffectId effectId;
-        uint8_t paletteId;
-        uint8_t brightness;
-        uint8_t speed;
-        uint32_t frameIndex;
-        uint32_t timestampUs;
+        EffectId effectId = INVALID_EFFECT_ID;
+        uint8_t paletteId = 0;
+        uint8_t brightness = 0;
+        uint8_t speed = 0;
+        uint32_t frameIndex = 0;
+        uint32_t timestampUs = 0;
     };
     CaptureMetadata getCaptureMetadata() const;
 
@@ -656,13 +751,34 @@ private:
      * buffer with centre at LED 79, then dispatches the effect's render().
      * Falls back to clearing the strip buffer if the effect is unregistered.
      */
-    void renderStripIndependent(uint8_t stripIdx, EffectId eid, uint32_t deltaTimeMs);
+    void renderStripIndependent(uint8_t stripIdx, EffectId eid, uint32_t deltaTimeMs
+#if FEATURE_AUDIO_SYNC
+                                , const audio::ControlBusFrame& audioFrame
+                                , bool audioAvailable
+                                , bool trinityActive
+#endif
+    );
 
     void applyPendingAudioContractTuning();
     void applyPendingEffectParameterUpdates();
 
 #if FEATURE_AUDIO_SYNC
-    void updateSharedOnsetContext(uint32_t nowMs, float dtSeconds);
+    void updateSharedOnsetContext(const audio::ControlBusFrame& frame,
+                                  const audio::MusicalGridSnapshot& grid,
+                                  bool available,
+                                  bool trinityActive,
+                                  uint32_t nowMs,
+                                  float dtSeconds);
+    void populateAudioContextForRender(plugins::AudioContext& out,
+                                       const audio::ControlBusFrame& frame,
+                                       const audio::MusicalGridSnapshot& grid,
+                                       bool available,
+                                       bool trinityActive,
+                                       bool includeBehaviorContext);
+    void queueSynqMatrixTransition(const synqmatrix::SynqMatrixSwitchRequest& request,
+                                          EffectId previousEffectId);
+    bool processSynqMatrixTransition(uint32_t nowMs);
+    void syncSynqMatrixTransitionTelemetry(uint32_t nowMs);
 #endif
 
     /**
@@ -725,6 +841,20 @@ private:
     uint8_t m_speed;
     uint8_t m_paletteIndex;
     uint8_t m_hue;
+    /**
+     * @brief Timestamp (millis()) of the most recent user-driven hue write.
+     *
+     * The render loop applies a slow `m_hue += 1` per-frame auto-rotation so
+     * palette-driven effects keep their colour rotation feel. Without
+     * gating, that auto-rotation overwrites a user-set hue value within
+     * ~4 s at 60 fps — making the iOS Hue slider feel non-functional.
+     *
+     * Gate: auto-rotation is suppressed for `kHueAutoRotatePauseMs` after
+     * each `handleSetHue()` call. Once that window elapses the rotation
+     * resumes, restoring "set and forget" feel for users who don't touch
+     * the slider after applying their colour preference.
+     */
+    uint32_t m_hueLastUserSetMs;
     uint8_t m_intensity;
     uint8_t m_saturation;
     uint8_t m_complexity;
@@ -751,6 +881,10 @@ private:
         const char* name;
         plugins::IEffect* effect;   // All effects are IEffect instances (native or adapter)
         plugins::runtime::LegacyEffectAdapter* legacyAdapter;  // Owned, nullptr if native
+        // D-1 keystone: optional per-zone instance factory. nullptr means the
+        // effect has not opted in to per-zone isolation; ZoneComposer falls
+        // back to the singleton for multi-zone use of the same effectId.
+        lightwaveos::zones::EffectFactoryFn factory;
         bool active;
     };
     EffectRegistration m_registry[MAX_EFFECTS];
@@ -780,6 +914,16 @@ private:
 
     // Statistics
     RenderStats m_stats;
+    uint32_t m_lastEffectRenderUs = 0;
+    uint32_t m_avgEffectRenderUs = 0;
+    uint32_t m_lastColourCorrectionUs = 0;
+    uint32_t m_avgColourCorrectionUs = 0;
+    uint32_t m_lastShowLedsUs = 0;
+    uint32_t m_avgShowLedsUs = 0;
+    uint32_t m_lastOutputPrepUs = 0;
+    uint32_t m_avgOutputPrepUs = 0;
+    uint32_t m_lastPrePacingWorkUs = 0;
+    uint32_t m_avgPrePacingWorkUs = 0;
 
     hal::LedDriver m_ledDriver;
 
@@ -792,10 +936,11 @@ private:
     plugins::EffectContext m_effectContext;
 
 #if FEATURE_AUDIO_SYNC
-    // Shared audio context built once per frame and reused by both zone mode and
-    // single-effect mode. Keeping this as a member avoids large stack usage in
-    // renderFrame() that can trigger FreeRTOS stack overflow in the Renderer task.
+    // ZoneComposer compatibility context. Single-effect and independent-strip
+    // paths populate m_effectContext.audio directly to avoid an extra full
+    // ControlBusFrame copy after the renderer-owned snapshot is already stable.
     plugins::AudioContext m_sharedAudioCtx;
+    plugins::OnsetContext m_sharedOnsetCtx{};
     audio::OnsetSemanticTrackerState m_onsetTrackerState{};
     audio::MotionSemanticEngine m_motionEngine;  ///< Layer 2: ControlBusFrame -> 6-axis motion-semantic frame
     audio::MotionShaper m_motionShaper;          ///< Layer 3: onset-driven temporal envelope shaping
@@ -873,6 +1018,15 @@ public:
     // ========================================================================
 
 #if FEATURE_AUDIO_SYNC
+    bool m_synqMatrixDirectorTransitionQueued = false;
+    bool m_synqMatrixDirectorTransitionPreparing = false;
+    bool m_synqMatrixDirectorTransitionActiveNotified = false;
+    EffectId m_synqMatrixDirectorPreviousEffect = INVALID_EFFECT_ID;
+    EffectId m_synqMatrixDirectorTargetEffect = INVALID_EFFECT_ID;
+    const char* m_synqMatrixDirectorTargetFamily = "none";
+    const char* m_synqMatrixDirectorTargetLanguage = "none";
+    const char* m_synqMatrixDirectorTransitionReason = "none";
+
     /**
      * MusicalGrid PLL - owned by renderer for 120 FPS Tick()
      *

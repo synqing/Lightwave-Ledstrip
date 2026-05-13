@@ -186,23 +186,23 @@ public:
      * @param mode Blend mode
      * @param amount Blend amount [0-255] (255 = full effect)
      */
-    static void blend(CRGB& dest, const CRGB& src, BlendMode mode, uint8_t amount = 255) {
+    static void blend(CRGB& dest, const CRGB& src, GradientBlendMode mode, uint8_t amount = 255) {
         CRGB result;
         switch (mode) {
-            case BlendMode::REPLACE:
+            case GradientBlendMode::REPLACE:
                 result = src;
                 break;
-            case BlendMode::ADD:
+            case GradientBlendMode::ADD:
                 result.r = qadd8(dest.r, src.r);
                 result.g = qadd8(dest.g, src.g);
                 result.b = qadd8(dest.b, src.b);
                 break;
-            case BlendMode::SCREEN:
+            case GradientBlendMode::SCREEN:
                 result.r = 255 - (uint8_t)(((uint16_t)(255 - dest.r) * (255 - src.r)) >> 8);
                 result.g = 255 - (uint8_t)(((uint16_t)(255 - dest.g) * (255 - src.g)) >> 8);
                 result.b = 255 - (uint8_t)(((uint16_t)(255 - dest.b) * (255 - src.b)) >> 8);
                 break;
-            case BlendMode::MULTIPLY:
+            case GradientBlendMode::MULTIPLY:
                 result.r = (uint8_t)(((uint16_t)dest.r * src.r) >> 8);
                 result.g = (uint8_t)(((uint16_t)dest.g * src.g) >> 8);
                 result.b = (uint8_t)(((uint16_t)dest.b * src.b) >> 8);

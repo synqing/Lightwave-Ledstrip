@@ -4,8 +4,8 @@
  * Main entry point for native unit tests. Runs all test suites and
  * reports results.
  *
- * Build: pio run -e native_test
- * Run: .pio/build/native_test/program
+ * Legacy aggregate runner retained only as a source grouping reference.
+ * Run current host validation with scripts/native_harness_matrix.py.
  */
 
 #include <unity.h>
@@ -27,6 +27,7 @@ extern void run_translation_engine_tests();
 extern void run_translation_integration_tests();
 extern void run_effect_role_flags_tests();
 extern void run_persistence_helpers_tests();
+extern void run_perceptual_jnd_tests();
 extern void run_math_substrate_tests();
 extern void run_framebuffer_lpf_tests();
 extern void run_layer_stack_tests();
@@ -94,6 +95,11 @@ int main(int argc, char** argv) {
     printf("  PersistenceHelpers Tests (Phase 1 Move 1.1 substrate)\n");
     printf("───────────────────────────────────────────────────────────────\n");
     run_persistence_helpers_tests();
+
+    printf("\n───────────────────────────────────────────────────────────────\n");
+    printf("  PerceptualJND Tests (Phase 1 Move 1.7 - K1 LGP floor)\n");
+    printf("───────────────────────────────────────────────────────────────\n");
+    run_perceptual_jnd_tests();
 
     printf("\n───────────────────────────────────────────────────────────────\n");
     printf("  Math Substrate Tests (Phase 1 Move 1.6 — sinLUT256 + CFL)\n");

@@ -5,6 +5,23 @@
  * LightwaveOS v2 - Zone System
  *
  * Provides 8 blend modes for compositing multiple zones.
+ *
+ * NAMESPACE POLICY (B7 disambiguation, 2026-05-01):
+ *   `lightwaveos::zones::BlendMode` is the CANONICAL `BlendMode` symbol in the
+ *   firmware. The gradient subsystem's separate enum was renamed to
+ *   `lightwaveos::effects::gradient::GradientBlendMode` to eliminate
+ *   name-namespace ambiguity.
+ *
+ *   Do NOT introduce a `BlendMode` enum in any other namespace. Future
+ *   blend-related types in different domains MUST use a domain-prefixed name
+ *   (e.g. `LayerBlendMode`, `MaskBlendMode`).
+ *
+ *   Compile-time isolation enforced by:
+ *     firmware-v3/test/test_blend_mode_namespace/test_main.cpp
+ *
+ *   Regression-prevention rationale: zone BlendMode is used by serial JSON,
+ *   REST, WS, and the runtime parameter system. A duplicate-named enum in a
+ *   different namespace creates silent mapping bugs across transports.
  */
 
 #pragma once

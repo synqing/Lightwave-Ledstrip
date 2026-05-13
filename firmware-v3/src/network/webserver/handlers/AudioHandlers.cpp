@@ -644,7 +644,7 @@ void AudioHandlers::handlePresetGet(AsyncWebServerRequest* request, uint8_t pres
         c["barCorrectionGain"] = contract.barCorrectionGain;
         c["beatsPerBar"] = contract.beatsPerBar;
         c["beatUnit"] = contract.beatUnit;
-    }, 2048);
+    }, 4096);
 }
 
 void AudioHandlers::handlePresetSave(AsyncWebServerRequest* request,
@@ -817,6 +817,31 @@ void AudioHandlers::handleMappingsListSources(AsyncWebServerRequest* request) {
         addSource("MID", 13, "aggregate", "(band2 + band3 + band4) / 3", 0.0f, 1.0f);
         addSource("TREBLE", 14, "aggregate", "(band5 + band6 + band7) / 3", 0.0f, 1.0f);
         addSource("HEAVY_BASS", 15, "aggregate", "Squared bass response", 0.0f, 1.0f);
+        addSource("HEAVY_MID", 19, "aggregate", "Heavy-smoothed mid response", 0.0f, 1.0f);
+        addSource("HEAVY_TREBLE", 20, "aggregate", "Heavy-smoothed treble response", 0.0f, 1.0f);
+
+        addSource("AUDIO_CONFIDENCE", 21, "state", "Active-music confidence", 0.0f, 1.0f);
+        addSource("LIVELINESS", 22, "state", "Audio-driven liveliness", 0.0f, 1.0f);
+        addSource("SILENT_SCALE", 23, "state", "Silence fade scale", 0.0f, 1.0f);
+
+        addSource("ONSET_EVENT", 24, "onset", "Broadband onset event", 0.0f, 1.0f);
+        addSource("KICK_LEVEL", 25, "onset", "Kick channel level", 0.0f, 1.0f);
+        addSource("SNARE_LEVEL", 26, "onset", "Snare channel level", 0.0f, 1.0f);
+        addSource("HIHAT_LEVEL", 27, "onset", "Hi-hat channel level", 0.0f, 1.0f);
+
+        addSource("CHROMA_MAX", 28, "harmonic", "Maximum chroma-bin energy", 0.0f, 1.0f);
+        addSource("CHORD_CONFIDENCE", 29, "harmonic", "Chord classifier confidence", 0.0f, 1.0f);
+
+        addSource("OVERALL_SALIENCY", 30, "saliency", "Overall musical saliency", 0.0f, 1.0f);
+        addSource("HARMONIC_SALIENCY", 31, "saliency", "Harmonic novelty", 0.0f, 1.0f);
+        addSource("RHYTHMIC_SALIENCY", 32, "saliency", "Rhythmic novelty", 0.0f, 1.0f);
+        addSource("TIMBRAL_SALIENCY", 33, "saliency", "Timbral novelty", 0.0f, 1.0f);
+        addSource("DYNAMIC_SALIENCY", 34, "saliency", "Dynamic novelty", 0.0f, 1.0f);
+
+        addSource("BEAT_PULSE", 35, "scene", "Perceptual scene beat pulse", 0.0f, 1.0f);
+        addSource("PHRASE_PROGRESS", 36, "scene", "Perceptual scene phrase progress", 0.0f, 1.0f);
+        addSource("TENSION", 37, "scene", "Perceptual scene tension", 0.0f, 1.0f);
+        addSource("SPECTRAL_BRIGHTNESS", 38, "scene", "Upper-balance proxy", 0.0f, 1.0f);
 
         addSource("BEAT_PHASE", 16, "timing", "Beat phase [0,1)", 0.0f, 1.0f);
         addSource("BPM", 17, "timing", "Tempo in BPM", 30.0f, 300.0f);

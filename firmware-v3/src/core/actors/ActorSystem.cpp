@@ -9,7 +9,6 @@
 #include "ActorSystem.h"
 #include "../../config/effect_ids.h"
 #include <math.h>
-#include <cstdio>
 
 #ifndef NATIVE_BUILD
 #include <Arduino.h>
@@ -125,6 +124,16 @@ bool ActorSystem::init()
             m_state = SystemState::UNINITIALIZED;
             return false;
         }
+
+        if (!m_audio->hasControlBusBuffer()) {
+#ifndef NATIVE_BUILD
+            ESP_LOGE(TAG, "Failed to allocate AudioActor ControlBus snapshot buffer");
+#endif
+            m_state = SystemState::UNINITIALIZED;
+            return false;
+        }
+
+        m_audio->logControlBusBufferPlacement();
 #ifndef NATIVE_BUILD
         ESP_LOGI(TAG, "AudioActor created (Phase 2 audio sync enabled)");
 #endif
@@ -419,41 +428,11 @@ bool ActorSystem::setSpeed(uint8_t speed)
 bool ActorSystem::setPalette(uint8_t paletteIndex)
 {
     if (!m_renderer || !m_renderer->isRunning()) {
-        // #region agent log
-        {
-            FILE* f = fopen("/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/.cursor/debug.log", "a");
-            if (f) {
-                fprintf(f,
-                        "{\"sessionId\":\"debug-session\",\"runId\":\"palette-loop-1\",\"hypothesisId\":\"H2\","
-                        "\"location\":\"ActorSystem.cpp:setPalette\",\"message\":\"setPalette rejected (renderer not running)\","
-                        "\"data\":{\"paletteIndex\":%u,\"rendererReady\":false},\"timestamp\":%lu}\n",
-                        static_cast<unsigned>(paletteIndex),
-                        static_cast<unsigned long>(millis()));
-                fclose(f);
-            }
-        }
-        // #endregion
         return false;
     }
 
     Message msg(MessageType::SET_PALETTE, paletteIndex);
     bool success = m_renderer->send(msg, pdMS_TO_TICKS(10));
-    // #region agent log
-    {
-        FILE* f = fopen("/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/.cursor/debug.log", "a");
-        if (f) {
-            fprintf(f,
-                    "{\"sessionId\":\"debug-session\",\"runId\":\"palette-loop-1\",\"hypothesisId\":\"H2\","
-                    "\"location\":\"ActorSystem.cpp:setPalette\",\"message\":\"setPalette dispatched\","
-                    "\"data\":{\"paletteIndex\":%u,\"success\":%s,\"queueUtil\":%u},\"timestamp\":%lu}\n",
-                    static_cast<unsigned>(paletteIndex),
-                    success ? "true" : "false",
-                    static_cast<unsigned>(m_renderer->getQueueUtilization()),
-                    static_cast<unsigned long>(millis()));
-            fclose(f);
-        }
-    }
-    // #endregion
     return success;
 }
 
@@ -566,6 +545,13 @@ bool ActorSystem::saveEdgeMixerToNVS()
 {
     if (!m_renderer || !m_renderer->isRunning()) return false;
     Message msg(MessageType::SAVE_EDGE_MIXER_NVS);
+    return m_renderer->send(msg, pdMS_TO_TICKS(10));
+}
+
+bool ActorSystem::setLedDithering(bool enabled)
+{
+    if (!m_renderer || !m_renderer->isRunning()) return false;
+    Message msg(MessageType::SET_LED_DITHERING, enabled ? 1 : 0);
     return m_renderer->send(msg, pdMS_TO_TICKS(10));
 }
 

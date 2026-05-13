@@ -103,6 +103,14 @@ class AppViewModel {
         self.ws = WebSocketService()
         self.udpReceiver = UDPStreamReceiver()
         self.discovery = DeviceDiscoveryService()
+
+        // Wire weak parent references so child VMs can route diagnostic logs
+        // through `log(_:category:)` — surfaces in DebugLogView + TestFlight
+        // instead of disappearing into stdout. Must happen after `self`
+        // initialisation completes.
+        self.effects.appVM = self
+        self.palettes.appVM = self
+        self.colourCorrection.appVM = self
     }
 
     // MARK: - Connection Management
@@ -186,7 +194,10 @@ class AppViewModel {
             zones.ws = ws
             audio.restClient = client
             transition.restClient = client
-            colourCorrection.restClient = client
+            // ColourCorrection: WS-only. REST `/api/v1/colorCorrection/*` is a
+            // 404 stub on the firmware; the working surface is
+            // `colorCorrection.{getConfig,setConfig}` over WS.
+            colourCorrection.ws = ws
             edgeMixer.ws = ws
 
             // Load initial state.
@@ -539,6 +550,14 @@ class AppViewModel {
 
                 case .showAck:
                     self.log("Phase 2: received show.* ack — forwarded to ShowsView", category: "WS")
+
+                // MARK: Phase 2 — colour correction (WS-only path).
+                // Replaces the previously-dead REST `/api/v1/colorCorrection/*`
+                // stubs. `WsColorCommands.cpp:247-352` unicasts the full state
+                // in reply to both `getConfig` and `setConfig`; the VM applies
+                // it to local state.
+                case .colourCorrectionConfigUpdated(let payload):
+                    self.colourCorrection.handleConfigUpdate(payload.data)
                 }
             }
         }

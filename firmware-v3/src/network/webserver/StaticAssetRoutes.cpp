@@ -11,6 +11,10 @@
 #include "../ApiResponse.h"
 #include <WiFi.h>
 #include <Arduino.h>
+#include <cstdlib>
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#endif
 #include "../../config/version.h"
 #include "../../config/network_config.h"
 #define LW_LOG_TAG "StaticRoutes"
@@ -19,6 +23,35 @@
 namespace lightwaveos {
 namespace network {
 namespace webserver {
+
+namespace {
+
+constexpr size_t kLauncherBufferSize = 3072;
+
+char* getLauncherBuffer() {
+    static char* buffer = nullptr;
+    if (buffer) {
+        return buffer;
+    }
+
+#if !defined(NATIVE_BUILD) && defined(BOARD_HAS_PSRAM)
+    buffer = static_cast<char*>(
+        heap_caps_malloc(kLauncherBufferSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+#endif
+#if !defined(NATIVE_BUILD)
+    if (!buffer) {
+        buffer = static_cast<char*>(
+            heap_caps_malloc(kLauncherBufferSize, MALLOC_CAP_8BIT));
+    }
+#else
+    if (!buffer) {
+        buffer = static_cast<char*>(std::malloc(kLauncherBufferSize));
+    }
+#endif
+    return buffer;
+}
+
+} // namespace
 
 // ---------------------------------------------------------------------------
 // HTML template  (raw string literal with snprintf placeholders)
@@ -84,10 +117,15 @@ void StaticAssetRoutes::registerRoutes(HttpRouteRegistry& registry) {
             ssid = "WiFi";
         }
 
-        // Static buffer - safe for low-concurrency root page
-        // Note: Not thread-safe if concurrent requests hit this route
-        static char buf[3072];
-        snprintf(buf, sizeof(buf), LAUNCHER_HTML,
+        // Persistent cold-path buffer; prefer PSRAM so the launcher page does
+        // not reserve internal DRAM while idle.
+        char* buf = getLauncherBuffer();
+        if (!buf) {
+            request->send(HttpStatus::SERVICE_UNAVAILABLE, "text/plain", "Launcher unavailable");
+            return;
+        }
+
+        snprintf(buf, kLauncherBufferSize, LAUNCHER_HTML,
                  ssid.c_str(),                     // WiFi network name (%s)
                  FIRMWARE_VERSION_STRING,           // version in footer (%s)
                  config::NetworkConfig::MDNS_HOSTNAME); // hostname in footer (%s)

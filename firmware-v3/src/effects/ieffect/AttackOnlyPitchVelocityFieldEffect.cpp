@@ -223,11 +223,10 @@ void AttackOnlyPitchVelocityFieldEffect::render(plugins::EffectContext& ctx) {
     // Hop-gated chroma → follower target capture.
     //
     // ctx.audio.hopSequence() advances at hop cadence (~125 Hz at 32 kHz / 256-sample
-    // hops on K1 audio). On a fresh hop we update each follower's *target*
-    // by smoothing toward the new chroma. Between hops the AsymmetricFollower
-    // continues to smooth toward its last captured target every frame (so
-    // the visual stays buttery at 120 FPS even though new audio data only
-    // lands at 125 Hz).
+    // hops on K1 audio). On a fresh attack hop we update each follower's
+    // *target* from chroma. Non-attack hops leave the last target alone:
+    // this keeps a sustained tonal field stable instead of letting every
+    // tiny chroma wobble reshuffle the top-K field.
     //
     // m_lastHopSeq is initialised to UINT32_MAX so the first render call
     // always captures, even if hopSequence() is still 0 (unit-test contexts
@@ -235,9 +234,11 @@ void AttackOnlyPitchVelocityFieldEffect::render(plugins::EffectContext& ctx) {
     // ------------------------------------------------------------------
     const uint32_t hopSeqNow = ctx.audio.hopSequence();
     if (hopSeqNow != m_lastHopSeq) {
-        // Fresh hop — capture new target chroma vector.
-        for (uint8_t c = 0; c < kChromaBins; ++c) {
-            m_chromaTargets[c] = ctx.audio.getChroma(c);
+        if (ctx.audio.hasOnsetEvent()) {
+            // Fresh attack hop — capture new target chroma vector.
+            for (uint8_t c = 0; c < kChromaBins; ++c) {
+                m_chromaTargets[c] = ctx.audio.getChroma(c);
+            }
         }
         m_lastHopSeq = hopSeqNow;
     }
@@ -288,18 +289,22 @@ void AttackOnlyPitchVelocityFieldEffect::render(plugins::EffectContext& ctx) {
         if (v != 0.0f) fieldZero = false;
     }
 
+    const float confGateRaw = ctx.audio.audioConfidence() * ctx.audio.silentScale();
+    const float confGate = (confGateRaw < 0.0f) ? 0.0f : (confGateRaw > 1.0f ? 1.0f : confGateRaw);
+
     // ------------------------------------------------------------------ S10
-    // Bed layer — dim ambient glow keeps the strip alive in soft passages.
-    // fastRms() is in [0..~0.5] in normal listening; the scaling below
-    // caps the bed at roughly 16 % of full brightness so radial peaks
-    // (added via qadd8) still saturate above it.
+    // Bed layer — dim field-owned glow keeps active fields readable in soft
+    // passages. It is deliberately NOT raw-RMS driven: `fastRms` movement on
+    // sustained material reads as background flicker on the K1 LGP. The bed
+    // only exists when the attack-gated chroma field is already alive, and it
+    // follows the slow confidence/silence gate instead of per-hop energy.
     //
     // Composed via `+=` (qadd8 saturating) so peaks land cleanly above the
     // bed and the prior fadeToBlackBy residue.
     // ------------------------------------------------------------------
-    const float    fastRms     = ctx.audio.fastRms();
-    const float    fastRmsClamped = (fastRms < 0.0f) ? 0.0f : (fastRms > 1.0f ? 1.0f : fastRms);
-    const uint8_t  bedBright   = scale8(static_cast<uint8_t>(fastRmsClamped * 100.0f), kBedScale);
+    const uint8_t  bedBright   = (topkActiveCount > 0)
+        ? scale8(static_cast<uint8_t>(confGate * 48.0f + 0.5f), kBedScale)
+        : 0;
     if (bedBright > 0) {
         const CRGB bedCol = ctx.palette.getColor(paletteIdx, bedBright);
         for (uint16_t i = 0; i < ctx.ledCount; ++i) {
@@ -321,7 +326,6 @@ void AttackOnlyPitchVelocityFieldEffect::render(plugins::EffectContext& ctx) {
     // Trail persistence comes from the fadeToBlackBy at the top of
     // render(); the bed (S10) provides the soft-passage floor.
     // ------------------------------------------------------------------
-    const float confGate = ctx.audio.audioConfidence() * ctx.audio.silentScale();
     const uint16_t total = ctx.ledCount;
 
     for (uint16_t r = 0; r < kHalfLength; ++r) {

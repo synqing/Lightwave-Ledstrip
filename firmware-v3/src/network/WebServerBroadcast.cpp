@@ -154,6 +154,7 @@ void WebServer::doBroadcastStatus() {
     doc["variation"] = cached.variation;
     doc["fps"] = cached.stats.currentFPS;
     doc["cpuPercent"] = cached.stats.cpuPercent;
+    doc["ledDitheringEnabled"] = cached.ledDitheringEnabled;
 
     doc["freeHeap"] = ESP.getFreeHeap();
     doc["freeHeapInternal"] = static_cast<uint32_t>(getFreeInternalHeap());
@@ -336,11 +337,14 @@ void WebServer::broadcastZoneState() {
     doc["enabled"] = m_zoneComposer->isEnabled();
     doc["zoneCount"] = m_zoneComposer->getZoneCount();
 
+    // Wire-format migration (2026-05-02): every zoneId emitted on the wire is
+    // 1-indexed (1..3). Internal storage stays 0-indexed; convert at the
+    // boundary by adding 1.
     JsonArray segmentsArray = doc["segments"].to<JsonArray>();
     const zones::ZoneSegment* segments = m_zoneComposer->getZoneConfig();
     for (uint8_t i = 0; i < m_zoneComposer->getZoneCount(); i++) {
         JsonObject seg = segmentsArray.add<JsonObject>();
-        seg["zoneId"] = segments[i].zoneId;
+        seg["zoneId"] = static_cast<uint8_t>(segments[i].zoneId + 1);
         seg["s1LeftStart"] = segments[i].s1LeftStart;
         seg["s1LeftEnd"] = segments[i].s1LeftEnd;
         seg["s1RightStart"] = segments[i].s1RightStart;
@@ -351,7 +355,9 @@ void WebServer::broadcastZoneState() {
     JsonArray zones = doc["zones"].to<JsonArray>();
     for (uint8_t i = 0; i < m_zoneComposer->getZoneCount(); i++) {
         JsonObject zone = zones.add<JsonObject>();
-        zone["id"] = i;
+        const uint8_t wireZoneId = static_cast<uint8_t>(i + 1);
+        zone["id"] = wireZoneId;
+        zone["zoneId"] = wireZoneId;
         zone["enabled"] = m_zoneComposer->isZoneEnabled(i);
         EffectId effectId = m_zoneComposer->getZoneEffect(i);
         zone["effectId"] = effectId;
@@ -418,9 +424,11 @@ void WebServer::broadcastSingleZoneState(uint8_t zoneId) {
         return;
     }
 
+    // Wire-format migration (2026-05-02): callback supplies the INTERNAL
+    // 0-indexed zoneId from ZoneComposer; emit it on the wire as 1-indexed.
     JsonDocument doc;
     doc["type"] = "zones.stateChanged";
-    doc["zoneId"] = zoneId;
+    doc["zoneId"] = static_cast<uint8_t>(zoneId + 1);
     doc["timestamp"] = now;
 
     JsonObject current = doc["current"].to<JsonObject>();

@@ -67,7 +67,10 @@ struct ZoneEnableDecodeResult {
 // ============================================================================
 
 struct ZoneSetEffectRequest {
-    uint8_t zoneId;      // Required (0-2)
+    // 1-indexed wire zoneId (1..3) per the 2026-05-02 wire-format migration.
+    // Handlers translate to the 0-indexed internal index via
+    // wireZoneIdToInternal() before calling ZoneComposer setters.
+    uint8_t zoneId;      // Required (1..3, wire-format)
     EffectId effectId;   // Effect ID (stable namespaced)
     const char* requestId;
 

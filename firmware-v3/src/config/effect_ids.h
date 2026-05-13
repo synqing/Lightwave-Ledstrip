@@ -8,8 +8,15 @@
  *
  * Structure: [FAMILY : 8 bits][SEQUENCE : 8 bits]
  *
- * This file is auto-generated from inventory.json by gen_effect_ids.py.
- * Do not edit manually -- regenerate when adding new effects.
+ * ============================================================================
+ * AUTO-GENERATED -- DO NOT EDIT MANUALLY
+ *
+ * Source: firmware-v3/effects/inventory.json
+ * Generator: firmware-v3/scripts/gen_effect_ids.py
+ *
+ * Direct edits to this file WILL BE REVERTED on the next build. Add new effects
+ * by editing inventory.json and re-running the generator; never patch IDs here.
+ * ============================================================================
  *
  * @author LightwaveOS Team
  * @version 1.0.0
@@ -380,8 +387,9 @@ constexpr EffectId EID_FIRST_LIGHT_IGNITION                 = 0x2000;  // First-
 constexpr EffectId EID_RADIAL_TIME_SCOPE                    = 0x2100;  // Move 5.4 — onset history time-scope
 constexpr EffectId EID_ATTACK_ONLY_PITCH_VELOCITY           = 0x2101;  // Move 5.6 — pitch-class radial ribbons
 constexpr EffectId EID_BEAT_PARITY_SPRITE                   = 0x2102;  // Move 5.7 — beat-parity sprite radiation
+constexpr EffectId EID_CROSS_STRIP_WAVE_INTERFERENCE        = 0x2103;  // Move 3.2 — F4 cross-strip wave interference
 
-// Total: 206 IDs assigned (205 active, 1 retired)
+// Total: 207 IDs assigned (206 active, 1 retired)
 
 // ============================================================================
 // Migration: Old Sequential ID -> New Stable ID

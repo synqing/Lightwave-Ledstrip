@@ -377,12 +377,12 @@ void Actor::run()
             m_messageCount++;
             onMessage(msg);
         } else {
-            // Timeout or no message (waitTime=0) - call onTick
-            // For tickInterval=0 (self-clocked), always tick
-            // For tickInterval>0 (periodic), tick on timeout
-            if (m_config.tickInterval == 0 || m_config.tickInterval > 0) {
-                onTick();
-            }
+            // Timeout or no message — call onTick.
+            // Upstream wait-time selection already gates this: tickInterval=0
+            // sets waitTime=0 (self-clocked, fires every loop) and tickInterval>0
+            // sets waitTime=tickInterval (periodic, fires only on queue timeout).
+            // Either way, reaching this branch means it is time to tick.
+            onTick();
         }
 
         // Stack overflow detection (development aid)

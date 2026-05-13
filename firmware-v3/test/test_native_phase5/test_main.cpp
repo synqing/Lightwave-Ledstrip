@@ -13,6 +13,7 @@
 // ── Phase 5 effects ────────────────────────────────────────────────────────
 extern void run_radial_time_scope_tests();             // Move 5.4 — LIN-06
 extern void run_attack_only_pitch_velocity_tests();    // Move 5.6 — LIN-08
+extern void run_beat_parity_sprite_tests();            // Move 5.7 — beat-parity sprite
 extern void run_psram_frame_ring_tests();              // Move 5.1 — INF-03 substrate
 
 // ── Phase 4 audio substrates ──────────────────────────────────────────────
@@ -59,6 +60,7 @@ int main(int /*argc*/, char** /*argv*/) {
     run_psram_frame_ring_tests();
     run_radial_time_scope_tests();
     run_attack_only_pitch_velocity_tests();
+    run_beat_parity_sprite_tests();
 
     return UNITY_END();
 }

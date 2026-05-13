@@ -40,8 +40,6 @@ jobs:
 
       - name: Core unit tests
         working-directory: firmware-v3
-        # native_test_phase5 is purpose-built for Phase 5 effect classes (RTS/PVF/BPS)
-        # which the legacy native_test env's source filter omits — link fails on
-        # missing IEffect vtables. native_test_phase5 is 130/130 PASS as of
-        # commit f49b4d6a. See plan: shit-got-fucked-but-groovy-neumann.md Tier A.1.
+        # Native harnesses are scoped; the broad native aggregate was retired
+        # after it linked unrelated tests without their provider objects.
         run: pio test -e native_test_phase5

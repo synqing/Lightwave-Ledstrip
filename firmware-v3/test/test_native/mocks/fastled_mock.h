@@ -105,6 +105,13 @@ struct CRGB {
         return *this;
     }
 
+    inline CRGB& nscale8_video(uint8_t scale) {
+        r = (r == 0 || scale == 0) ? 0 : static_cast<uint8_t>(((r * scale) / 255) + 1);
+        g = (g == 0 || scale == 0) ? 0 : static_cast<uint8_t>(((g * scale) / 255) + 1);
+        b = (b == 0 || scale == 0) ? 0 : static_cast<uint8_t>(((b * scale) / 255) + 1);
+        return *this;
+    }
+
     inline CRGB& operator/=(uint8_t scale) {
         if (scale != 0) {
             r = (r * 255) / scale;
@@ -317,6 +324,12 @@ inline void nscale8(CRGB* leds, int numLeds, uint8_t scale) {
     }
 }
 
+inline void nscale8_video(CRGB* leds, int numLeds, uint8_t scale) {
+    for (int i = 0; i < numLeds; i++) {
+        leds[i].nscale8_video(scale);
+    }
+}
+
 // Color temperature correction (simplified)
 inline CRGB ColorFromPalette(const CRGB* palette, uint8_t index,
                              uint8_t brightness = 255,
@@ -418,6 +431,10 @@ inline CHSV rgb2hsv_approximate(const CRGB& rgb) {
     if (hueF >= 256.0f) hueF -= 256.0f;
     out.h = static_cast<uint8_t>(hueF);
     return out;
+}
+
+inline void hsv2rgb_spectrum(const CHSV& hsv, CRGB& rgb) {
+    rgb.setHSV(hsv.h, hsv.s, hsv.v);
 }
 
 #endif // NATIVE_BUILD

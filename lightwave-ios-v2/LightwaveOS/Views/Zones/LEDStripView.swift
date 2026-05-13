@@ -89,11 +89,15 @@ struct LEDStripView: View {
         context.stroke(centrePath, with: .color(.lwGold.opacity(0.5)), lineWidth: 2)
     }
 
-    /// Draw zone segment with centre-origin mirrored layout
-    /// LEFT half: Z2 outer (edge) → Z1 inner (centre)
-    /// RIGHT half: Z1 inner (centre) → Z2 outer (edge)
+    /// Draw zone segment with centre-origin mirrored layout.
+    /// LEFT half: Z3 outer (edge) → Z1 inner (centre)
+    /// RIGHT half: Z1 inner (centre) → Z3 outer (edge)
+    ///
+    /// Wire-format note (2026-05-02): segment.zoneId is 1-indexed (1, 2, 3).
+    /// `Color.zoneColor(_:)` indexes a 0-based palette array, so we subtract 1
+    /// to translate the wire identifier into the colour-palette index.
     private func drawZoneSegmentMirrored(context: GraphicsContext, segment: ZoneSegment, canvasWidth: CGFloat, canvasHeight: CGFloat) {
-        let zoneColour = Color.zoneColor(segment.zoneId).opacity(0.25)
+        let zoneColour = Color.zoneColor(max(0, segment.zoneId - 1)).opacity(0.25)
         let centreX = canvasWidth / 2
 
         // LEFT half (0-79): segments are mirrored so inner zones appear at centre
@@ -135,8 +139,8 @@ struct LEDStripView: View {
         vm.zones.zonesEnabled = true
         vm.zones.zoneCount = 2
         vm.zones.segments = [
-            ZoneSegment(zoneId: 0, s1LeftStart: 0, s1LeftEnd: 39, s1RightStart: 80, s1RightEnd: 119),
-            ZoneSegment(zoneId: 1, s1LeftStart: 40, s1LeftEnd: 79, s1RightStart: 120, s1RightEnd: 159)
+            ZoneSegment(zoneId: 1, s1LeftStart: 0, s1LeftEnd: 39, s1RightStart: 80, s1RightEnd: 119),
+            ZoneSegment(zoneId: 2, s1LeftStart: 40, s1LeftEnd: 79, s1RightStart: 120, s1RightEnd: 159)
         ]
         return vm
     }()
@@ -153,7 +157,7 @@ struct LEDStripView: View {
         vm.zones.zonesEnabled = true
         vm.zones.zoneCount = 1
         vm.zones.segments = [
-            ZoneSegment(zoneId: 0, s1LeftStart: 65, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 94)
+            ZoneSegment(zoneId: 1, s1LeftStart: 65, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 94)
         ]
         return vm
     }()

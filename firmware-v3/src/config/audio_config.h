@@ -16,6 +16,8 @@
 #include "features.h"
 #include "chip_config.h"
 
+#include <cstddef>
+
 #if FEATURE_AUDIO_SYNC
 
 #ifdef NATIVE_BUILD

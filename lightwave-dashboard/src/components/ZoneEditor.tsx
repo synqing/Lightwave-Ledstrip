@@ -53,8 +53,8 @@ export const ZoneEditor: React.FC = () => {
       return errors;
     }
 
-    if (segments.length > 4) {
-      errors.push({ message: 'Maximum 4 zones allowed' });
+    if (segments.length > 3) {
+      errors.push({ message: 'Maximum 3 zones allowed' });
       return errors;
     }
 
@@ -62,9 +62,9 @@ export const ZoneEditor: React.FC = () => {
     for (let i = 0; i < segments.length; i++) {
       const seg = segments[i];
       
-      // Check zoneId matches index
-      if (seg.zoneId !== i) {
-        errors.push({ field: `zones[${i}].zoneId`, message: `Zone ID must be ${i}` });
+      // Check zoneId is 1-indexed and matches position (wire format: zoneId 1..3)
+      if (seg.zoneId !== i + 1) {
+        errors.push({ field: `zones[${i}].zoneId`, message: `Zone ID must be ${i + 1}` });
       }
 
       // Check left segment bounds
@@ -87,17 +87,17 @@ export const ZoneEditor: React.FC = () => {
       const leftSize = seg.s1LeftEnd - seg.s1LeftStart + 1;
       const rightSize = seg.s1RightEnd - seg.s1RightStart + 1;
       if (leftSize !== rightSize) {
-        errors.push({ field: `zones[${i}]`, message: `Zone ${i}: Left and right segments must have equal size` });
+        errors.push({ field: `zones[${i}]`, message: `Zone ${seg.zoneId}: Left and right segments must have equal size` });
       }
       const leftDistance = CENTER_LEFT - seg.s1LeftEnd;
       const rightDistance = seg.s1RightStart - CENTER_RIGHT;
       if (leftDistance !== rightDistance) {
-        errors.push({ field: `zones[${i}]`, message: `Zone ${i}: Segments must be symmetric around centre pair (79/80)` });
+        errors.push({ field: `zones[${i}]`, message: `Zone ${seg.zoneId}: Segments must be symmetric around centre pair (79/80)` });
       }
 
       // Check minimum size
       if (leftSize < 1 || rightSize < 1) {
-        errors.push({ field: `zones[${i}]`, message: `Zone ${i}: Each segment must have at least 1 LED` });
+        errors.push({ field: `zones[${i}]`, message: `Zone ${seg.zoneId}: Each segment must have at least 1 LED` });
       }
     }
 
@@ -147,7 +147,7 @@ export const ZoneEditor: React.FC = () => {
       const nextMinDist = Math.min(CENTER_LEFT - next.s1LeftEnd, next.s1RightStart - CENTER_RIGHT);
       
       if (currentMinDist > nextMinDist) {
-        errors.push({ message: `Zones must be ordered from centre outward (Zone ${i} should be closer to centre than Zone ${i + 1})` });
+        errors.push({ message: `Zones must be ordered from centre outward (Zone ${current.zoneId} should be closer to centre than Zone ${next.zoneId})` });
       }
     }
 
@@ -207,33 +207,33 @@ export const ZoneEditor: React.FC = () => {
     }
   }, [editingSegments, validateLayout, actions]);
 
-  // Preset segment definitions (matching firmware ZoneDefinition.h)
+  // Preset segment definitions (matching firmware ZoneDefinition.h, post-B2)
+  // Wire zoneId is 1-indexed: Zone 1 = innermost (closest to centre), Zone 3 = outermost.
   const PRESET_SEGMENTS: Record<number, V2ZoneSegment[]> = {
     0: [ // Unified - uses 3-zone config
-      { zoneId: 0, s1LeftStart: 65, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 94, totalLeds: 30 },
-      { zoneId: 1, s1LeftStart: 20, s1LeftEnd: 64, s1RightStart: 95, s1RightEnd: 139, totalLeds: 90 },
-      { zoneId: 2, s1LeftStart: 0, s1LeftEnd: 19, s1RightStart: 140, s1RightEnd: 159, totalLeds: 40 },
-    ],
-    1: [ // Dual Split - uses 3-zone config
-      { zoneId: 0, s1LeftStart: 65, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 94, totalLeds: 30 },
-      { zoneId: 1, s1LeftStart: 20, s1LeftEnd: 64, s1RightStart: 95, s1RightEnd: 139, totalLeds: 90 },
-      { zoneId: 2, s1LeftStart: 0, s1LeftEnd: 19, s1RightStart: 140, s1RightEnd: 159, totalLeds: 40 },
-    ],
-    2: [ // Triple Rings - uses 3-zone config
-      { zoneId: 0, s1LeftStart: 65, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 94, totalLeds: 30 },
-      { zoneId: 1, s1LeftStart: 20, s1LeftEnd: 64, s1RightStart: 95, s1RightEnd: 139, totalLeds: 90 },
-      { zoneId: 2, s1LeftStart: 0, s1LeftEnd: 19, s1RightStart: 140, s1RightEnd: 159, totalLeds: 40 },
-    ],
-    3: [ // Quad Active - uses 4-zone config
-      { zoneId: 0, s1LeftStart: 60, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 99, totalLeds: 40 },
-      { zoneId: 1, s1LeftStart: 40, s1LeftEnd: 59, s1RightStart: 100, s1RightEnd: 119, totalLeds: 40 },
-      { zoneId: 2, s1LeftStart: 20, s1LeftEnd: 39, s1RightStart: 120, s1RightEnd: 139, totalLeds: 40 },
+      { zoneId: 1, s1LeftStart: 65, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 94, totalLeds: 30 },
+      { zoneId: 2, s1LeftStart: 20, s1LeftEnd: 64, s1RightStart: 95, s1RightEnd: 139, totalLeds: 90 },
       { zoneId: 3, s1LeftStart: 0, s1LeftEnd: 19, s1RightStart: 140, s1RightEnd: 159, totalLeds: 40 },
     ],
+    1: [ // Dual Split - uses 3-zone config
+      { zoneId: 1, s1LeftStart: 65, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 94, totalLeds: 30 },
+      { zoneId: 2, s1LeftStart: 20, s1LeftEnd: 64, s1RightStart: 95, s1RightEnd: 139, totalLeds: 90 },
+      { zoneId: 3, s1LeftStart: 0, s1LeftEnd: 19, s1RightStart: 140, s1RightEnd: 159, totalLeds: 40 },
+    ],
+    2: [ // Triple Rings - uses 3-zone config
+      { zoneId: 1, s1LeftStart: 65, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 94, totalLeds: 30 },
+      { zoneId: 2, s1LeftStart: 20, s1LeftEnd: 64, s1RightStart: 95, s1RightEnd: 139, totalLeds: 90 },
+      { zoneId: 3, s1LeftStart: 0, s1LeftEnd: 19, s1RightStart: 140, s1RightEnd: 159, totalLeds: 40 },
+    ],
+    3: [ // Triple Wide - 3-zone config with even thirds (wire zoneId max is 3)
+      { zoneId: 1, s1LeftStart: 53, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 106, totalLeds: 54 },
+      { zoneId: 2, s1LeftStart: 27, s1LeftEnd: 52, s1RightStart: 107, s1RightEnd: 132, totalLeds: 52 },
+      { zoneId: 3, s1LeftStart: 0, s1LeftEnd: 26, s1RightStart: 133, s1RightEnd: 159, totalLeds: 54 },
+    ],
     4: [ // Heartbeat Focus - uses 3-zone config
-      { zoneId: 0, s1LeftStart: 65, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 94, totalLeds: 30 },
-      { zoneId: 1, s1LeftStart: 20, s1LeftEnd: 64, s1RightStart: 95, s1RightEnd: 139, totalLeds: 90 },
-      { zoneId: 2, s1LeftStart: 0, s1LeftEnd: 19, s1RightStart: 140, s1RightEnd: 159, totalLeds: 40 },
+      { zoneId: 1, s1LeftStart: 65, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 94, totalLeds: 30 },
+      { zoneId: 2, s1LeftStart: 20, s1LeftEnd: 64, s1RightStart: 95, s1RightEnd: 139, totalLeds: 90 },
+      { zoneId: 3, s1LeftStart: 0, s1LeftEnd: 19, s1RightStart: 140, s1RightEnd: 159, totalLeds: 40 },
     ],
   };
 

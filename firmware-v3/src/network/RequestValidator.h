@@ -605,19 +605,60 @@ inline uint8_t validatePaletteIdInRequest(uint8_t paletteId) {
 }
 
 /**
- * @brief Validate and clamp zone ID to safe range [0, MAX_ZONES-1]
- * 
- * DEFENSIVE CHECK: Prevents LoadProhibited crashes from corrupted zone ID in requests.
- * 
- * @param zoneId Zone ID from request
- * @return Valid zone ID, defaults to 0 if out of bounds
+ * @brief Validate a 1-indexed wire zoneId and translate to a 0-indexed internal index.
+ *
+ * Wire-format contract (2026-05-02 migration): the network layer accepts
+ * zoneId in [1, MAX_ZONES]. Internal C++ array indexing remains [0, MAX_ZONES-1];
+ * translation happens here, once, at the boundary.
+ *
+ * DEFENSIVE CHECK: Prevents LoadProhibited crashes from corrupted zone IDs in
+ * requests by rejecting out-of-range values via the `valid` out-parameter.
+ *
+ * @param wireZoneId 1-indexed zoneId from the wire (1, 2, or 3)
+ * @param valid Out-parameter set to true if wireZoneId is in range [1, MAX_ZONES],
+ *              false otherwise. Callers MUST check this and return an INVALID_VALUE
+ *              error when false; do not silently fall through.
+ * @return Internal 0-indexed zone index in [0, MAX_ZONES-1]; 0 on invalid input
+ *         (defensive default to avoid undefined behaviour if the caller ignores
+ *         the `valid` flag — but the canonical contract is to return an error).
  */
-inline uint8_t validateZoneIdInRequest(uint8_t zoneId) {
+inline uint8_t wireZoneIdToInternal(uint8_t wireZoneId, bool& valid) {
     constexpr uint8_t MAX_ZONES = 3;  // From ZoneDefinition.h
-    if (zoneId >= MAX_ZONES) {
-        return 0;  // Return safe default (zone 0)
+    if (wireZoneId < 1 || wireZoneId > MAX_ZONES) {
+        valid = false;
+        return 0;  // Defensive default
     }
-    return zoneId;
+    valid = true;
+    return static_cast<uint8_t>(wireZoneId - 1);
+}
+
+/**
+ * @brief Translate a 0-indexed internal zone index back to a 1-indexed wire zoneId.
+ *
+ * Companion to wireZoneIdToInternal — used when serialising response or broadcast
+ * payloads so every emitted zoneId on the wire is 1-indexed.
+ *
+ * @param internalZone Internal 0-indexed zone index (0..MAX_ZONES-1)
+ * @return Wire-format 1-indexed zoneId (internalZone + 1)
+ */
+inline uint8_t internalZoneIdToWire(uint8_t internalZone) {
+    return static_cast<uint8_t>(internalZone + 1);
+}
+
+/**
+ * @brief LEGACY: validate-and-clamp helper retained as a thin wrapper.
+ *
+ * @deprecated New code MUST use wireZoneIdToInternal(wireZoneId, valid). This
+ * wrapper interprets its argument as the wire-format 1-indexed zoneId and
+ * returns the corresponding internal index, silently mapping invalid input to
+ * internal index 0 (preserves the legacy "never crash" behaviour for paths
+ * that have not yet been updated). The compiler does not warn — call sites
+ * are migrated explicitly during the 2026-05-02 wire-format migration.
+ */
+inline uint8_t validateZoneIdInRequest(uint8_t wireZoneId) {
+    bool valid = false;
+    uint8_t internal = wireZoneIdToInternal(wireZoneId, valid);
+    return valid ? internal : 0;
 }
 
 // ============================================================================

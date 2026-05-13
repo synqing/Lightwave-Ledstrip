@@ -283,6 +283,18 @@
 #define FEATURE_MABUTRACE 0
 #endif
 
+// Surface 2 Tier 2: audio -> renderer handoff decomposition spans.
+// Opt-in only; canonical production builds keep this at zero cost.
+#ifndef FEATURE_TRACE_AUDIO_HANDOFF
+#define FEATURE_TRACE_AUDIO_HANDOFF 0
+#endif
+
+// Surface 3 Tier 2: audio DSP decomposition spans.
+// Opt-in only; canonical production builds keep this at zero cost.
+#ifndef FEATURE_TRACE_AUDIO_DSP
+#define FEATURE_TRACE_AUDIO_DSP 0
+#endif
+
 // Surface 5 (memory/thermal): die-temp sensor available on ESP32-S3 variants.
 // Uses legacy ESP-IDF 4.x driver/temp_sensor.h API (arduino-esp32 v3.x ships
 // the legacy header on espressif32@6.9.0). One-time init at boot via

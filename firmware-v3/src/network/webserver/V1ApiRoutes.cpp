@@ -30,6 +30,7 @@
 #include "handlers/ShowHandlers.h"
 #include "handlers/ModifierHandlers.h"
 #include "handlers/ColorCorrectionHandlers.h"
+#include "handlers/SynqMatrixHandlers.h"
 #include "../../effects/enhancement/EdgeMixer.h"
 #include "../../core/actors/ActorSystem.h"
 #include "handlers/StimulusHandlers.h"
@@ -255,6 +256,126 @@ void V1ApiRoutes::registerRoutes(
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
             handlers::ParameterHandlers::handleSet(request, data, len, ctx.orchestrator, broadcastStatus);
+        }
+    );
+
+    // SynqMatrix director config/status (runtime-only, no persistence).
+    // Canonical name: /api/v1/synqmatrix/*. Legacy /api/v1/songAware/* aliases
+    // coexist for one release; both paths invoke the same handler.
+    registry.onGet("/api/v1/songAware/config", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::SynqMatrixHandlers::handleGetConfig(request);
+    });
+    registry.onGet("/api/v1/synqmatrix/config", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::SynqMatrixHandlers::handleGetConfig(request);
+    });
+
+    registry.onPost("/api/v1/songAware/config",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::SynqMatrixHandlers::handleSetConfig(request, data, len);
+            broadcastStatus();
+        }
+    );
+    registry.onPost("/api/v1/synqmatrix/config",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::SynqMatrixHandlers::handleSetConfig(request, data, len);
+            broadcastStatus();
+        }
+    );
+
+    registry.onPatch("/api/v1/songAware/config",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::SynqMatrixHandlers::handleSetConfig(request, data, len);
+            broadcastStatus();
+        }
+    );
+    registry.onPatch("/api/v1/synqmatrix/config",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::SynqMatrixHandlers::handleSetConfig(request, data, len);
+            broadcastStatus();
+        }
+    );
+
+    registry.onGet("/api/v1/songAware/status", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::SynqMatrixHandlers::handleGetStatus(request);
+    });
+    registry.onGet("/api/v1/synqmatrix/status", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::SynqMatrixHandlers::handleGetStatus(request);
+    });
+
+    registry.onGet("/api/v1/songAware/allowlist", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::SynqMatrixHandlers::handleGetAllowlist(request);
+    });
+    registry.onGet("/api/v1/synqmatrix/allowlist", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::SynqMatrixHandlers::handleGetAllowlist(request);
+    });
+
+    registry.onPatch("/api/v1/songAware/allowlist",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::SynqMatrixHandlers::handleSetAllowlist(request, data, len);
+            broadcastStatus();
+        }
+    );
+    registry.onPatch("/api/v1/synqmatrix/allowlist",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::SynqMatrixHandlers::handleSetAllowlist(request, data, len);
+            broadcastStatus();
+        }
+    );
+
+    registry.onPost("/api/v1/songAware/allowlist/reset",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t*, size_t, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::SynqMatrixHandlers::handleResetAllowlist(request);
+            broadcastStatus();
+        }
+    );
+    registry.onPost("/api/v1/synqmatrix/allowlist/reset",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t*, size_t, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::SynqMatrixHandlers::handleResetAllowlist(request);
+            broadcastStatus();
         }
     );
 
@@ -960,14 +1081,14 @@ void V1ApiRoutes::registerRoutes(
     );
 
     // Zone regex routes - GET /api/v1/zones/:id
-    registry.onGetRegex("^\\/api\\/v1\\/zones\\/([0-3])$", [ctx, server, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+    registry.onGetRegex("^\\/api\\/v1\\/zones\\/([1-3])$", [ctx, server, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
         handlers::ZoneHandlers::handleGet(request, ctx.orchestrator, server->getCachedRendererState(), ctx.zoneComposer);
     });
 
     // Zone regex routes - POST /api/v1/zones/:id/effect
-    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([0-3])\\/effect$",
+    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([1-3])\\/effect$",
         [](AsyncWebServerRequest* request) {},
         nullptr,
         [ctx, server, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
@@ -978,7 +1099,7 @@ void V1ApiRoutes::registerRoutes(
     );
 
     // Zone regex routes - POST /api/v1/zones/:id/brightness
-    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([0-3])\\/brightness$",
+    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([1-3])\\/brightness$",
         [](AsyncWebServerRequest* request) {},
         nullptr,
         [ctx, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
@@ -989,7 +1110,7 @@ void V1ApiRoutes::registerRoutes(
     );
 
     // Zone regex routes - POST /api/v1/zones/:id/speed
-    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([0-3])\\/speed$",
+    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([1-3])\\/speed$",
         [](AsyncWebServerRequest* request) {},
         nullptr,
         [ctx, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
@@ -1000,7 +1121,7 @@ void V1ApiRoutes::registerRoutes(
     );
 
     // Zone regex routes - POST /api/v1/zones/:id/palette
-    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([0-3])\\/palette$",
+    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([1-3])\\/palette$",
         [](AsyncWebServerRequest* request) {},
         nullptr,
         [ctx, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
@@ -1011,7 +1132,7 @@ void V1ApiRoutes::registerRoutes(
     );
 
     // Zone regex routes - POST /api/v1/zones/:id/blend
-    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([0-3])\\/blend$",
+    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([1-3])\\/blend$",
         [](AsyncWebServerRequest* request) {},
         nullptr,
         [ctx, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
@@ -1022,7 +1143,7 @@ void V1ApiRoutes::registerRoutes(
     );
 
     // Zone regex routes - POST /api/v1/zones/:id/enabled
-    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([0-3])\\/enabled$",
+    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([1-3])\\/enabled$",
         [](AsyncWebServerRequest* request) {},
         nullptr,
         [ctx, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
@@ -1115,64 +1236,86 @@ void V1ApiRoutes::registerRoutes(
 
     // ==================== Zone Audio Config Routes (Phase 2b.1) ====================
 
-    // GET /api/v1/zones/:id/audio - Get zone audio config
-    registry.onGetRegex("^\\/api\\/v1\\/zones\\/([0-3])\\/audio$", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+    // GET /api/v1/zones/:zoneId/audio - Get zone audio config
+    // Wire-format migration (2026-05-02): path :zoneId is 1-indexed (1..3);
+    // regex now restricts to [1-3]. Internal index is path-digit minus 1.
+    registry.onGetRegex("^\\/api\\/v1\\/zones\\/([1-3])\\/audio$", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        // Extract zone ID from URL
         String path = request->url();
         int zonesIdx = path.indexOf("/zones/");
-        uint8_t zoneId = (zonesIdx >= 0 && zonesIdx + 7 < path.length())
-            ? path.charAt(zonesIdx + 7) - '0'
-            : 255;
+        uint8_t zoneId = 255;
+        if (zonesIdx >= 0 && zonesIdx + 7 < path.length()) {
+            char d = path.charAt(zonesIdx + 7);
+            if (d >= '1' && d <= '9') {
+                bool ok = false;
+                zoneId = lightwaveos::network::wireZoneIdToInternal(static_cast<uint8_t>(d - '0'), ok);
+                if (!ok) zoneId = 255;
+            }
+        }
         handlers::ZoneHandlers::handleAudioConfigGet(request, zoneId, ctx.zoneComposer);
     });
 
-    // POST /api/v1/zones/:id/audio - Set zone audio config
-    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([0-3])\\/audio$",
+    // POST /api/v1/zones/:zoneId/audio - Set zone audio config
+    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([1-3])\\/audio$",
         [](AsyncWebServerRequest* request) {},
         nullptr,
         [ctx, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
-            // Extract zone ID from URL
             String path = request->url();
             int zonesIdx = path.indexOf("/zones/");
-            uint8_t zoneId = (zonesIdx >= 0 && zonesIdx + 7 < path.length())
-                ? path.charAt(zonesIdx + 7) - '0'
-                : 255;
+            uint8_t zoneId = 255;
+            if (zonesIdx >= 0 && zonesIdx + 7 < path.length()) {
+                char d = path.charAt(zonesIdx + 7);
+                if (d >= '1' && d <= '9') {
+                    bool ok = false;
+                    zoneId = lightwaveos::network::wireZoneIdToInternal(static_cast<uint8_t>(d - '0'), ok);
+                    if (!ok) zoneId = 255;
+                }
+            }
             handlers::ZoneHandlers::handleAudioConfigSet(request, data, len, zoneId, ctx.zoneComposer, broadcastZoneState);
         }
     );
 
     // ==================== Zone Beat Trigger Routes (Phase 2b.2) ====================
 
-    // GET /api/v1/zones/:id/beat-trigger - Get zone beat trigger config
-    registry.onGetRegex("^\\/api\\/v1\\/zones\\/([0-3])\\/beat-trigger$", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+    // GET /api/v1/zones/:zoneId/beat-trigger - Get zone beat trigger config
+    registry.onGetRegex("^\\/api\\/v1\\/zones\\/([1-3])\\/beat-trigger$", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        // Extract zone ID from URL
         String path = request->url();
         int zonesIdx = path.indexOf("/zones/");
-        uint8_t zoneId = (zonesIdx >= 0 && zonesIdx + 7 < path.length())
-            ? path.charAt(zonesIdx + 7) - '0'
-            : 255;
+        uint8_t zoneId = 255;
+        if (zonesIdx >= 0 && zonesIdx + 7 < path.length()) {
+            char d = path.charAt(zonesIdx + 7);
+            if (d >= '1' && d <= '9') {
+                bool ok = false;
+                zoneId = lightwaveos::network::wireZoneIdToInternal(static_cast<uint8_t>(d - '0'), ok);
+                if (!ok) zoneId = 255;
+            }
+        }
         handlers::ZoneHandlers::handleBeatTriggerGet(request, zoneId, ctx.zoneComposer);
     });
 
-    // POST /api/v1/zones/:id/beat-trigger - Set zone beat trigger config
-    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([0-3])\\/beat-trigger$",
+    // POST /api/v1/zones/:zoneId/beat-trigger - Set zone beat trigger config
+    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([1-3])\\/beat-trigger$",
         [](AsyncWebServerRequest* request) {},
         nullptr,
         [ctx, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
-            // Extract zone ID from URL
             String path = request->url();
             int zonesIdx = path.indexOf("/zones/");
-            uint8_t zoneId = (zonesIdx >= 0 && zonesIdx + 7 < path.length())
-                ? path.charAt(zonesIdx + 7) - '0'
-                : 255;
+            uint8_t zoneId = 255;
+            if (zonesIdx >= 0 && zonesIdx + 7 < path.length()) {
+                char d = path.charAt(zonesIdx + 7);
+                if (d >= '1' && d <= '9') {
+                    bool ok = false;
+                    zoneId = lightwaveos::network::wireZoneIdToInternal(static_cast<uint8_t>(d - '0'), ok);
+                    if (!ok) zoneId = 255;
+                }
+            }
             handlers::ZoneHandlers::handleBeatTriggerSet(request, data, len, zoneId, ctx.zoneComposer, broadcastZoneState);
         }
     );
@@ -1954,6 +2097,50 @@ void V1ApiRoutes::registerRoutes(
                 respData["spatialName"] = lightwaveos::enhancement::EdgeMixer::spatialName(static_cast<ES>(rSpatial));
                 respData["temporal"] = rTemporal;
                 respData["temporalName"] = lightwaveos::enhancement::EdgeMixer::temporalName(static_cast<ET>(rTemporal));
+            });
+        }
+    );
+
+    // ==================== Render Output Routes ====================
+
+    // GET /api/v1/render/dithering - Get current LED dithering state
+    registry.onGet("/api/v1/render/dithering", [checkRateLimit, checkAPIKey, &ctx](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        auto* renderer = ctx.actorSystem.getRenderer();
+        const bool enabled = renderer ? renderer->isLedDitheringEnabled() : true;
+        sendSuccessResponse(request, [enabled](JsonObject& data) {
+            data["enabled"] = enabled;
+        });
+    });
+
+    // POST /api/v1/render/dithering - Set LED dithering state
+    registry.onPost("/api/v1/render/dithering",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey, &ctx](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            JsonDocument doc;
+            if (deserializeJson(doc, data, len)) {
+                sendErrorResponse(request, 400, ErrorCodes::INVALID_JSON, "Invalid JSON");
+                return;
+            }
+            if (!doc.containsKey("enabled")) {
+                sendErrorResponse(request, 400, ErrorCodes::MISSING_FIELD, "enabled is required", "enabled");
+                return;
+            }
+
+            const bool enabled = doc["enabled"].as<bool>();
+            if (!ctx.actorSystem.setLedDithering(enabled)) {
+                LW_LOGW("REST render dithering update rejected - queue saturated");
+                sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                                  ErrorCodes::RATE_LIMITED, "Queue saturated");
+                return;
+            }
+
+            sendSuccessResponse(request, [enabled](JsonObject& respData) {
+                respData["enabled"] = enabled;
             });
         }
     );

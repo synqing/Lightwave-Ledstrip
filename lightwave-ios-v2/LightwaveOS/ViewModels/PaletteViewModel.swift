@@ -23,6 +23,11 @@ class PaletteViewModel {
 
     var restClient: RESTClient?
 
+    /// Weak reference to the parent so VM-level events surface in the in-app
+    /// DebugLogView and TestFlight reports rather than disappearing into stdout.
+    /// Set by `AppViewModel.init` immediately after construction.
+    weak var appVM: AppViewModel?
+
     // MARK: - Computed Properties
 
     var currentPaletteName: String {
@@ -68,8 +73,12 @@ class PaletteViewModel {
     // MARK: - API Methods
 
     func loadPalettes() async {
-        guard let client = restClient else { return }
+        guard let client = restClient else {
+            appVM?.log("loadPalettes skipped — restClient is nil", category: "PALETTE-ERROR")
+            return
+        }
 
+        appVM?.log("GET /api/v1/palettes (limit=100) — sending", category: "PALETTE")
         do {
             let response = try await client.getPalettes(limit: 100)
             let fromAPI = response.data.palettes.map { p in
@@ -77,7 +86,10 @@ class PaletteViewModel {
             }
 
             if !fromAPI.isEmpty {
-                // Merge: API overrides, defaults as fallback
+                // Merge: API overrides, defaults as fallback. Defaults are
+                // bundled at `Resources/Palettes/Palettes_Master.json` and
+                // carry the canonical colour stops; API rows carry only
+                // metadata, so the merged entry pulls colours from defaults.
                 var merged: [Int: PaletteMetadata] = [:]
 
                 // Start with defaults
@@ -97,15 +109,25 @@ class PaletteViewModel {
                 }
 
                 self.allPalettes = merged.values.sorted { $0.id < $1.id }
-                print("Loaded \(allPalettes.count) palettes (API + defaults)")
+                let withColours = allPalettes.filter { ($0.colors?.isEmpty == false) }.count
+                appVM?.log(
+                    "Loaded \(allPalettes.count) palettes (\(fromAPI.count) from API, \(withColours) with colour stops)",
+                    category: "PALETTE"
+                )
+                if withColours == 0 {
+                    appVM?.log(
+                        "WARN: zero palettes carry colour stops — swatches will render grey-to-white fallback. Check `Resources/Palettes/Palettes_Master.json`.",
+                        category: "PALETTE-WARN"
+                    )
+                }
             } else {
                 // Fallback to defaults
                 self.allPalettes = PaletteStore.all
-                print("Using fallback palettes")
+                appVM?.log("Using fallback palettes (API returned empty list)", category: "PALETTE-WARN")
             }
 
         } catch {
-            print("Palette load failed, using fallback: \(error)")
+            appVM?.log("Palette load failed, using fallback: \(error.localizedDescription)", category: "PALETTE-ERROR")
             self.allPalettes = PaletteStore.all
         }
     }
@@ -118,10 +140,10 @@ class PaletteViewModel {
 
             // Optimistic update
             self.currentPaletteId = id
-            print("Set palette to \(id): \(currentPaletteName)")
+            appVM?.log("Set palette to \(id): \(currentPaletteName)", category: "PALETTE")
 
         } catch {
-            print("Error setting palette: \(error)")
+            appVM?.log("Set palette failed (\(id)): \(error.localizedDescription)", category: "PALETTE-ERROR")
         }
     }
 

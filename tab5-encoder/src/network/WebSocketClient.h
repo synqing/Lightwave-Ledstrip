@@ -41,9 +41,19 @@
 //   Outbound:
 //     {"type": "effects.setCurrent", "effectId": N}
 //     {"type": "parameters.set", "brightness": N, ...}
-//     {"type": "zone.setEffect", "zoneId": N, "effectId": N}
-//     {"type": "zone.setBrightness", "zoneId": N, "value": N}
+//     {"type": "zone.setEffect", "zoneId": 1..3, "effectId": N}
+//     {"type": "zone.setBrightness", "zoneId": 1..3, "value": N}
 //     {"type": "getStatus"}
+//
+// Wire-format note (post-2026-05-02 K1 B2 migration):
+//   - Wire `zoneId` is 1-indexed across REST, WebSocket, and SerialJSON.
+//   - Valid wire values: 1, 2, 3. Wire value 0 is RESERVED (K1 rejects it).
+//   - Tab5 internally indexes zones 0..2 (matches ParameterId::ZoneN,
+//     ZoneState[3], ParamIndex::ZONE1_EFFECT base). Conversion is performed
+//     at the WS boundary only: outbound wire = internal + 1; inbound
+//     internal = wire - 1 after range check (wire ∈ {1,2,3}).
+//   - Internal storage (ZoneSegment::zoneId, _selectedZone, sidebar caches)
+//     remains 0-indexed; do NOT migrate persisted preset/NVS payloads.
 //
 //   Inbound:
 //     {"type": "status", ...} - Full state sync
@@ -268,7 +278,9 @@ private:
     struct PendingMessage {
         uint8_t paramIndex;
         uint8_t value;
-        uint8_t zoneId;  // For zone parameters (0-2), unused for global params
+        uint8_t zoneId;  // INTERNAL 0-based zone index (0..2) for zone parameters,
+                          // or 255 for global params. Translated to 1-indexed
+                          // wire format on send (see processSendQueue()).
         uint32_t timestamp;
         const char* type;
         bool valid;

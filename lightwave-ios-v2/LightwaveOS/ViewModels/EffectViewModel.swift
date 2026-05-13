@@ -25,6 +25,11 @@ class EffectViewModel {
 
     var restClient: RESTClient?
 
+    /// Weak reference to the parent so VM-level events surface in the in-app
+    /// DebugLogView and TestFlight reports rather than disappearing into stdout.
+    /// Set by `AppViewModel.init` immediately after construction.
+    weak var appVM: AppViewModel?
+
     // MARK: - Computed Properties
 
     /// All unique categories from loaded effects
@@ -84,8 +89,12 @@ class EffectViewModel {
     // MARK: - API Methods
 
     func loadEffects() async {
-        guard let client = restClient else { return }
+        guard let client = restClient else {
+            appVM?.log("loadEffects skipped — restClient is nil", category: "EFFECTS-ERROR")
+            return
+        }
 
+        appVM?.log("GET /api/v1/effects (page=1, limit=200) — sending", category: "EFFECTS")
         do {
             let response = try await client.getEffects(page: 1, limit: 200)
 
@@ -104,10 +113,28 @@ class EffectViewModel {
                     categoryName: effect.categoryName
                 )
             }
-            print("Loaded \(allEffects.count) effects")
+            let totalCount = allEffects.count
+            let experimentalCount = allEffects.filter { $0.isExperimental }.count
+            let visibleCount = totalCount - experimentalCount
+            appVM?.log(
+                "Loaded \(totalCount) effects (visible: \(visibleCount), experimental: \(experimentalCount), showExperimental: \(showExperimental))",
+                category: "EFFECTS"
+            )
+            if visibleCount == 0 && totalCount > 0 {
+                appVM?.log(
+                    "WARN: every effect is flagged experimental — picker will appear empty unless showExperimental is enabled",
+                    category: "EFFECTS-WARN"
+                )
+            }
 
+        } catch let DecodingError.keyNotFound(key, context) {
+            appVM?.log("Effects decode failed: missing key '\(key.stringValue)' at \(context.codingPath.map(\.stringValue).joined(separator: "."))", category: "EFFECTS-ERROR")
+        } catch let DecodingError.typeMismatch(type, context) {
+            appVM?.log("Effects decode failed: type mismatch \(type) at \(context.codingPath.map(\.stringValue).joined(separator: "."))", category: "EFFECTS-ERROR")
+        } catch let DecodingError.dataCorrupted(context) {
+            appVM?.log("Effects decode failed: data corrupted at \(context.codingPath.map(\.stringValue).joined(separator: ".")) — \(context.debugDescription)", category: "EFFECTS-ERROR")
         } catch {
-            print("Error loading effects: \(error)")
+            appVM?.log("Effects load failed: \(error.localizedDescription)", category: "EFFECTS-ERROR")
         }
     }
 
@@ -122,10 +149,10 @@ class EffectViewModel {
             if let effect = allEffects.first(where: { $0.id == id }) {
                 self.currentEffectName = effect.name
             }
-            print("Set effect to \(id)")
+            appVM?.log("Set effect to \(id)", category: "EFFECTS")
 
         } catch {
-            print("Error setting effect: \(error)")
+            appVM?.log("Set effect failed (\(id)): \(error.localizedDescription)", category: "EFFECTS-ERROR")
         }
     }
 
@@ -182,9 +209,9 @@ class EffectViewModel {
         do {
             let envelope = try await client.getEffectParameters(effectId: effectId)
             self.currentParameters = envelope.parameters
-            print("Loaded \(envelope.parameters.count) parameters for effect \(effectId)")
+            appVM?.log("Loaded \(envelope.parameters.count) parameters for effect \(effectId)", category: "EFFECTS")
         } catch {
-            print("Error loading effect parameters for \(effectId): \(error)")
+            appVM?.log("Effect parameters load failed for \(effectId): \(error.localizedDescription)", category: "EFFECTS-ERROR")
             self.currentParameters = []
         }
     }
@@ -233,7 +260,7 @@ class EffectViewModel {
                     value: latest
                 )
             } catch {
-                print("Error setting runtime parameter \(name): \(error)")
+                self.appVM?.log("Runtime parameter \(name) failed: \(error.localizedDescription)", category: "EFFECTS-ERROR")
             }
         }
     }

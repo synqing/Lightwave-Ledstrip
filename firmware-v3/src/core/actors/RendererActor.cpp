@@ -22,6 +22,7 @@
 #include "../../effects/transitions/TransitionEngine.h"
 #endif
 #include "../../effects/PatternRegistry.h"
+#include "../../effects/ReflectiveTwinPolicy.h"
 #include "../../palettes/Palettes_Master.h"
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
@@ -41,11 +42,13 @@
 #include <esp_heap_caps.h>
 #include <esp_timer.h>  // CLOCK SPINE FIX: Use same clock as AudioActor
 #endif
+#include <cstring>
 
 // Audio integration (Phase 2)
 #if FEATURE_AUDIO_SYNC
 #include "../../audio/AudioActor.h"
 #include "../../audio/contracts/OnsetSemantics.h"
+#include "../synqmatrix/SynqMatrix.h"
 #if !FEATURE_AUDIO_BACKEND_ESV11
 // TempoTracker integration (replaces K1)
 #include "../../audio/tempo/TempoTracker.h"
@@ -58,6 +61,32 @@ using namespace lightwaveos::transitions;
 using namespace lightwaveos::palettes;
 
 namespace {
+// Hue auto-rotation pause window. After every user-driven `handleSetHue`
+// call, the per-frame `m_hue += 1` rotation is suppressed for this many
+// milliseconds. Once the window elapses, rotation resumes — restoring
+// "set and forget" feel for users who don't keep tweaking the slider
+// while preserving immediate slider responsiveness.
+constexpr uint32_t kHueAutoRotatePauseMs = 30000;
+
+#if FEATURE_AUDIO_SYNC && FEATURE_TRANSITIONS
+TransitionType synqMatrixTransitionForReason(const char* reason) {
+    if (reason == nullptr) {
+        return TransitionType::FADE;
+    }
+    if (strcmp(reason, "drop_impact") == 0) {
+        return TransitionType::PULSEWAVE;
+    }
+    if (strcmp(reason, "build_pressure") == 0 ||
+        strcmp(reason, "transition_bridge") == 0) {
+        return TransitionType::WIPE_OUT;
+    }
+    if (strcmp(reason, "breakdown_release") == 0 ||
+        strcmp(reason, "ambient_posture") == 0) {
+        return TransitionType::FADE;
+    }
+    return TransitionType::FADE;
+}
+#endif
 
 /// Reinhard tone-map scale LUT (knee = 1.0).
 /// lut[avg] = round(255 * 255 / (avg + 255))
@@ -97,6 +126,10 @@ float computeSpeedTimeFactor(uint8_t speed) {
     // Use a gentle curve to preserve mid/high speeds while slowing the low end.
     float curved = sqrtf(norm);
     return kMinSpeedTimeFactor + (1.0f - kMinSpeedTimeFactor) * curved;
+}
+
+uint32_t smoothTimingUs(uint32_t avgUs, uint32_t sampleUs) {
+    return (avgUs == 0U) ? sampleUs : ((avgUs * 9U + sampleUs) / 10U);
 }
 
 }  // namespace
@@ -148,6 +181,7 @@ RendererActor::RendererActor()
     , m_speed(LedConfig::DEFAULT_SPEED)
     , m_paletteIndex(0)
     , m_hue(0)
+    , m_hueLastUserSetMs(0)
     , m_intensity(128)
     , m_saturation(255)
     , m_complexity(128)
@@ -207,6 +241,7 @@ RendererActor::RendererActor()
         m_registry[i].name = nullptr;
         m_registry[i].effect = nullptr;
         m_registry[i].legacyAdapter = nullptr;
+        m_registry[i].factory = nullptr;
         m_registry[i].active = false;
     }
 
@@ -221,7 +256,7 @@ RendererActor::RendererActor()
     m_musicalGrid.SetTimeSignature(m_audioContractTuning.beatsPerBar, m_audioContractTuning.beatUnit);
 #endif
     audio::resetOnsetSemanticTracker(m_onsetTrackerState);
-    m_sharedAudioCtx.onset = plugins::OnsetContext{};
+    m_sharedOnsetCtx = plugins::OnsetContext{};
 #endif
 }
 
@@ -245,16 +280,47 @@ RendererActor::~RendererActor()
 
 #if FEATURE_AUDIO_SYNC
 
-void RendererActor::updateSharedOnsetContext(uint32_t nowMs, float dtSeconds) {
+void RendererActor::updateSharedOnsetContext(const audio::ControlBusFrame& frame,
+                                             const audio::MusicalGridSnapshot& grid,
+                                             bool available,
+                                             bool trinityActive,
+                                             uint32_t nowMs,
+                                             float dtSeconds) {
     const audio::OnsetSemanticInputs inputs{
-        m_sharedAudioCtx.controlBus,
-        m_sharedAudioCtx.musicalGrid,
-        m_sharedAudioCtx.available,
-        m_sharedAudioCtx.trinityActive,
+        frame,
+        grid,
+        available,
+        trinityActive,
         nowMs,
         dtSeconds,
     };
-    audio::updateOnsetContext(inputs, m_onsetTrackerState, m_sharedAudioCtx.onset);
+    audio::updateOnsetContext(inputs, m_onsetTrackerState, m_sharedOnsetCtx);
+}
+
+void RendererActor::populateAudioContextForRender(plugins::AudioContext& out,
+                                                  const audio::ControlBusFrame& frame,
+                                                  const audio::MusicalGridSnapshot& grid,
+                                                  bool available,
+                                                  bool trinityActive,
+                                                  bool includeBehaviorContext) {
+#if FEATURE_TRACE_AUDIO_HANDOFF
+    TRACE_SCOPE("audio_ctx_populate_us");
+#endif
+    out.controlBus = frame;
+    out.musicalGrid = grid;
+    out.available = available;
+    out.trinityActive = trinityActive;
+    out.onset = m_sharedOnsetCtx;
+
+    if (includeBehaviorContext && out.available) {
+        out.behaviorContext = plugins::selectBehavior(
+            out.musicStyle(),
+            out.saliencyFrame(),
+            out.styleConfidence()
+        );
+    } else {
+        out.behaviorContext = plugins::BehaviorContext{};
+    }
 }
 
 #endif
@@ -330,6 +396,7 @@ bool RendererActor::registerEffect(EffectId id, const char* name, EffectRenderFn
     reg.name = name;
     reg.effect = adapter;
     reg.legacyAdapter = adapter;
+    reg.factory = nullptr;
     reg.active = true;
     m_registryCount++;
 
@@ -370,10 +437,27 @@ bool RendererActor::registerEffect(EffectId id, plugins::IEffect* effect)
     reg.name = meta.name;
     reg.effect = effect;
     reg.legacyAdapter = nullptr;
+    reg.factory = nullptr;
     reg.active = true;
     m_registryCount++;
 
     LW_LOGD("Registered effect 0x%04X: %s (IEffect native)", id, meta.name);
+    return true;
+}
+
+bool RendererActor::registerEffectFactory(EffectId id,
+                                          lightwaveos::zones::EffectFactoryFn factory)
+{
+    if (id == INVALID_EFFECT_ID || factory == nullptr) {
+        return false;
+    }
+    auto* existing = findById(id);
+    if (existing == nullptr) {
+        // Effect must be registered first; we attach the factory to its slot.
+        return false;
+    }
+    existing->factory = factory;
+    LW_LOGD("Registered factory for effect 0x%04X (D-1 per-zone isolation enabled)", id);
     return true;
 }
 
@@ -391,6 +475,7 @@ bool RendererActor::unregisterEffect(EffectId id)
     reg->active = false;
     reg->effect = nullptr;
     reg->name = nullptr;
+    reg->factory = nullptr;
 
     // Clean up legacy adapter if present
     if (reg->legacyAdapter != nullptr) {
@@ -442,6 +527,16 @@ plugins::IEffect* RendererActor::getEffectInstance(EffectId id) const
     const auto* reg = findById(id);
     if (reg) {
         return reg->effect;
+    }
+    return nullptr;
+}
+
+lightwaveos::zones::EffectFactoryFn
+RendererActor::getEffectFactory(EffectId id) const
+{
+    const auto* reg = findById(id);
+    if (reg) {
+        return reg->factory;
     }
     return nullptr;
 }
@@ -565,6 +660,10 @@ void RendererActor::onStart()
     // alongside p50/p99 measurements of audio_snapshot_read.
     TRACE_COUNTER("audio_snapshot_size_bytes",
                   static_cast<int>(sizeof(audio::ControlBusFrame)));
+    TRACE_COUNTER("audio_context_size_bytes",
+                  static_cast<int>(sizeof(plugins::AudioContext)));
+    TRACE_COUNTER("effect_context_size_bytes",
+                  static_cast<int>(sizeof(plugins::EffectContext)));
 
     LW_LOGI("Ready - %d effects, brightness=%d, target=%d FPS",
              m_registryCount, m_brightness, LedConfig::TARGET_FPS);
@@ -572,6 +671,39 @@ void RendererActor::onStart()
 
 void RendererActor::onMessage(const Message& msg)
 {
+#if FEATURE_AUDIO_SYNC
+    switch (msg.type) {
+        case MessageType::SET_EFFECT:
+        case MessageType::SET_BRIGHTNESS:
+        case MessageType::SET_SPEED:
+        case MessageType::SET_PALETTE:
+        case MessageType::SET_INTENSITY:
+        case MessageType::SET_SATURATION:
+        case MessageType::SET_COMPLEXITY:
+        case MessageType::SET_VARIATION:
+        case MessageType::SET_HUE:
+        case MessageType::SET_MOOD:
+        case MessageType::SET_FADE_AMOUNT:
+        case MessageType::SET_EDGE_MIXER_MODE:
+        case MessageType::SET_EDGE_MIXER_SPREAD:
+        case MessageType::SET_EDGE_MIXER_STRENGTH:
+        case MessageType::SET_EDGE_MIXER_SPATIAL:
+        case MessageType::SET_EDGE_MIXER_TEMPORAL:
+        case MessageType::START_TRANSITION: {
+            const uint32_t nowMs = millis();
+            auto& director = synqmatrix::SynqMatrix::instance();
+            if (director.isShowOwnerActive(nowMs)) {
+                director.markShowControl(nowMs);
+            } else {
+                director.markManualControl(nowMs);
+            }
+            break;
+        }
+        default:
+            break;
+    }
+#endif
+
     switch (msg.type) {
         case MessageType::SET_EFFECT:
             // ActorSystem packs EffectId as 2 bytes: param1=low, param2=high
@@ -649,6 +781,10 @@ void RendererActor::onMessage(const Message& msg)
             break;
         case MessageType::SAVE_EDGE_MIXER_NVS:
             enhancement::EdgeMixer::getInstance().saveToNVS();
+            break;
+
+        case MessageType::SET_LED_DITHERING:
+            m_ledDriver.setDithering(msg.param1 != 0);
             break;
 
         case MessageType::START_TRANSITION:
@@ -907,6 +1043,8 @@ void RendererActor::onTick()
             m_correctionSkipCount++;
         }
         const uint32_t _cc_end_us = micros();
+        m_lastColourCorrectionUs = _cc_end_us - _cc_start_us;
+        m_avgColourCorrectionUs = smoothTimingUs(m_avgColourCorrectionUs, m_lastColourCorrectionUs);
         // Surface 1 Tier 1 (folded per Master OQ #2 — always-on, ~80 events/sec).
         TRACE_COUNTER("color_correction_us", static_cast<int>(_cc_end_us - _cc_start_us));
     }
@@ -917,7 +1055,14 @@ void RendererActor::onTick()
     }
 
     // Push to strips (patched FastLED RMT4: CPU returns quickly; wire time runs in parallel).
-    { TRACE_SCOPE("show_leds"); showLeds(); }
+    {
+        TRACE_SCOPE("show_leds");
+        const uint32_t showStartUs = micros();
+        showLeds();
+        const uint32_t showEndUs = micros();
+        m_lastShowLedsUs = showEndUs - showStartUs;
+        m_avgShowLedsUs = smoothTimingUs(m_avgShowLedsUs, m_lastShowLedsUs);
+    }
 
     // Calculate frame time (pre-throttle)
     uint32_t frameEndUs = micros();
@@ -973,6 +1118,8 @@ void RendererActor::onTick()
     // Update statistics (use raw time for drops, throttled time for FPS).
     // Surface 1 Tier 1: log RAW pre-pacing work time so we measure actual
     // CPU time spent in render rather than the post-throttle 8.33 ms cadence.
+    m_lastPrePacingWorkUs = rawFrameTimeUs;
+    m_avgPrePacingWorkUs = smoothTimingUs(m_avgPrePacingWorkUs, m_lastPrePacingWorkUs);
     TRACE_COUNTER("render_frame_work_us", static_cast<int>(rawFrameTimeUs));
     // Surface 1 Tier 1: deadline-miss instant when raw work exceeds the
     // 2.0 ms render contract ceiling (CLAUDE.md hard constraints).
@@ -1150,6 +1297,119 @@ bool RendererActor::getCapturedFrame(CaptureTap tap, CRGB* outBuffer) const {
 
 RendererActor::CaptureMetadata RendererActor::getCaptureMetadata() const {
     return m_captureMetadata;
+}
+
+RendererActor::VpStackSnapshot RendererActor::getVpStackSnapshot() const {
+    VpStackSnapshot snapshot;
+
+    const EffectId safeEffect =
+        m_currentEffectValid ? m_validatedEffectId : validateEffectId(m_currentEffect);
+
+    snapshot.effectId = safeEffect;
+    snapshot.effectName = getEffectName(safeEffect);
+    snapshot.paletteId = m_paletteIndex;
+    snapshot.paletteName = getPaletteName(m_paletteIndex);
+    snapshot.brightness = m_brightness;
+    snapshot.speed = m_speed;
+    snapshot.intensity = m_intensity;
+    snapshot.saturation = m_saturation;
+    snapshot.complexity = m_complexity;
+    snapshot.variation = m_variation;
+    snapshot.hue = m_hue;
+    snapshot.mood = m_mood;
+    snapshot.rendererMode = m_rendererMode;
+
+    bool zonePath = false;
+    if (m_zoneComposer != nullptr) {
+        zonePath = m_zoneComposer->isEnabled();
+    }
+
+    if (m_rendererMode == RendererMode::Independent) {
+        snapshot.topology = diagnostics::VpTopology::DirectStrip;
+    } else if (zonePath) {
+        snapshot.topology = diagnostics::VpTopology::ZoneUnified;
+    } else if (m_effectContext.dualChannelMode) {
+        snapshot.topology = diagnostics::VpTopology::DirectStrip;
+    } else {
+        snapshot.topology = diagnostics::VpTopology::Unified;
+    }
+
+    const bool colourToggleEnabled =
+        ::lightwaveos::bench::isToggleEnabled(&::lightwaveos::bench::g_bench_render_color_correction);
+    const bool colourSkippedByEffect =
+        ::PatternRegistry::shouldSkipColorCorrection(safeEffect);
+    const bool colourApplied = colourToggleEnabled && !colourSkippedByEffect;
+
+    snapshot.surfaces =
+        diagnostics::deriveVpSurfaces(snapshot.topology,
+                                      m_effectContext.dualChannelMode,
+                                      colourApplied);
+    snapshot.renderStats = m_stats;
+    snapshot.ledStats = m_ledDriver.getStats();
+    snapshot.lastEffectRenderUs = m_lastEffectRenderUs;
+    snapshot.avgEffectRenderUs = m_avgEffectRenderUs;
+    snapshot.lastColourCorrectionUs = m_lastColourCorrectionUs;
+    snapshot.avgColourCorrectionUs = m_avgColourCorrectionUs;
+    snapshot.lastShowLedsUs = m_lastShowLedsUs;
+    snapshot.avgShowLedsUs = m_avgShowLedsUs;
+    snapshot.lastOutputPrepUs = m_lastOutputPrepUs;
+    snapshot.avgOutputPrepUs = m_avgOutputPrepUs;
+    snapshot.lastPrePacingWorkUs = m_lastPrePacingWorkUs;
+    snapshot.avgPrePacingWorkUs = m_avgPrePacingWorkUs;
+    snapshot.ledDitheringEnabled = m_ledDriver.isDitheringEnabled();
+    snapshot.colourCorrectionToggleEnabled = colourToggleEnabled;
+    snapshot.colourCorrectionSkippedByEffect = colourSkippedByEffect;
+    snapshot.colourCorrectionApplied = colourApplied;
+    snapshot.correctionApplyCount = m_correctionApplyCount;
+    snapshot.correctionSkipCount = m_correctionSkipCount;
+
+    auto& colourEngine = enhancement::ColorCorrectionEngine::getInstance();
+    snapshot.colourConfig = colourEngine.getConfig();
+    snapshot.gamma = colourEngine.getGammaLutStatus();
+    snapshot.toneMapNeeded = needsToneMap(safeEffect);
+
+#if FEATURE_AUDIO_SYNC
+    snapshot.audioAvailable = (m_controlBusBuffer != nullptr);
+    snapshot.silentScale = m_lastControlBus.silentScale;
+    snapshot.globalSilenceBypassed = (safeEffect == EID_CROSS_STRIP_WAVE_INTERFERENCE);
+    snapshot.globalSilenceScaleActive =
+        !snapshot.globalSilenceBypassed &&
+        snapshot.audioAvailable &&
+        m_lastControlBus.silentScale < 0.999f;
+    snapshot.hardSilenceGateEffect =
+        needsSilenceGate(safeEffect) && ::PatternRegistry::isAudioReactive(safeEffect);
+#else
+    snapshot.audioAvailable = false;
+    snapshot.silentScale = 1.0f;
+    snapshot.globalSilenceBypassed = false;
+    snapshot.globalSilenceScaleActive = false;
+    snapshot.hardSilenceGateEffect = false;
+#endif
+
+    auto& edgeMixer = enhancement::EdgeMixer::getInstance();
+    snapshot.edgeMode = edgeMixer.getMode();
+    snapshot.edgeSpatial = edgeMixer.getSpatial();
+    snapshot.edgeTemporal = edgeMixer.getTemporal();
+    snapshot.edgeSpread = edgeMixer.getSpread();
+    snapshot.edgeStrength = edgeMixer.getStrength();
+
+    snapshot.captureEnabled = m_captureEnabled;
+    snapshot.captureTapMask = m_captureTapMask;
+    snapshot.captureEffectId = m_captureMetadata.effectId;
+    snapshot.capturePaletteId = m_captureMetadata.paletteId;
+    snapshot.captureBrightness = m_captureMetadata.brightness;
+    snapshot.captureSpeed = m_captureMetadata.speed;
+    snapshot.captureFrameIndex = m_captureMetadata.frameIndex;
+    snapshot.captureTimestampUs = m_captureMetadata.timestampUs;
+
+    snapshot.wireFenceActive = true;
+#if CHIP_ESP32_S3
+    snapshot.expectedWireTimeUs = 5600;
+#else
+    snapshot.expectedWireTimeUs = 0;
+#endif
+
+    return snapshot;
 }
 
 #if FEATURE_AUDIO_SYNC
@@ -1343,6 +1603,135 @@ void RendererActor::initLeds()
              LedConfig::LEDS_PER_STRIP, LedConfig::STRIP1_PIN, LedConfig::STRIP2_PIN);
 }
 
+#if FEATURE_AUDIO_SYNC
+void RendererActor::queueSynqMatrixTransition(
+    const synqmatrix::SynqMatrixSwitchRequest& request,
+    EffectId previousEffectId)
+{
+    m_synqMatrixDirectorTransitionQueued = true;
+    m_synqMatrixDirectorPreviousEffect = previousEffectId;
+    m_synqMatrixDirectorTargetEffect = static_cast<EffectId>(request.targetEffectId);
+    m_synqMatrixDirectorTargetFamily = request.targetFamily;
+    m_synqMatrixDirectorTargetLanguage = request.targetVisualLanguage;
+    m_synqMatrixDirectorTransitionReason = request.reason;
+}
+
+bool RendererActor::processSynqMatrixTransition(uint32_t nowMs)
+{
+    if (!m_synqMatrixDirectorTransitionQueued) {
+        return false;
+    }
+
+    const EffectId previousEffect = m_synqMatrixDirectorPreviousEffect;
+    const EffectId targetEffect = m_synqMatrixDirectorTargetEffect;
+    const char* targetFamily = m_synqMatrixDirectorTargetFamily;
+    const char* targetLanguage = m_synqMatrixDirectorTargetLanguage;
+    const char* reason = m_synqMatrixDirectorTransitionReason;
+    m_synqMatrixDirectorTransitionQueued = false;
+
+    auto& director = synqmatrix::SynqMatrix::instance();
+    if (isTransitionActive()) {
+        director.notifySwitchRejected(targetEffect, nowMs, synqmatrix::SynqMatrixSuppressedReason::TransitionActive);
+        return false;
+    }
+    if (findById(targetEffect) == nullptr) {
+        director.notifySwitchRejected(targetEffect, nowMs, synqmatrix::SynqMatrixSuppressedReason::TargetUnavailable);
+        return false;
+    }
+
+#if FEATURE_TRANSITIONS
+    if (!m_transitionEngine) {
+        director.notifySwitchRejected(targetEffect, nowMs, synqmatrix::SynqMatrixSuppressedReason::SwitchingDisabled);
+        return false;
+    }
+
+    memcpy(m_transitionSourceBuffer, m_leds, sizeof(m_transitionSourceBuffer));
+
+    m_synqMatrixDirectorTransitionPreparing = true;
+    handleSetEffect(targetEffect);
+    m_synqMatrixDirectorTransitionPreparing = false;
+
+    const EffectId currentAfterTransitionStart =
+        m_currentEffectValid ? m_validatedEffectId : validateEffectId(m_currentEffect);
+    if (currentAfterTransitionStart != targetEffect) {
+        director.notifySwitchRejected(targetEffect, millis(), synqmatrix::SynqMatrixSuppressedReason::TargetUnavailable);
+        return false;
+    }
+
+    m_synqMatrixDirectorTransitionPreparing = true;
+    renderFrame();
+    m_synqMatrixDirectorTransitionPreparing = false;
+
+    const TransitionType transitionType = synqMatrixTransitionForReason(reason);
+    m_transitionEngine->startTransition(m_transitionSourceBuffer,
+                                        m_leds,
+                                        m_leds,
+                                        transitionType);
+
+    const uint32_t appliedAtMs = millis();
+    director.notifySwitchApplied(previousEffect,
+                                 targetEffect,
+                                 appliedAtMs,
+                                 getEffectName(currentAfterTransitionStart));
+
+    if (m_transitionEngine->isActive()) {
+        const uint32_t elapsedMs = m_transitionEngine->getElapsedMs();
+        const uint32_t durationMs = elapsedMs + m_transitionEngine->getRemainingMs();
+        const uint32_t startedAtMs = (appliedAtMs >= elapsedMs) ? (appliedAtMs - elapsedMs) : appliedAtMs;
+        director.notifyTransitionStarted(previousEffect, targetEffect, startedAtMs, durationMs);
+        m_synqMatrixDirectorTransitionActiveNotified = true;
+    } else {
+        director.notifyTransitionCompleted(appliedAtMs);
+        m_synqMatrixDirectorTransitionActiveNotified = false;
+    }
+
+    LW_LOGI("SynqMatrix Director transition state=%s confidence=%.3f prev=0x%04X target=0x%04X family=%s language=%s reason=%s",
+            synqmatrix::synqMatrixStateName(director.getStatus().currentState),
+            director.getStatus().confidence,
+            previousEffect,
+            targetEffect,
+            targetFamily,
+            targetLanguage,
+            reason);
+    return true;
+#else
+    director.notifySwitchRejected(targetEffect, nowMs, synqmatrix::SynqMatrixSuppressedReason::SwitchingDisabled);
+    return false;
+#endif
+}
+
+void RendererActor::syncSynqMatrixTransitionTelemetry(uint32_t nowMs)
+{
+#if FEATURE_TRANSITIONS
+    auto& director = synqmatrix::SynqMatrix::instance();
+    if (m_transitionEngine && m_transitionEngine->isActive()) {
+        if (!m_synqMatrixDirectorTransitionActiveNotified) {
+            const uint32_t elapsedMs = m_transitionEngine->getElapsedMs();
+            const uint32_t durationMs = elapsedMs + m_transitionEngine->getRemainingMs();
+            const uint32_t startedAtMs = (nowMs >= elapsedMs) ? (nowMs - elapsedMs) : nowMs;
+            const EffectId targetEffect =
+                m_currentEffectValid ? m_validatedEffectId : validateEffectId(m_currentEffect);
+            director.notifyTransitionStarted(m_synqMatrixDirectorPreviousEffect,
+                                             targetEffect,
+                                             startedAtMs,
+                                             durationMs);
+            m_synqMatrixDirectorTransitionActiveNotified = true;
+        }
+        return;
+    }
+
+    if (m_synqMatrixDirectorTransitionActiveNotified) {
+        director.notifyTransitionCompleted(nowMs);
+        m_synqMatrixDirectorTransitionActiveNotified = false;
+        m_synqMatrixDirectorPreviousEffect = INVALID_EFFECT_ID;
+        m_synqMatrixDirectorTargetEffect = INVALID_EFFECT_ID;
+    }
+#else
+    (void)nowMs;
+#endif
+}
+#endif
+
 void RendererActor::renderFrame()
 {
     TRACE_SCOPE("render_frame");
@@ -1393,12 +1782,33 @@ void RendererActor::renderFrame()
 #endif
     applyPendingEffectParameterUpdates();
 
+#if FEATURE_AUDIO_SYNC
+    const uint32_t synqMatrixNowMs = millis();
+    syncSynqMatrixTransitionTelemetry(synqMatrixNowMs);
+    if (processSynqMatrixTransition(synqMatrixNowMs)) {
+#if FEATURE_TRANSITIONS
+        if (m_transitionEngine && m_transitionEngine->isActive()) {
+            m_transitionEngine->update();
+        }
+#endif
+        syncSynqMatrixTransitionTelemetry(millis());
+        return;
+    }
+#endif
+
 #if FEATURE_TRANSITIONS
     // EXCLUSIVE MODE: If transition active, ONLY update transition
     // v1 pattern: effect OR transition, never both
     if (m_transitionEngine && m_transitionEngine->isActive()) {
-        m_transitionEngine->update();
-        m_hue += 1;
+        const bool transitionStillActive = m_transitionEngine->update();
+#if FEATURE_AUDIO_SYNC
+        if (!transitionStillActive) {
+            syncSynqMatrixTransitionTelemetry(millis());
+        }
+#endif
+        if (millis() - m_hueLastUserSetMs > kHueAutoRotatePauseMs) {
+            m_hue += 1;
+        }
         return;  // Skip all effect rendering
     }
 #endif
@@ -1408,6 +1818,9 @@ void RendererActor::renderFrame()
     // =========================================================================
 #if FEATURE_AUDIO_SYNC
     bool audioAvailable = false;
+    const audio::ControlBusFrame* audioContextFrame = &m_lastControlBus;
+    bool audioContextAvailable = false;
+    bool audioContextTrinityActive = false;
     const audio::SnapshotBuffer<audio::ControlBusFrame>* activeBuffer = nullptr;
     if (m_audioInputMode == AudioInputMode::StimulusOverride && m_stimulusControlBusBuffer != nullptr) {
         activeBuffer = m_stimulusControlBusBuffer;
@@ -1608,15 +2021,13 @@ void RendererActor::renderFrame()
         }
 
         if (trinityActive) {
-            m_sharedAudioCtx.controlBus = m_trinityProxy.getFrame();
-            m_sharedAudioCtx.musicalGrid = m_lastMusicalGrid;
-            m_sharedAudioCtx.available = true;
-            m_sharedAudioCtx.trinityActive = true;
+            audioContextFrame = &m_trinityProxy.getFrame();
+            audioContextAvailable = true;
+            audioContextTrinityActive = true;
         } else {
-            m_sharedAudioCtx.controlBus = m_lastControlBus;
-            m_sharedAudioCtx.musicalGrid = m_lastMusicalGrid;
-            m_sharedAudioCtx.available = audioAvailable;
-            m_sharedAudioCtx.trinityActive = false;
+            audioContextFrame = &m_lastControlBus;
+            audioContextAvailable = audioAvailable;
+            audioContextTrinityActive = false;
 
             uint8_t idx = m_bandsDebugWriteIndex.load(std::memory_order_relaxed);
             BandsDebugSnapshot& snap = m_bandsDebugSnapshot[idx];
@@ -1641,13 +2052,13 @@ void RendererActor::renderFrame()
             trinityActive = false;
         }
         if (trinityActive) {
-            m_sharedAudioCtx.controlBus = m_trinityProxy.getFrame();
-            m_sharedAudioCtx.musicalGrid = m_lastMusicalGrid;
-            m_sharedAudioCtx.available = true;
-            m_sharedAudioCtx.trinityActive = true;
+            audioContextFrame = &m_trinityProxy.getFrame();
+            audioContextAvailable = true;
+            audioContextTrinityActive = true;
         } else {
-            m_sharedAudioCtx.available = false;
-            m_sharedAudioCtx.trinityActive = false;
+            audioContextFrame = &m_lastControlBus;
+            audioContextAvailable = false;
+            audioContextTrinityActive = false;
         }
     }
 #endif
@@ -1662,7 +2073,12 @@ void RendererActor::renderFrame()
     }
 
 #if FEATURE_AUDIO_SYNC
-    updateSharedOnsetContext(now / 1000u, static_cast<float>(deltaTimeMs) * 0.001f);
+    updateSharedOnsetContext(*audioContextFrame,
+                             m_lastMusicalGrid,
+                             audioContextAvailable,
+                             audioContextTrinityActive,
+                             now / 1000u,
+                             static_cast<float>(deltaTimeMs) * 0.001f);
 #endif
 
     // Phase 1B — Independent dispatch. Top and bottom strips render different
@@ -1671,10 +2087,20 @@ void RendererActor::renderFrame()
     // and skips the unified->strip memcpy + applies tone-map per strip.
     if (m_rendererMode == RendererMode::Independent) {
         TRACE_SCOPE("render_independent");
-        renderStripIndependent(0, m_stripEffectId[0], deltaTimeMs);
-        renderStripIndependent(1, m_stripEffectId[1], deltaTimeMs);
+        renderStripIndependent(0, m_stripEffectId[0], deltaTimeMs
+#if FEATURE_AUDIO_SYNC
+                               , *audioContextFrame, audioContextAvailable, audioContextTrinityActive
+#endif
+        );
+        renderStripIndependent(1, m_stripEffectId[1], deltaTimeMs
+#if FEATURE_AUDIO_SYNC
+                               , *audioContextFrame, audioContextAvailable, audioContextTrinityActive
+#endif
+        );
         m_effectContext.dualChannelMode = true;
-        m_hue += 1;
+        if (millis() - m_hueLastUserSetMs > kHueAutoRotatePauseMs) {
+            m_hue += 1;
+        }
         return;
     }
 
@@ -1683,15 +2109,58 @@ void RendererActor::renderFrame()
         TRACE_SCOPE("zone_compose");
         // Use ZoneComposer for multi-zone rendering
 #if FEATURE_AUDIO_SYNC
+        populateAudioContextForRender(m_sharedAudioCtx,
+                                      *audioContextFrame,
+                                      m_lastMusicalGrid,
+                                      audioContextAvailable,
+                                      audioContextTrinityActive,
+                                      false);
         m_zoneComposer->render(m_leds, LedConfig::TOTAL_LEDS,
                                &m_currentPalette, m_hue, m_frameCount, deltaTimeMs, &m_sharedAudioCtx);
 #else
         m_zoneComposer->render(m_leds, LedConfig::TOTAL_LEDS,
                                &m_currentPalette, m_hue, m_frameCount, deltaTimeMs, nullptr);
 #endif
-        m_hue += 1;
+        if (millis() - m_hueLastUserSetMs > kHueAutoRotatePauseMs) {
+            m_hue += 1;
+        }
         return;
     }
+
+#if FEATURE_AUDIO_SYNC
+    if (!m_synqMatrixDirectorTransitionPreparing && !m_synqMatrixDirectorTransitionQueued) {
+        const EffectId activeEffectForDirector =
+            m_currentEffectValid ? m_validatedEffectId : validateEffectId(m_currentEffect);
+        const auto& ledStats = m_ledDriver.getStats();
+        const uint32_t directorNowMs = millis();
+        syncSynqMatrixTransitionTelemetry(directorNowMs);
+        synqmatrix::SynqMatrixContext directorContext;
+        directorContext.health.showSkips = ledStats.showSkips;
+        directorContext.health.failures = ledStats.ledShowFailures;
+        directorContext.health.rmtErrors = ledStats.rmtErrors;
+        directorContext.health.underruns = ledStats.rmtUnderruns;
+
+        synqmatrix::SynqMatrixSwitchRequest switchRequest;
+        if (synqmatrix::SynqMatrix::instance().tick(
+                *audioContextFrame,
+                m_lastMusicalGrid,
+                audioContextAvailable,
+                directorNowMs,
+                activeEffectForDirector,
+                directorContext,
+                switchRequest)) {
+            if (switchRequest.requested && findById(switchRequest.targetEffectId) != nullptr) {
+                queueSynqMatrixTransition(switchRequest, activeEffectForDirector);
+                return;
+            } else if (switchRequest.requested) {
+                synqmatrix::SynqMatrix::instance().notifySwitchRejected(
+                    switchRequest.targetEffectId,
+                    directorNowMs,
+                    synqmatrix::SynqMatrixSuppressedReason::TargetUnavailable);
+            }
+        }
+    }
+#endif
 
     // Single-effect mode
     // Use cached validation result (set on effect change) to avoid per-frame linear scan
@@ -1745,19 +2214,16 @@ void RendererActor::renderFrame()
 
         // =====================================================================
         // Phase 2: Audio Context Integration
-        // Reuse shared audio context prepared before zone composer check
+        // Populate directly from the renderer-owned frame to avoid a redundant
+        // shared-context ControlBusFrame copy in the single-effect path.
         // =====================================================================
 #if FEATURE_AUDIO_SYNC
-        ctx.audio = m_sharedAudioCtx;
-        if (ctx.audio.available) {
-            ctx.audio.behaviorContext = plugins::selectBehavior(
-                ctx.audio.musicStyle(),
-                ctx.audio.saliencyFrame(),
-                ctx.audio.styleConfidence()
-            );
-        } else {
-            ctx.audio.behaviorContext = plugins::BehaviorContext{};
-        }
+        populateAudioContextForRender(ctx.audio,
+                                      *audioContextFrame,
+                                      m_lastMusicalGrid,
+                                      audioContextAvailable,
+                                      audioContextTrinityActive,
+                                      true);
 #else
         ctx.audio.available = false;
 #endif
@@ -1802,6 +2268,34 @@ void RendererActor::renderFrame()
             ctx.complexity = mappedComplexity;
             ctx.variation = mappedVariation;
             ctx.gHue = mappedHue;
+        }
+
+        {
+            synqmatrix::SynqMatrixParams synqMatrixParams;
+            synqMatrixParams.effectId = safeEffect;
+            synqMatrixParams.brightness = ctx.brightness;
+            synqMatrixParams.speed = ctx.speed;
+            synqMatrixParams.intensity = ctx.intensity;
+            synqMatrixParams.saturation = ctx.saturation;
+            synqMatrixParams.complexity = ctx.complexity;
+            synqMatrixParams.variation = ctx.variation;
+            synqMatrixParams.hue = ctx.gHue;
+
+            synqmatrix::SynqMatrix::instance().apply(
+                *audioContextFrame,
+                m_lastMusicalGrid,
+                audioContextAvailable,
+                static_cast<float>(deltaTimeMs) * 0.001f,
+                millis(),
+                synqMatrixParams);
+
+            ctx.brightness = synqMatrixParams.brightness;
+            ctx.speed = synqMatrixParams.speed;
+            ctx.intensity = synqMatrixParams.intensity;
+            ctx.saturation = synqMatrixParams.saturation;
+            ctx.complexity = synqMatrixParams.complexity;
+            ctx.variation = synqMatrixParams.variation;
+            ctx.gHue = synqMatrixParams.hue;
         }
 #endif
 
@@ -1854,17 +2348,42 @@ void RendererActor::renderFrame()
         ctx.frameNumber = m_effectFrameCount;
         ctx.totalTimeMs = static_cast<uint32_t>(m_effectTimeSeconds * 1000.0f + 0.5f);
 
-        { TRACE_SCOPE("effect_render"); safeReg->effect->render(ctx); }
+        {
+            TRACE_SCOPE("effect_render");
+            const uint32_t effectStartUs = micros();
+            safeReg->effect->render(ctx);
+            const uint32_t effectEndUs = micros();
+            m_lastEffectRenderUs = effectEndUs - effectStartUs;
+            m_avgEffectRenderUs = smoothTimingUs(m_avgEffectRenderUs, m_lastEffectRenderUs);
+        }
+
+        // Phase 3 Move 3.1: Reflective Twin enforcement. A render body can
+        // request direct dual-strip output only if its metadata declares the
+        // DUAL_CHANNEL role; otherwise showLeds() keeps the mirrored unified
+        // path and overwrites accidental strip-buffer writes.
+        ctx.dualChannelMode = effects::reflective_twin::allowDualChannel(
+            safeReg->effect->getMetadata(),
+            ctx.dualChannelMode);
     }
 
-    // Increment hue for effects that use it
-    m_hue += 1;  // Slow rotation
+    // Increment hue for effects that use it (slow rotation), gated so a
+    // user-set hue from the iOS slider sticks for `kHueAutoRotatePauseMs`
+    // before rotation resumes.
+    if (millis() - m_hueLastUserSetMs > kHueAutoRotatePauseMs) {
+        m_hue += 1;
+    }
 }
 
 // =============================================================================
 // Phase 1B — Independent strip dispatch helper
 // =============================================================================
-void RendererActor::renderStripIndependent(uint8_t stripIdx, EffectId eid, uint32_t deltaTimeMs)
+void RendererActor::renderStripIndependent(uint8_t stripIdx, EffectId eid, uint32_t deltaTimeMs
+#if FEATURE_AUDIO_SYNC
+                                           , const audio::ControlBusFrame& audioFrame
+                                           , bool audioAvailable
+                                           , bool trinityActive
+#endif
+)
 {
     if (stripIdx > 1) return;
     CRGB* dest = (stripIdx == 0) ? m_strip1 : m_strip2;
@@ -1920,16 +2439,12 @@ void RendererActor::renderStripIndependent(uint8_t stripIdx, EffectId eid, uint3
     ctx.dualChannelMode = false;  // Outer code sets true once after both strips render
 
 #if FEATURE_AUDIO_SYNC
-    ctx.audio = m_sharedAudioCtx;
-    if (ctx.audio.available) {
-        ctx.audio.behaviorContext = plugins::selectBehavior(
-            ctx.audio.musicStyle(),
-            ctx.audio.saliencyFrame(),
-            ctx.audio.styleConfidence()
-        );
-    } else {
-        ctx.audio.behaviorContext = plugins::BehaviorContext{};
-    }
+    populateAudioContextForRender(ctx.audio,
+                                  audioFrame,
+                                  m_lastMusicalGrid,
+                                  audioAvailable,
+                                  trinityActive,
+                                  true);
 #else
     ctx.audio.available = false;
 #endif
@@ -1950,6 +2465,8 @@ void RendererActor::showLeds()
     if (m_strip1 == nullptr || m_strip2 == nullptr) {
         return;
     }
+    const uint32_t outputPrepStartUs = micros();
+
     // Conditional tone map: only additive-blending effects need washout control.
     // Non-additive effects skip entirely for sharper colour and ~3 ms savings.
     // LUT Reinhard (knee = 1.0): scale = 255 / (avg + 255), applied via nscale8.
@@ -1997,15 +2514,17 @@ void RendererActor::showLeds()
     // =========================================================================
 #if FEATURE_AUDIO_SYNC
     {
+        const EffectId safeId = m_currentEffectValid ? m_validatedEffectId : validateEffectId(m_currentEffect);
+
         // --- (1) Global silence scale (Sensory Bridge silent_scale pattern) ---
         uint8_t silentScaleVal = 255;
-        if (m_controlBusBuffer != nullptr && m_lastControlBus.silentScale < 0.999f) {
+        const bool bypassGlobalSilence = (safeId == EID_CROSS_STRIP_WAVE_INTERFERENCE);
+        if (!bypassGlobalSilence && m_controlBusBuffer != nullptr && m_lastControlBus.silentScale < 0.999f) {
             silentScaleVal = static_cast<uint8_t>(m_lastControlBus.silentScale * 255.0f);
         }
 
         // --- (2) Hard silence gate for late-pack reactive effects ---
         uint8_t gateScale = 255;
-        const EffectId safeId = m_currentEffectValid ? m_validatedEffectId : validateEffectId(m_currentEffect);
         const bool hardGateEffect = needsSilenceGate(safeId) && ::PatternRegistry::isAudioReactive(safeId);
         if (hardGateEffect) {
             float dt = m_effectContext.rawDeltaTimeSeconds;
@@ -2068,6 +2587,10 @@ void RendererActor::showLeds()
         }
         captureFrame(CaptureTap::TAP_C_PRE_WS2812, m_captureTapC);
     }
+
+    const uint32_t ledDriverStartUs = micros();
+    m_lastOutputPrepUs = ledDriverStartUs - outputPrepStartUs;
+    m_avgOutputPrepUs = smoothTimingUs(m_avgOutputPrepUs, m_lastOutputPrepUs);
 
     // Push to hardware
     m_ledDriver.show();
@@ -2329,9 +2852,14 @@ void RendererActor::handleSetVariation(uint8_t variation)
 
 void RendererActor::handleSetHue(uint8_t hue)
 {
+    // Always record the user-set timestamp — even if the value is unchanged,
+    // a slider re-touch should refresh the auto-rotation pause window so the
+    // user's currently-displayed colour sticks for another full window.
+    m_hueLastUserSetMs = millis();
     if (m_hue != hue) {
         m_hue = hue;
-        LW_LOGD("Hue: %d", m_hue);
+        LW_LOGD("Hue: %d (auto-rotate paused %u ms)", m_hue,
+                (unsigned)kHueAutoRotatePauseMs);
     }
 }
 

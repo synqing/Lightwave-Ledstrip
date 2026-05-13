@@ -5,7 +5,7 @@
  * LightwaveOS v2 - Phase 4 Audio API Enhancement
  *
  * Provides runtime-configurable audio-to-visual parameter bindings per effect.
- * Maps 19 audio sources to 7 visual targets with 6 response curves.
+ * Maps 39 audio sources to 7 visual targets with 6 response curves.
  *
  * Features:
  * - Per-effect mapping configurations (up to 80 effects)
@@ -47,6 +47,8 @@ namespace audio {
  * - Frequency bands (8 Goertzel bands)
  * - Aggregated bands (bass, mid, treble)
  * - Musical timing (beat phase, BPM)
+ * - Existing ControlBus render-side reuse surfaces (state, onset, harmonic,
+ *   saliency, scene, high-frequency semantics)
  */
 enum class AudioSource : uint8_t {
     // Energy metrics
@@ -75,6 +77,34 @@ enum class AudioSource : uint8_t {
     BEAT_PHASE = 16,      ///< Beat phase [0,1)
     BPM = 17,             ///< Tempo in BPM [30,300]
     TEMPO_CONFIDENCE = 18, ///< Beat detection confidence [0,1]
+
+    // Move 1.5: render-side reuse of already-published ControlBus fields.
+    // These are existing audio surfaces only; no audio-side DSP is introduced.
+    HEAVY_MID = 19,       ///< Heavy-smoothed mid aggregate
+    HEAVY_TREBLE = 20,    ///< Heavy-smoothed treble aggregate
+
+    AUDIO_CONFIDENCE = 21, ///< Smooth active-music confidence
+    LIVELINESS = 22,       ///< Audio-driven liveliness scalar
+    SILENT_SCALE = 23,     ///< Silence fade scale
+
+    ONSET_EVENT = 24,      ///< Broadband onset event strength
+    KICK_LEVEL = 25,       ///< Semantic kick channel level
+    SNARE_LEVEL = 26,      ///< Semantic snare channel level
+    HIHAT_LEVEL = 27,      ///< Semantic hi-hat channel level
+
+    CHROMA_MAX = 28,       ///< Maximum chroma-bin energy
+    CHORD_CONFIDENCE = 29, ///< Chord classifier confidence
+
+    OVERALL_SALIENCY = 30,  ///< Overall musical saliency
+    HARMONIC_SALIENCY = 31, ///< Harmonic novelty
+    RHYTHMIC_SALIENCY = 32, ///< Rhythmic novelty
+    TIMBRAL_SALIENCY = 33,  ///< Timbral novelty
+    DYNAMIC_SALIENCY = 34,  ///< Dynamic novelty
+
+    BEAT_PULSE = 35,       ///< Perceptual scene beat pulse
+    PHRASE_PROGRESS = 36,  ///< Perceptual scene phrase progress
+    TENSION = 37,          ///< Perceptual scene tension
+    SPECTRAL_BRIGHTNESS = 38, ///< Upper-balance proxy, or treble fallback
 
     NONE = 0xFF           ///< No source (disabled)
 };

@@ -447,6 +447,65 @@ float AudioMappingRegistry::getAudioValue(
             float bass = (bus.bands[0] + bus.bands[1]) * 0.5f;
             return bass * bass;  // Squared response
         }
+        case AudioSource::HEAVY_MID:
+            return (bus.heavy_bands[2] + bus.heavy_bands[3] + bus.heavy_bands[4]) / 3.0f;
+        case AudioSource::HEAVY_TREBLE:
+            return (bus.heavy_bands[5] + bus.heavy_bands[6] + bus.heavy_bands[7]) / 3.0f;
+
+        // Audio state
+        case AudioSource::AUDIO_CONFIDENCE:
+            return bus.audioConfidence;
+        case AudioSource::LIVELINESS:
+            return bus.liveliness;
+        case AudioSource::SILENT_SCALE:
+            return bus.silentScale;
+
+        // Onset and percussion channels
+        case AudioSource::ONSET_EVENT:
+            return bus.onsetEvent;
+        case AudioSource::KICK_LEVEL:
+            return bus.kickTrigger ? 1.0f : bus.onsetBassFlux;
+        case AudioSource::SNARE_LEVEL:
+            return bus.snareTrigger ? 1.0f : bus.snareEnergy;
+        case AudioSource::HIHAT_LEVEL:
+            return bus.hihatTrigger ? 1.0f : bus.hihatEnergy;
+
+        // Harmonic colour
+        case AudioSource::CHROMA_MAX: {
+            float maxChroma = 0.0f;
+            for (uint8_t i = 0; i < CONTROLBUS_NUM_CHROMA; ++i) {
+                if (bus.chroma[i] > maxChroma) maxChroma = bus.chroma[i];
+            }
+            return maxChroma;
+        }
+        case AudioSource::CHORD_CONFIDENCE:
+            return bus.chordState.confidence;
+
+        // Musical saliency
+        case AudioSource::OVERALL_SALIENCY:
+            return bus.saliency.overallSaliency;
+        case AudioSource::HARMONIC_SALIENCY:
+            return bus.saliency.harmonicNoveltySmooth;
+        case AudioSource::RHYTHMIC_SALIENCY:
+            return bus.saliency.rhythmicNoveltySmooth;
+        case AudioSource::TIMBRAL_SALIENCY:
+            return bus.saliency.timbralNoveltySmooth;
+        case AudioSource::DYNAMIC_SALIENCY:
+            return bus.saliency.dynamicNoveltySmooth;
+
+        // Perceptual scene
+        case AudioSource::BEAT_PULSE:
+            return bus.scene.beat_pulse;
+        case AudioSource::PHRASE_PROGRESS:
+            return bus.scene.phrase_progress;
+        case AudioSource::TENSION:
+            return bus.scene.tension;
+        case AudioSource::SPECTRAL_BRIGHTNESS:
+#if FEATURE_AUDIO_HF_SEMANTICS
+            return bus.spectralBrightness;
+#else
+            return (bus.bands[5] + bus.bands[6] + bus.bands[7]) / 3.0f;
+#endif
 
         // Musical timing
         case AudioSource::BEAT_PHASE:
@@ -642,6 +701,26 @@ const char* AudioMappingRegistry::getSourceName(AudioSource source) {
         case AudioSource::MID: return "MID";
         case AudioSource::TREBLE: return "TREBLE";
         case AudioSource::HEAVY_BASS: return "HEAVY_BASS";
+        case AudioSource::HEAVY_MID: return "HEAVY_MID";
+        case AudioSource::HEAVY_TREBLE: return "HEAVY_TREBLE";
+        case AudioSource::AUDIO_CONFIDENCE: return "AUDIO_CONFIDENCE";
+        case AudioSource::LIVELINESS: return "LIVELINESS";
+        case AudioSource::SILENT_SCALE: return "SILENT_SCALE";
+        case AudioSource::ONSET_EVENT: return "ONSET_EVENT";
+        case AudioSource::KICK_LEVEL: return "KICK_LEVEL";
+        case AudioSource::SNARE_LEVEL: return "SNARE_LEVEL";
+        case AudioSource::HIHAT_LEVEL: return "HIHAT_LEVEL";
+        case AudioSource::CHROMA_MAX: return "CHROMA_MAX";
+        case AudioSource::CHORD_CONFIDENCE: return "CHORD_CONFIDENCE";
+        case AudioSource::OVERALL_SALIENCY: return "OVERALL_SALIENCY";
+        case AudioSource::HARMONIC_SALIENCY: return "HARMONIC_SALIENCY";
+        case AudioSource::RHYTHMIC_SALIENCY: return "RHYTHMIC_SALIENCY";
+        case AudioSource::TIMBRAL_SALIENCY: return "TIMBRAL_SALIENCY";
+        case AudioSource::DYNAMIC_SALIENCY: return "DYNAMIC_SALIENCY";
+        case AudioSource::BEAT_PULSE: return "BEAT_PULSE";
+        case AudioSource::PHRASE_PROGRESS: return "PHRASE_PROGRESS";
+        case AudioSource::TENSION: return "TENSION";
+        case AudioSource::SPECTRAL_BRIGHTNESS: return "SPECTRAL_BRIGHTNESS";
         case AudioSource::BEAT_PHASE: return "BEAT_PHASE";
         case AudioSource::BPM: return "BPM";
         case AudioSource::TEMPO_CONFIDENCE: return "TEMPO_CONFIDENCE";
@@ -695,6 +774,26 @@ AudioSource AudioMappingRegistry::parseSource(const char* name) {
     if (strcmp(name, "MID") == 0) return AudioSource::MID;
     if (strcmp(name, "TREBLE") == 0) return AudioSource::TREBLE;
     if (strcmp(name, "HEAVY_BASS") == 0) return AudioSource::HEAVY_BASS;
+    if (strcmp(name, "HEAVY_MID") == 0) return AudioSource::HEAVY_MID;
+    if (strcmp(name, "HEAVY_TREBLE") == 0) return AudioSource::HEAVY_TREBLE;
+    if (strcmp(name, "AUDIO_CONFIDENCE") == 0) return AudioSource::AUDIO_CONFIDENCE;
+    if (strcmp(name, "LIVELINESS") == 0) return AudioSource::LIVELINESS;
+    if (strcmp(name, "SILENT_SCALE") == 0) return AudioSource::SILENT_SCALE;
+    if (strcmp(name, "ONSET_EVENT") == 0) return AudioSource::ONSET_EVENT;
+    if (strcmp(name, "KICK_LEVEL") == 0) return AudioSource::KICK_LEVEL;
+    if (strcmp(name, "SNARE_LEVEL") == 0) return AudioSource::SNARE_LEVEL;
+    if (strcmp(name, "HIHAT_LEVEL") == 0) return AudioSource::HIHAT_LEVEL;
+    if (strcmp(name, "CHROMA_MAX") == 0) return AudioSource::CHROMA_MAX;
+    if (strcmp(name, "CHORD_CONFIDENCE") == 0) return AudioSource::CHORD_CONFIDENCE;
+    if (strcmp(name, "OVERALL_SALIENCY") == 0) return AudioSource::OVERALL_SALIENCY;
+    if (strcmp(name, "HARMONIC_SALIENCY") == 0) return AudioSource::HARMONIC_SALIENCY;
+    if (strcmp(name, "RHYTHMIC_SALIENCY") == 0) return AudioSource::RHYTHMIC_SALIENCY;
+    if (strcmp(name, "TIMBRAL_SALIENCY") == 0) return AudioSource::TIMBRAL_SALIENCY;
+    if (strcmp(name, "DYNAMIC_SALIENCY") == 0) return AudioSource::DYNAMIC_SALIENCY;
+    if (strcmp(name, "BEAT_PULSE") == 0) return AudioSource::BEAT_PULSE;
+    if (strcmp(name, "PHRASE_PROGRESS") == 0) return AudioSource::PHRASE_PROGRESS;
+    if (strcmp(name, "TENSION") == 0) return AudioSource::TENSION;
+    if (strcmp(name, "SPECTRAL_BRIGHTNESS") == 0) return AudioSource::SPECTRAL_BRIGHTNESS;
     if (strcmp(name, "BEAT_PHASE") == 0) return AudioSource::BEAT_PHASE;
     if (strcmp(name, "BPM") == 0) return AudioSource::BPM;
     if (strcmp(name, "TEMPO_CONFIDENCE") == 0) return AudioSource::TEMPO_CONFIDENCE;

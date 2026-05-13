@@ -89,8 +89,8 @@ void test_effects_set_current_wrong_type() {
 
 void test_effects_set_current_out_of_range() {
     JsonDocument doc;
-    doc["effectId"] = 255;  // Max is 127
-    
+    doc["effectId"] = 70000;  // Max is uint16_t range
+
     JsonObjectConst root = doc.as<JsonObjectConst>();
     EffectsSetCurrentDecodeResult result = WsEffectsCodec::decodeSetCurrent(root);
     

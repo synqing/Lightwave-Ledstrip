@@ -11,6 +11,9 @@ struct ZoneEffectSelectorView: View {
     @Environment(AppViewModel.self) private var appVM
     @Environment(\.dismiss) private var dismiss
 
+    /// Wire-format zoneId (1-indexed, 1..3). Matches the `id` field on
+    /// `ZoneConfig` and the `zoneId` field on `ZoneSegment`. Sent verbatim on
+    /// `zone.setEffect` / `POST /api/v1/zones/{zoneId}/effect`.
     let zoneId: Int
 
     @State private var searchText = ""
@@ -29,9 +32,11 @@ struct ZoneEffectSelectorView: View {
                 Color.lwBase.ignoresSafeArea()
 
                 VStack(spacing: 0) {
-                    // Zone header chip
+                    // Zone header chip — wire-format zoneId already
+                    // matches the user-facing label. `Color.zoneColor(_:)`
+                    // is 0-indexed so subtract 1 for the palette lookup.
                     HStack {
-                        ZoneSelectorChip(title: "ZONE \(zoneId + 1)", colour: Color.zoneColor(zoneId))
+                        ZoneSelectorChip(title: "ZONE \(zoneId)", colour: Color.zoneColor(max(0, zoneId - 1)))
                         Spacer()
                     }
                     .padding(.horizontal, Spacing.md)

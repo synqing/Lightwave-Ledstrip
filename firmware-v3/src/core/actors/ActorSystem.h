@@ -305,6 +305,12 @@ public:
      */
     bool saveEdgeMixerToNVS();
 
+    /**
+     * @brief Set LED output dithering
+     * @param enabled true=enable FastLED temporal dithering
+     */
+    bool setLedDithering(bool enabled);
+
 #if FEATURE_AUDIO_SYNC
     // ========================================================================
     // Trinity Sync Commands (Offline ML Analysis)

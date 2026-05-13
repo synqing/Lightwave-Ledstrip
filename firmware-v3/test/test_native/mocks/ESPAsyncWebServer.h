@@ -64,6 +64,27 @@ public:
     }
 };
 
+class AsyncResponseStream : public AsyncWebServerResponse {
+public:
+    explicit AsyncResponseStream(const char* contentType, size_t initialBufferSize = 4096)
+        : m_contentType(contentType), m_body() {
+        m_body.reserve(initialBufferSize);
+    }
+
+    size_t write(uint8_t byte) {
+        m_body.push_back(static_cast<char>(byte));
+        return 1;
+    }
+
+    size_t write(const uint8_t* buffer, size_t size) {
+        m_body.append(reinterpret_cast<const char*>(buffer), size);
+        return size;
+    }
+
+    std::string m_contentType;
+    String m_body;
+};
+
 // AsyncWebServerRequest — stub for ApiResponse.h compilation
 class AsyncWebServerRequest {
 public:
@@ -80,10 +101,17 @@ public:
         return &m_mockResponse;
     }
 
+    AsyncResponseStream* beginResponseStream(const char* contentType,
+                                             size_t initialBufferSize = 4096) {
+        m_mockStream = AsyncResponseStream(contentType, initialBufferSize);
+        return &m_mockStream;
+    }
+
     // Test instrumentation
     uint16_t m_responseCode = 0;
     String m_responseBody;
     AsyncWebServerResponse m_mockResponse;
+    AsyncResponseStream m_mockStream{"application/json"};
 };
 
 // AsyncWebServer — stub (not needed by WsCommandRouter tests)

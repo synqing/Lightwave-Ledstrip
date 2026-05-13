@@ -29,7 +29,7 @@ def load_reference_data():
 
     if not reference_file.exists():
         print(f"Error: {reference_file} not found")
-        print("Generate it with: pio run -e native_test")
+        print("Legacy native_test was retired; add a scoped reference generator env before regenerating.")
         return None
 
     data = read_reference.read_reference_file(str(reference_file))

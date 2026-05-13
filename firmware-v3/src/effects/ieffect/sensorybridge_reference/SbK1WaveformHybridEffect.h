@@ -5,7 +5,7 @@
  * Keeps the K1-native bouncing dot + trail visual concept but applies
  * three SB 3.0.0 colour synthesis corrections:
  *   1. 1.5x brightness boost after contrast squaring
- *   2. led_share scaling (1/12 per chroma bin)
+ *   2. led_share scaling, locally widened for the K1 LGP fixture
  *   3. Temporal RGB smoothing (0.05/0.95 EMA, ~20-frame inertia)
  *
  * The result: more nuanced colour mixing where individual chroma bins

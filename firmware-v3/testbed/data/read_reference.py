@@ -157,7 +157,7 @@ if __name__ == '__main__':
         print_stats(data)
     except FileNotFoundError:
         print(f"Error: {filepath} not found")
-        print("Run: pio run -e native_test")
+        print("Legacy native_test was retired; add a scoped reference generator env before regenerating.")
         sys.exit(1)
     except Exception as e:
         print(f"Error reading reference file: {e}")

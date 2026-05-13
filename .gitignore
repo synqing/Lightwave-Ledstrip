@@ -58,6 +58,12 @@ wifi_credentials.ini
 # Local tooling caches
 .cache/
 
+# Playwright MCP snapshot dumps (session artefacts — do not track)
+.playwright-mcp/
+
+# Vite dependency pre-bundle cache (regenerated locally)
+lightwave-dashboard/.vite/
+
 # iOS build artifacts and design tool outputs
 lightwave-ios-v2/build/
 lightwave-ios-v2/docs/Rive/
@@ -80,6 +86,7 @@ Master_Archive/
 archives/
 baseline_*
 reports/
+firmware-v3/tools/baselines/c1_envelope_*/
 # Exception: Phase 1B MabuTrace research bundle (capture/analyse artefacts live under */reports/)
 !firmware-v3/docs/research/phase1b_runtime_evidence_2026-04-27/reports/
 !firmware-v3/docs/research/phase1b_runtime_evidence_2026-04-27/reports/**

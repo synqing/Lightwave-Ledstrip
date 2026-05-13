@@ -15,6 +15,8 @@ and this project adheres to the repository-wide versioning scheme.
 
 ### Changed
 
+- **tab5 (network):** Migrate WebSocket zone commands to 1-indexed wire `zoneId` per K1 firmware B2 contract (2026-05-02). Internal C++ storage stays 0-indexed (0..2); translation occurs only at the WS boundary. Outbound: `WebSocketClient::sendZoneEffect/Brightness/Speed/Palette/Blend` now send `zoneId = internal + 1` (1..3); `sendZonesSetLayout` translates each segment's `zoneId`; `processSendQueue()` translates queued zone parameters. Inbound: `WsMessageRouter::handleZoneStatus` and `handleZonesList` (segments + zones[] + sidebar pass) decode wire 1..3 and reject wire 0 (RESERVED) and out-of-range values before mapping to internal `ZoneState[3]` / `ZoneSegment.zoneId` / `ParameterId::ZoneN`.
+
 ### Fixed
 
 <!-- (reverted 2026-04-18) AsyncTCP priority/core/WDT flags destabilised WS on ESP32-P4 - needs different approach. -->
@@ -36,3 +38,4 @@ and this project adheres to the repository-wide versioning scheme.
 | Date | Author | Change |
 |------|--------|--------|
 | 2026-04-18 | agent:opus-4.7-1M (session by captain:elroy) | Created. Scaffold for Track B forensic-audit remediation. Replaces ad-hoc commit-message documentation. |
+| 2026-05-02 | agent:opus-4.7-1M (session by captain:elroy) | Logged Tab5 1-indexed wire `zoneId` migration aligning with K1 B2 commit `d53092ad`. |

@@ -31,7 +31,7 @@ void registerWsModifierCommands(const WebServerContext& ctx) {
     // - modifiers.clear
     // - modifiers.update
 
-    LW_LOGI("Modifier WebSocket commands registered (stub)");
+    LW_LOGD("Modifier WS handlers reserved (not yet implemented)");
 }
 
 } // namespace ws

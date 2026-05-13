@@ -297,6 +297,10 @@ private:
      *
      * Zone-specific parameter sync for multi-zone LED configurations.
      * Supports up to 3 zones, each with independent effect/brightness.
+     *
+     * Wire format (post-2026-05-02 K1 B2): the "id" field carries a
+     * 1-indexed wire zoneId (1..3). Wire 0 is RESERVED. We translate to
+     * the INTERNAL 0-based index (0..2) before mapping to ParameterId.
      */
     static void handleZoneStatus(JsonDocument& doc) {
         if (!s_paramHandler) {
@@ -322,18 +326,20 @@ private:
         for (JsonObject zone : zones) {
             if (!zone["id"].is<uint8_t>()) continue;
 
-            uint8_t zoneId = zone["id"].as<uint8_t>();
+            uint8_t wireZoneId = zone["id"].as<uint8_t>();
 
-            // Map zone parameters to Unit B encoders (indices 8-13)
+            // Wire-format: zoneId is 1-indexed (1..3). Reject wire 0
+            // (reserved) and out-of-range values; convert to internal 0..2.
+            if (wireZoneId < 1 || wireZoneId > 3) {
+                TAB5_WS_PRINTF("[WsRouter] Wire zoneId %u out of range (1..3)\n", wireZoneId);
+                continue;
+            }
+            const uint8_t zoneId = static_cast<uint8_t>(wireZoneId - 1);
+
+            // Map internal zone ID to the correct ParameterId enum values.
             // zoneId 0 -> Zone1Effect (8), Zone1Speed (9)  [Zone 1 user-facing]
             // zoneId 1 -> Zone2Effect (10), Zone2Speed (11) [Zone 2 user-facing]
             // zoneId 2 -> Zone3Effect (12), Zone3Speed (13) [Zone 3 user-facing]
-            if (zoneId > 2) {
-                TAB5_WS_PRINTF("[WsRouter] Zone %d out of range (max 2)\n", zoneId);
-                continue;
-            }
-
-            // Map zone ID to the correct ParameterId enum values
             ParameterId effectParam, speedParam;
             switch (zoneId) {
                 case 0:
@@ -503,7 +509,11 @@ private:
             zoneCount = zones::MAX_ZONES;
         }
 
-        // Parse segments array if present
+        // Parse segments array if present.
+        // Wire format: each segment carries a 1-indexed zoneId (1..3).
+        // We translate to internal 0-based (0..2) on ingest. Segments with
+        // out-of-range wire values (0 or > 3) are skipped — internal storage
+        // and downstream UI assume 0..2.
         if (doc["segments"].is<JsonArray>()) {
             JsonArray segmentsArray = doc["segments"].as<JsonArray>();
             zones::ZoneSegment segments[zones::MAX_ZONES];
@@ -512,7 +522,12 @@ private:
             for (JsonObject seg : segmentsArray) {
                 if (segCount >= zones::MAX_ZONES) break;
 
-                segments[segCount].zoneId = seg["zoneId"].as<uint8_t>();
+                uint8_t wireZoneId = seg["zoneId"].as<uint8_t>();
+                if (wireZoneId < 1 || wireZoneId > 3) {
+                    TAB5_WS_PRINTF("[WsRouter] zones.list segment wire zoneId %u out of range (1..3)\n", wireZoneId);
+                    continue;
+                }
+                segments[segCount].zoneId = static_cast<uint8_t>(wireZoneId - 1);
                 segments[segCount].s1LeftStart = seg["s1LeftStart"].as<uint8_t>();
                 segments[segCount].s1LeftEnd = seg["s1LeftEnd"].as<uint8_t>();
                 segments[segCount].s1RightStart = seg["s1RightStart"].as<uint8_t>();
@@ -521,18 +536,24 @@ private:
                 segCount++;
             }
 
-            // Update UI with segments
+            // Update UI with segments (internal 0-indexed)
             s_zoneComposerUI->updateSegments(segments, segCount);
         }
 
-        // Parse zones array for runtime state (effect, palette, blend, speed)
+        // Parse zones array for runtime state (effect, palette, blend, speed).
+        // Wire format: each zone row carries a 1-indexed "id" (1..3).
         if (doc["zones"].is<JsonArray>()) {
             JsonArray zones = doc["zones"].as<JsonArray>();
 
             for (JsonObject zone : zones) {
                 if (!zone["id"].is<uint8_t>()) continue;
 
-                uint8_t zoneId = zone["id"].as<uint8_t>();
+                uint8_t wireZoneId = zone["id"].as<uint8_t>();
+                if (wireZoneId < 1 || wireZoneId > 3) {
+                    TAB5_WS_PRINTF("[WsRouter] zones.list row wire zoneId %u out of range (1..3)\n", wireZoneId);
+                    continue;
+                }
+                const uint8_t zoneId = static_cast<uint8_t>(wireZoneId - 1);
                 if (zoneId >= zones::MAX_ZONES) continue;
 
                 // Update ZoneState for UI
@@ -576,12 +597,15 @@ private:
             // Also update parameter handler for encoder sync
             handleZoneStatus(doc);
 
-            // Update sidebar zone state cache (independent of active screen)
+            // Update sidebar zone state cache (independent of active screen).
+            // Wire format: zone "id" is 1-indexed (1..3); sidebar storage is
+            // 0-indexed (0..2).
             if (s_displayUI) {
                 for (JsonObject zone : zones) {
                     if (!zone["id"].is<uint8_t>()) continue;
-                    uint8_t zid = zone["id"].as<uint8_t>();
-                    if (zid >= 3) continue;  // Sidebar supports 3 zones
+                    uint8_t wireZid = zone["id"].as<uint8_t>();
+                    if (wireZid < 1 || wireZid > 3) continue;
+                    const uint8_t zid = static_cast<uint8_t>(wireZid - 1);
 
                     uint16_t eid = 0;
                     if (zone["effectId"].is<int>()) {

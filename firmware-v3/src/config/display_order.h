@@ -328,6 +328,7 @@ constexpr EffectId DISPLAY_ORDER[] = {
     EID_RADIAL_TIME_SCOPE,                   // 0x2100: Move 5.4 — onset history time-scope
     EID_ATTACK_ONLY_PITCH_VELOCITY,          // 0x2101: Move 5.6 — pitch-class velocity field
     EID_BEAT_PARITY_SPRITE,                  // 0x2102: Move 5.7 — beat-parity sprite radiation
+    EID_CROSS_STRIP_WAVE_INTERFERENCE,       // 0x2103: Move 3.2 — cross-strip wave interference
 };
 
 /// Number of effects in the display order (excludes retired slots)

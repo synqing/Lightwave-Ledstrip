@@ -51,9 +51,10 @@
 #include "webserver/ws/WsMotionCommands.h"
 #include "webserver/ws/WsColorCommands.h"
 #include "webserver/ws/WsEdgeMixerCommands.h"
+#include "webserver/ws/WsRenderCommands.h"
+#include "webserver/ws/WsSynqMatrixCommands.h"
 #include "../effects/enhancement/EdgeMixer.h"
 #include "webserver/ws/WsPaletteCommands.h"
-#include "webserver/ws/WsPresetCommands.h"
 #include "webserver/ws/WsZonePresetCommands.h"
 #include "webserver/ws/WsEffectPresetCommands.h"
 #include "webserver/ws/WsBatchCommands.h"
@@ -1051,6 +1052,7 @@ void WebServer::updateCachedRendererState() {
         m_cachedRendererState.edgeMixerSpatial = static_cast<uint8_t>(mixer.getSpatial());
         m_cachedRendererState.edgeMixerTemporal = static_cast<uint8_t>(mixer.getTemporal());
     }
+    m_cachedRendererState.ledDitheringEnabled = m_renderer->isLedDitheringEnabled();
     m_cachedRendererState.isRunning = m_renderer->isRunning();
     m_cachedRendererState.queueUtilization = m_renderer->getQueueUtilization();
     m_cachedRendererState.queueLength = m_renderer->getQueueLength();
@@ -1314,8 +1316,9 @@ void WebServer::setupWebSocket() {
     webserver::ws::registerWsMotionCommands(ctx);
     webserver::ws::registerWsColorCommands(ctx);
     webserver::ws::registerWsEdgeMixerCommands(ctx);
+    webserver::ws::registerWsRenderCommands(ctx);
+    webserver::ws::registerWsSynqMatrixCommands(ctx);
     webserver::ws::registerWsPaletteCommands(ctx);
-    webserver::ws::registerWsPresetCommands(ctx);
     webserver::ws::registerWsZonePresetCommands(ctx);
     webserver::ws::registerWsEffectPresetCommands(ctx);
     webserver::ws::registerWsBatchCommands(ctx);
@@ -1402,7 +1405,12 @@ bool WebServer::executeBatchAction(const String& action, JsonVariant params) {
     }
     else if (action == "setZoneEffect" && m_zoneComposer) {
         if (!params.containsKey("zoneId") || !params.containsKey("effectId")) return false;
-        uint8_t zoneId = params["zoneId"];
+        // Wire-format migration (2026-05-02): zoneId on the wire is 1-indexed.
+        // Translate to 0-indexed internal index before calling the setter.
+        uint8_t wireZoneId = params["zoneId"];
+        bool zoneIdValid = false;
+        uint8_t zoneId = wireZoneIdToInternal(wireZoneId, zoneIdValid);
+        if (!zoneIdValid) return false;
         EffectId effectId = params["effectId"];
         m_zoneComposer->setZoneEffect(zoneId, effectId);
         return true;

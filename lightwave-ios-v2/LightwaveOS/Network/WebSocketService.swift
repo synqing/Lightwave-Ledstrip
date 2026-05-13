@@ -124,6 +124,15 @@ actor WebSocketService {
         // a UI can confirm dispatch without each command needing its own case.
         case showStatus(WebSocketPayload)
         case showAck(WebSocketPayload)
+
+        // MARK: Phase 2 — colour correction (P2-?)
+        // Replaces the previously-dropped `.colourCorrectionConfig` REST stub
+        // path. Firmware unicasts the full ColorCorrectionEngine state in
+        // reply to `colorCorrection.getConfig` and `colorCorrection.setConfig`;
+        // both reply shapes are identical so we surface them under one event.
+        // See WsColorCommands.cpp:247-352 (firmware) and
+        // ColourCorrectionViewModel.handleConfigUpdate (iOS handler).
+        case colourCorrectionConfigUpdated(WebSocketPayload)
     }
 
     /// Sendable wrapper for [String: Any] JSON payloads
@@ -503,9 +512,18 @@ actor WebSocketService {
             print("[WS] EdgeMixer save ack")
             #endif
 
-        case .deviceStatus, .effectsChanged, .effectsList, .palettesList, .colourCorrectionConfig:
+        case .deviceStatus, .effectsChanged, .effectsList, .palettesList:
             // These are handled via REST API, not event stream
             break
+
+        case .colourCorrectionConfig:
+            // Firmware unicasts this in reply to `colorCorrection.getConfig`
+            // and `colorCorrection.setConfig`. Yield to AppViewModel so
+            // `ColourCorrectionViewModel` can refresh its state without a
+            // separate REST call. The REST path is a stub at
+            // ColorCorrectionHandlers.cpp:14-30 (returns 404) — WS is the
+            // only working route.
+            eventContinuation?.yield(.colourCorrectionConfigUpdated(payload))
 
         case .audioSubscribed, .audioUnsubscribed, .ledStreamSubscribed:
             #if DEBUG
@@ -763,6 +781,50 @@ actor WebSocketService {
     /// rows.
     func deleteZonePreset(id: Int) {
         send("zonePresets.delete", params: ["id": id])
+    }
+
+    // MARK: Phase 2 — colour correction WS commands
+    //
+    // Firmware exposes the working colour-correction surface only via WS
+    // (`WsColorCommands.cpp:247-352`). The matching REST endpoints at
+    // `/api/v1/colorCorrection/config` are stubs that return 404
+    // (`ColorCorrectionHandlers.cpp:22-30`). iOS uses these helpers to drive
+    // the panel; replies arrive as `.colourCorrectionConfigUpdated`.
+
+    /// `colorCorrection.getConfig` — fetch the live ColorCorrectionEngine state.
+    /// Reply yields `.colourCorrectionConfigUpdated(payload)`.
+    func sendColourCorrectionGetConfig(requestId: String? = nil) {
+        var params: [String: any Sendable] = [:]
+        if let requestId = requestId {
+            params["requestId"] = requestId
+        }
+        send("colorCorrection.getConfig", params: params)
+    }
+
+    /// `colorCorrection.setConfig` — push the full config (gamma + AE +
+    /// brown-guardrail + mode) atomically. Firmware applies and replies with
+    /// the new state, surfaced via `.colourCorrectionConfigUpdated`.
+    func sendColourCorrectionSetConfig(
+        gammaEnabled: Bool,
+        gammaValue: Float,
+        autoExposureEnabled: Bool,
+        autoExposureTarget: Int,
+        brownGuardrailEnabled: Bool,
+        mode: Int,
+        requestId: String? = nil
+    ) {
+        var params: [String: any Sendable] = [
+            "gammaEnabled": gammaEnabled,
+            "gammaValue": gammaValue,
+            "autoExposureEnabled": autoExposureEnabled,
+            "autoExposureTarget": autoExposureTarget,
+            "brownGuardrailEnabled": brownGuardrailEnabled,
+            "mode": mode,
+        ]
+        if let requestId = requestId {
+            params["requestId"] = requestId
+        }
+        send("colorCorrection.setConfig", params: params)
     }
 }
 

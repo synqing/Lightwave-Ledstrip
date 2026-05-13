@@ -1,0 +1,1072 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>K1 Frame Lifecycle Visualiser - 2026-05-05</title>
+  <style>
+    :root {
+      --bg: #f5f2ea;
+      --ink: #161616;
+      --muted: #5d625f;
+      --line: #c9c1b2;
+      --panel: #fffdf8;
+      --paper: #ffffff;
+      --paint: #d24f3a;
+      --change: #236da8;
+      --policy: #8b4d9d;
+      --protect: #1f7d55;
+      --transport: #72563d;
+      --warn: #bf3f32;
+      --ok: #24784d;
+      --soft: #ebe4d6;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+    }
+
+    header {
+      padding: 28px 32px 20px;
+      background: #fff9ec;
+      border-bottom: 1px solid var(--line);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(28px, 4vw, 46px);
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      max-width: 1040px;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.45;
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 380px;
+      gap: 18px;
+      padding: 18px;
+    }
+
+    .stack {
+      display: grid;
+      gap: 18px;
+      min-width: 0;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
+    }
+
+    .panel-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      gap: 16px;
+      padding: 16px 18px 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .note {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .lifecycle {
+      padding: 22px;
+      overflow-x: auto;
+    }
+
+    .spine {
+      position: relative;
+      min-width: 980px;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      grid-template-areas:
+        "tick inputs paint"
+        "fork fork fork"
+        "correct tone split"
+        "merge merge merge"
+        "policy edge hal"
+        "wire fence next";
+      gap: 18px 20px;
+      align-items: stretch;
+    }
+
+    .node {
+      position: relative;
+      min-height: 118px;
+      padding: 14px;
+      border: 2px solid var(--line);
+      border-radius: 8px;
+      background: var(--paper);
+      cursor: pointer;
+      text-align: left;
+      transition: transform 120ms ease, box-shadow 120ms ease;
+    }
+
+    .node:hover,
+    .node.selected {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 22px rgba(41, 34, 25, 0.14);
+    }
+
+    .node h3 {
+      margin: 8px 0 6px;
+      font-size: 16px;
+      line-height: 1.15;
+    }
+
+    .node p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .tag {
+      display: inline-flex;
+      min-height: 20px;
+      align-items: center;
+      padding: 2px 7px;
+      border-radius: 999px;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .paint { border-color: var(--paint); }
+    .paint .tag { background: var(--paint); }
+    .change { border-color: var(--change); }
+    .change .tag { background: var(--change); }
+    .policy { border-color: var(--policy); }
+    .policy .tag { background: var(--policy); }
+    .protect { border-color: var(--protect); }
+    .protect .tag { background: var(--protect); }
+    .transport { border-color: var(--transport); }
+    .transport .tag { background: var(--transport); }
+
+    .tick { grid-area: tick; }
+    .inputs { grid-area: inputs; }
+    .paintNode { grid-area: paint; }
+    .fork { grid-area: fork; }
+    .correct { grid-area: correct; }
+    .tone { grid-area: tone; }
+    .split { grid-area: split; }
+    .merge { grid-area: merge; }
+    .policyNode { grid-area: policy; }
+    .edge { grid-area: edge; }
+    .hal { grid-area: hal; }
+    .wire { grid-area: wire; }
+    .fence { grid-area: fence; }
+    .next { grid-area: next; }
+
+    .connector {
+      position: absolute;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .connector svg {
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    .connector path {
+      fill: none;
+      stroke: #4b4336;
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      marker-end: url(#arrow);
+    }
+
+    .connector .warn {
+      stroke: var(--warn);
+      stroke-dasharray: 7 6;
+    }
+
+    .fork-card,
+    .merge-card {
+      position: relative;
+      padding: 16px;
+      border: 2px solid #4b4336;
+      border-radius: 8px;
+      background: #fff8e8;
+    }
+
+    .fork-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .route {
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .route h4 {
+      margin: 0 0 6px;
+      font-size: 15px;
+      line-height: 1.2;
+    }
+
+    .route p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .risk-callout {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-left: 5px solid var(--warn);
+      background: #fff1eb;
+      color: #3b241f;
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 0 22px 20px;
+    }
+
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 99px;
+      display: inline-block;
+    }
+
+    .sim {
+      padding: 18px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .sim-grid {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      gap: 16px;
+      align-items: start;
+    }
+
+    .controls {
+      display: grid;
+      gap: 12px;
+    }
+
+    .control-group {
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .control-group h3 {
+      margin: 0 0 8px;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #4b4336;
+    }
+
+    .toggle {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-height: 32px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #292929;
+      cursor: pointer;
+    }
+
+    .toggle input {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--ok);
+    }
+
+    .samples {
+      display: grid;
+      gap: 12px;
+    }
+
+    .sample {
+      display: grid;
+      grid-template-columns: 170px minmax(0, 1fr) 108px;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .sample strong {
+      font-size: 13px;
+    }
+
+    .strip {
+      display: grid;
+      grid-template-columns: repeat(16, 1fr);
+      height: 34px;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid #111;
+      background: #111;
+    }
+
+    .metrics {
+      text-align: right;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .parking {
+      padding: 18px;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(160px, 1fr));
+      gap: 12px;
+    }
+
+    .parked {
+      padding: 12px;
+      border: 1px dashed #918777;
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .parked h3 {
+      margin: 0 0 6px;
+      font-size: 15px;
+    }
+
+    .parked p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    aside {
+      position: sticky;
+      top: 18px;
+      height: calc(100vh - 36px);
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    .detail {
+      padding: 18px;
+      overflow: auto;
+    }
+
+    .detail h2 {
+      margin: 0 0 8px;
+      font-size: 24px;
+      line-height: 1.05;
+    }
+
+    .risk {
+      display: inline-flex;
+      margin-bottom: 12px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      background: var(--ok);
+    }
+
+    .risk.high { background: var(--warn); }
+    .risk.medium { background: #bd6a15; }
+
+    .detail-section {
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+    }
+
+    .detail-section h3 {
+      margin: 0 0 8px;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #4b4336;
+    }
+
+    .detail-section p,
+    .detail-section li {
+      color: #333;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .detail-section ul {
+      margin: 8px 0 0;
+      padding-left: 18px;
+    }
+
+    code {
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 12px;
+      padding: 2px 4px;
+      border: 1px solid #ded4c1;
+      border-radius: 4px;
+      background: #f3ebdc;
+    }
+
+    @media (max-width: 1180px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+      aside {
+        position: static;
+        height: auto;
+      }
+      .sim-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 760px) {
+      header,
+      main {
+        padding-left: 12px;
+        padding-right: 12px;
+      }
+      .lifecycle {
+        padding: 14px;
+      }
+      .spine {
+        min-width: 0;
+        grid-template-columns: 1fr;
+        grid-template-areas:
+          "tick"
+          "inputs"
+          "paint"
+          "fork"
+          "correct"
+          "tone"
+          "split"
+          "merge"
+          "policy"
+          "edge"
+          "hal"
+          "wire"
+          "fence"
+          "next";
+      }
+      .fork-grid,
+      .sample,
+      .parking {
+        grid-template-columns: 1fr;
+      }
+      .metrics {
+        text-align: left;
+      }
+      .connector {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>K1 Frame Lifecycle Visualiser</h1>
+    <div class="subtitle">
+      One frame enters the renderer, pixels are authored into a buffer, shared output stages prepare the two physical strips,
+      the RMT driver emits the frame, the wire fence waits for completion, and only then does the next frame begin.
+      Gamma lifecycle/status was fixed in commit adacee3d; subjective colour A/B was skipped and is not evidence for default changes.
+    </div>
+  </header>
+
+  <main>
+    <section class="stack">
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>A Single Frame's Round Trip</h2>
+            <div class="note">This is one lifecycle with a buffer-ownership fork, not two separate pipelines.</div>
+          </div>
+          <div class="note">Click any stage for source anchors and risk notes.</div>
+        </div>
+        <div class="lifecycle">
+          <div class="spine" id="spine">
+            <svg width="0" height="0" aria-hidden="true">
+              <defs>
+                <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+                  <path d="M0,0 L10,4 L0,8 Z" fill="#4b4336"></path>
+                </marker>
+              </defs>
+            </svg>
+          </div>
+        </div>
+        <div class="legend">
+          <span><i class="dot" style="background: var(--paint)"></i>Paints pixels</span>
+          <span><i class="dot" style="background: var(--change)"></i>Changes pixels</span>
+          <span><i class="dot" style="background: var(--policy)"></i>Output policy</span>
+          <span><i class="dot" style="background: var(--transport)"></i>Moves pixels</span>
+          <span><i class="dot" style="background: var(--protect)"></i>Protects delivery</span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Simulation Sidecar</h2>
+            <div class="note">Representative explainer only. These controls are not a claim that every switch exists as a firmware runtime toggle.</div>
+          </div>
+        </div>
+        <div class="sim">
+          <div class="sim-grid">
+            <div class="controls" id="controls"></div>
+            <div class="samples" id="samples"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Not In The Live Global Path</h2>
+            <div class="note">Parked here so inactive infrastructure is not mistaken for part of the frame lifecycle.</div>
+          </div>
+        </div>
+        <div class="parking">
+          <div class="parked"><h3>LayerStack</h3><p>Overlap composer infrastructure. No global renderer call site found in this audit.</p></div>
+          <div class="parked"><h3>FramebufferLPF</h3><p>Implemented helper. Header says renderer pass is a later move.</p></div>
+          <div class="parked"><h3>FrameBlend</h3><p>Whole-frame post-process concept. Not active in the inspected production path.</p></div>
+          <div class="parked"><h3>ColorEngine</h3><p>Palette blending, rotation, and diffusion helpers. Not a proven global render layer.</p></div>
+        </div>
+      </section>
+    </section>
+
+    <aside class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Stage Inspector</h2>
+          <div class="note">Source-grounded details for the selected lifecycle stage.</div>
+        </div>
+      </div>
+      <div class="detail" id="detail"></div>
+    </aside>
+  </main>
+
+  <script>
+    const stages = [
+      {
+        id: "tick",
+        area: "tick",
+        title: "1. Frame Tick",
+        type: "transport",
+        tag: "start",
+        risk: "low",
+        summary: "Renderer starts frame N.",
+        source: "RendererActor.cpp:897-963",
+        changes: ["Calls renderFrame(), then colour correction, then showLeds().", "Defines lifecycle order; it does not directly change colour."],
+        decision: "Use this as the start/end anchor for all render-path explanations."
+      },
+      {
+        id: "inputs",
+        area: "inputs",
+        title: "2. Inputs Chosen",
+        type: "policy",
+        tag: "control",
+        risk: "medium",
+        summary: "Audio and user controls shape the recipe before pixels exist.",
+        source: "RendererActor.cpp:1454-1663, RendererActor.cpp:1813-1853",
+        changes: ["Audio mappings can alter brightness, speed, intensity, saturation, variation, and hue.", "Independent strip mode currently does not apply the same audio mapping path."],
+        decision: "Treat this as pre-pixel control, not a post-processing layer."
+      },
+      {
+        id: "paint",
+        area: "paintNode",
+        title: "3. Effect Paints Pixels",
+        type: "paint",
+        tag: "paint",
+        risk: "medium",
+        summary: "The effect authors the initial CRGB frame.",
+        source: "RendererActor.cpp:1757-1781, RendererActor.cpp:1905",
+        changes: ["Primary source of colour, hue, geometry, contrast, brightness, and saturation.", "The effect can author into a single 320-buffer surface or into strip buffers when allowed."],
+        decision: "Protect effect-authored colour unless a later layer has proven value."
+      },
+      {
+        id: "correct",
+        area: "correct",
+        title: "5A. Colour Correction Target",
+        type: "change",
+        tag: "changes pixels",
+        risk: "high",
+        summary: "Currently targets m_leds, not every possible authored surface.",
+        source: "RendererActor.cpp:931-947, ColorCorrectionEngine.cpp:181-217",
+        changes: ["Can boost saturation, subtract white, clamp brightness, apply gamma, and alter warm tones.", "Specific risk: strip-buffer authored frames can miss this correction unless correction is moved or duplicated."],
+        decision: "Fix gamma correctness, then decide whether correction should apply to actual output buffers."
+      },
+      {
+        id: "tone",
+        area: "tone",
+        title: "5B. Tone Map",
+        type: "change",
+        tag: "changes pixels",
+        risk: "medium",
+        summary: "Scoped brightness compression for additive effects.",
+        source: "RendererActor.cpp:2013-2043, effect_ids.h:619-653",
+        changes: ["Reduces additive white clipping.", "Can dim high-energy output if an effect is listed incorrectly."],
+        decision: "Keep scoped; tune the effect list if visual evidence says it is wrong."
+      },
+      {
+        id: "split",
+        area: "split",
+        title: "6. Split Or Keep Strip Buffers",
+        type: "transport",
+        tag: "moves pixels",
+        risk: "medium",
+        summary: "Single 320-buffer frames are copied into the two strip buffers unless strip buffers were already authored.",
+        source: "RendererActor.cpp:2045-2051",
+        changes: ["No intended colour change.", "This is where buffer ownership becomes the actual physical strip output."],
+        decision: "Use buffer-ownership language, not two-pipeline language."
+      },
+      {
+        id: "policy",
+        area: "policyNode",
+        title: "8. Silence Policy",
+        type: "policy",
+        tag: "policy",
+        risk: "medium",
+        summary: "Post-output brightness scaling from silentScale and hard reactive gate.",
+        source: "RendererActor.cpp:2053-2119, effect_ids.h:608-617",
+        changes: ["Brightness-only scaling after render.", "Can make ambient/non-reactive effects appear audio-reactive."],
+        decision: "Decide whether ambient effects should ignore global silence scale."
+      },
+      {
+        id: "edge",
+        area: "edge",
+        title: "9. EdgeMixer",
+        type: "policy",
+        tag: "edge policy",
+        risk: "medium",
+        summary: "Dual-edge transform after the output is in strip buffers.",
+        source: "RendererActor.cpp:2121-2122, EdgeMixer.h:92-144",
+        changes: ["MIRROR is baseline.", "Non-MIRROR modes can hue-shift, desaturate, RMS-gate, or STM-modulate strips."],
+        decision: "Force MIRROR for baseline visual debugging."
+      },
+      {
+        id: "hal",
+        area: "hal",
+        title: "10. HAL / FastLED",
+        type: "transport",
+        tag: "hardware",
+        risk: "low",
+        summary: "Copies to TX buffers and applies final FastLED state.",
+        source: "LedDriver_S3.cpp:89-97, LedDriver_S3.cpp:131-144, LedDriver_S3.cpp:193-207, LedDriver_S3.cpp:242-265",
+        changes: ["Applies global brightness, LED correction, dither, power limit, and GRB order.", "Prepares the physical transmit buffers."],
+        decision: "Keep observable and boring."
+      },
+      {
+        id: "wire",
+        area: "wire",
+        title: "11. WS2812 Wire Output",
+        type: "transport",
+        tag: "wire",
+        risk: "low",
+        summary: "FastLED/RMT physically shifts frame N to the LEDs.",
+        source: "LedDriver_S3.cpp:171-177",
+        changes: ["No creative transform intended.", "This is where CPU buffer timing becomes real LED timing."],
+        decision: "Do not treat early FastLED return as physical completion."
+      },
+      {
+        id: "fence",
+        area: "fence",
+        title: "12. Wire-Time Fence",
+        type: "protect",
+        tag: "protects",
+        risk: "low",
+        summary: "Waits until the physical output is done.",
+        source: "LedDriver_S3.cpp:171-177",
+        changes: ["Prevents frame N+1 from advancing while frame N is still shifting.", "This is the likely white-flash/haze fix."],
+        decision: "Do not remove without hard RMT completion proof."
+      },
+      {
+        id: "next",
+        area: "next",
+        title: "13. Next Frame Begins",
+        type: "protect",
+        tag: "loop",
+        risk: "low",
+        summary: "Frame N is complete; frame N+1 can safely start.",
+        source: "RendererActor.cpp:897-963, LedDriver_S3.cpp:171-177",
+        changes: ["Closes the lifecycle loop.", "Explains why the fence belongs at the end, not as an aesthetic layer."],
+        decision: "Keep the loop visible in every VP render-path explainer."
+      }
+    ];
+
+    const forkInfo = {
+      id: "fork",
+      area: "fork",
+      title: "4. Buffer Ownership Fork",
+      type: "transport",
+      tag: "fork",
+      risk: "high",
+      summary: "The frame is still in one lifecycle, but it may be authored into different buffer surfaces.",
+      source: "RendererActor.cpp:1783-1792, RendererActor.cpp:1905-1913, RendererActor.cpp:1927-2005",
+      changes: ["Single 320-buffer authoring: effect writes m_leds[0..319].", "Strip-buffer authoring: allowed effects write m_strip1[0..159] and m_strip2[0..159].", "This is not direct-to-LED output; later shared stages still apply."],
+      decision: "Use 'single 320-buffer authoring' and 'strip-buffer authoring' terminology."
+    };
+
+    const mergeInfo = {
+      id: "merge",
+      area: "merge",
+      title: "7. Actual Strip Output",
+      type: "transport",
+      tag: "merge",
+      risk: "medium",
+      summary: "Both authoring surfaces converge into m_strip1/m_strip2 before shared output policy.",
+      source: "RendererActor.cpp:2045-2051, RendererActor.cpp:2053-2122",
+      changes: ["After this point, silence policy, EdgeMixer, HAL, FastLED, and RMT all operate on the strip buffers.", "This is the shared output path."],
+      decision: "Show the fork merging before silence, EdgeMixer, and HAL."
+    };
+
+    const state = {
+      authoring: "single",
+      correction: true,
+      saturation: true,
+      gamma: true,
+      tone: true,
+      silence: false,
+      edge: false,
+      fence: true
+    };
+
+    let selected = forkInfo;
+
+    const basePixels = [
+      [238, 33, 51], [249, 86, 35], [255, 166, 35], [252, 214, 75],
+      [80, 205, 82], [28, 180, 132], [24, 171, 210], [32, 120, 236],
+      [82, 75, 232], [145, 67, 219], [219, 59, 178], [245, 82, 111],
+      [255, 255, 255], [205, 213, 222], [147, 91, 51], [18, 20, 24]
+    ];
+
+    function clamp(v) {
+      return Math.max(0, Math.min(255, Math.round(v)));
+    }
+
+    function rgbToHsv([r, g, b]) {
+      r /= 255; g /= 255; b /= 255;
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      const d = max - min;
+      let h = 0;
+      if (d !== 0) {
+        if (max === r) h = ((g - b) / d) % 6;
+        else if (max === g) h = (b - r) / d + 2;
+        else h = (r - g) / d + 4;
+        h *= 60;
+        if (h < 0) h += 360;
+      }
+      return [h, max === 0 ? 0 : d / max, max];
+    }
+
+    function hsvToRgb(h, s, v) {
+      const c = v * s;
+      const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+      const m = v - c;
+      let rp = 0, gp = 0, bp = 0;
+      if (h < 60) [rp, gp, bp] = [c, x, 0];
+      else if (h < 120) [rp, gp, bp] = [x, c, 0];
+      else if (h < 180) [rp, gp, bp] = [0, c, x];
+      else if (h < 240) [rp, gp, bp] = [0, x, c];
+      else if (h < 300) [rp, gp, bp] = [x, 0, c];
+      else [rp, gp, bp] = [c, 0, x];
+      return [clamp((rp + m) * 255), clamp((gp + m) * 255), clamp((bp + m) * 255)];
+    }
+
+    function applySaturation(pixel, amount) {
+      const [h, s, v] = rgbToHsv(pixel);
+      return hsvToRgb(h, Math.min(1, s + amount), v);
+    }
+
+    function whiteGuardrail([r, g, b]) {
+      const min = Math.min(r, g, b);
+      const max = Math.max(r, g, b);
+      if (min > 150 && (max - min) < 42) {
+        const reduction = Math.max(0, min - 100);
+        return [clamp(r - reduction), clamp(g - reduction), clamp(b - reduction)];
+      }
+      return [r, g, b];
+    }
+
+    function gamma(pixel, value) {
+      return pixel.map(c => clamp(255 * Math.pow(c / 255, value)));
+    }
+
+    function toneMap(pixel) {
+      const avg = (pixel[0] + pixel[1] + pixel[2]) / 3;
+      const scale = 255 / (avg + 255);
+      return pixel.map(c => clamp(c * scale));
+    }
+
+    function silence(pixel) {
+      return pixel.map(c => clamp(c * 0.38));
+    }
+
+    function edge(pixel, i) {
+      if (i < 8) return pixel;
+      const [h, s, v] = rgbToHsv(pixel);
+      return hsvToRgb((h + 42) % 360, Math.max(0, s * 0.72), v * 0.96);
+    }
+
+    function wireRisk(pixels) {
+      return pixels.map((p, i) => (i === 3 || i === 12) ? [255, 255, 255] : p);
+    }
+
+    function average(pixels) {
+      let brightness = 0, saturation = 0;
+      pixels.forEach(p => {
+        const hsv = rgbToHsv(p);
+        brightness += hsv[2];
+        saturation += hsv[1];
+      });
+      return {
+        brightness: Math.round((brightness / pixels.length) * 100),
+        saturation: Math.round((saturation / pixels.length) * 100)
+      };
+    }
+
+    function processRows() {
+      const rows = [];
+      let current = basePixels.map(p => p.slice());
+      rows.push(["Authored pixels", current.map(p => p.slice())]);
+
+      const correctionMiss = state.authoring === "strip";
+      if (state.correction && !correctionMiss) {
+        current = current.map(whiteGuardrail);
+        if (state.saturation) current = current.map(p => applySaturation(p, 0.10));
+        if (state.gamma) current = current.map(p => gamma(p, 2.2));
+      }
+      rows.push([correctionMiss ? "Colour correction miss risk" : "After correction target", current.map(p => p.slice())]);
+
+      if (state.tone) current = current.map(toneMap);
+      rows.push(["After tone map", current.map(p => p.slice())]);
+
+      if (state.silence) current = current.map(silence);
+      rows.push(["After silence policy", current.map(p => p.slice())]);
+
+      if (state.edge) current = current.map(edge);
+      rows.push(["After EdgeMixer", current.map(p => p.slice())]);
+
+      rows.push([state.fence ? "Frame N safely emitted" : "Unsafe early return example", state.fence ? current : wireRisk(current)]);
+      return rows;
+    }
+
+    function renderNode(stage) {
+      const node = document.createElement("button");
+      node.type = "button";
+      node.className = `node ${stage.type} ${stage.area} ${selected.id === stage.id ? "selected" : ""}`;
+      node.style.gridArea = stage.area;
+      node.innerHTML = `<span class="tag">${stage.tag}</span><h3>${stage.title}</h3><p>${stage.summary}</p>`;
+      node.addEventListener("click", () => {
+        selected = stage;
+        renderAll();
+      });
+      return node;
+    }
+
+    function renderFork() {
+      const wrap = document.createElement("div");
+      wrap.className = "fork-card fork";
+      wrap.style.gridArea = "fork";
+      wrap.innerHTML = `
+        <span class="tag" style="background: var(--transport)">fork</span>
+        <h3>${forkInfo.title}</h3>
+        <p>${forkInfo.summary}</p>
+        <div class="fork-grid">
+          <div class="route">
+            <h4>Single 320-buffer authoring</h4>
+            <p>Effect paints <code>m_leds[0..319]</code>. Colour correction currently targets this surface.</p>
+          </div>
+          <div class="route">
+            <h4>Strip-buffer authoring</h4>
+            <p>Effect paints <code>m_strip1[0..159]</code> and <code>m_strip2[0..159]</code>. Shared output stages still apply.</p>
+          </div>
+        </div>
+        <div class="risk-callout">Key risk: colour correction is aimed at <code>m_leds</code>. Strip-authored frames can miss that correction unless the correction target changes.</div>
+      `;
+      wrap.addEventListener("click", () => {
+        selected = forkInfo;
+        renderAll();
+      });
+      if (selected.id === "fork") wrap.classList.add("selected");
+      return wrap;
+    }
+
+    function renderMerge() {
+      const wrap = document.createElement("div");
+      wrap.className = "merge-card merge";
+      wrap.style.gridArea = "merge";
+      wrap.innerHTML = `
+        <span class="tag" style="background: var(--transport)">merge</span>
+        <h3>${mergeInfo.title}</h3>
+        <p>${mergeInfo.summary}</p>
+        <div class="risk-callout" style="border-left-color: var(--ok); background: #eef8f1;">After this merge, both authoring modes share the same strip-output stages: silence policy, EdgeMixer, HAL, FastLED, wire output, and fence.</div>
+      `;
+      wrap.addEventListener("click", () => {
+        selected = mergeInfo;
+        renderAll();
+      });
+      if (selected.id === "merge") wrap.classList.add("selected");
+      return wrap;
+    }
+
+    function renderSpine() {
+      const spine = document.getElementById("spine");
+      spine.innerHTML = "";
+      stages.slice(0, 3).forEach(s => spine.appendChild(renderNode(s)));
+      spine.appendChild(renderFork());
+      stages.slice(3, 6).forEach(s => spine.appendChild(renderNode(s)));
+      spine.appendChild(renderMerge());
+      stages.slice(6).forEach(s => spine.appendChild(renderNode(s)));
+    }
+
+    function renderControls() {
+      const controls = document.getElementById("controls");
+      controls.innerHTML = `
+        <div class="control-group">
+          <h3>Authoring mode</h3>
+          <label class="toggle"><input type="radio" name="authoring" value="single" ${state.authoring === "single" ? "checked" : ""}>Single 320-buffer authoring</label>
+          <label class="toggle"><input type="radio" name="authoring" value="strip" ${state.authoring === "strip" ? "checked" : ""}>Strip-buffer authoring</label>
+        </div>
+        <div class="control-group">
+          <h3>Correction stack</h3>
+          ${checkbox("correction", "Colour correction target active")}
+          ${checkbox("saturation", "Saturation boost child stage")}
+          ${checkbox("gamma", "Gamma child stage")}
+        </div>
+        <div class="control-group">
+          <h3>Post-split policy</h3>
+          ${checkbox("tone", "Tone map")}
+          ${checkbox("silence", "Silence policy")}
+          ${checkbox("edge", "EdgeMixer active")}
+        </div>
+        <div class="control-group">
+          <h3>Hardware protection</h3>
+          ${checkbox("fence", "Wire-time fence present")}
+        </div>
+      `;
+      controls.querySelectorAll("input[type=checkbox]").forEach(input => {
+        input.addEventListener("change", event => {
+          state[event.target.dataset.key] = event.target.checked;
+          renderAll();
+        });
+      });
+      controls.querySelectorAll("input[type=radio]").forEach(input => {
+        input.addEventListener("change", event => {
+          state.authoring = event.target.value;
+          renderAll();
+        });
+      });
+    }
+
+    function checkbox(key, label) {
+      return `<label class="toggle"><input type="checkbox" data-key="${key}" ${state[key] ? "checked" : ""}>${label}</label>`;
+    }
+
+    function renderSamples() {
+      const samples = document.getElementById("samples");
+      samples.innerHTML = "";
+      processRows().forEach(([label, pixels]) => {
+        const row = document.createElement("div");
+        row.className = "sample";
+        const strip = document.createElement("div");
+        strip.className = "strip";
+        pixels.forEach(pixel => {
+          const cell = document.createElement("div");
+          cell.style.background = `rgb(${pixel[0]}, ${pixel[1]}, ${pixel[2]})`;
+          strip.appendChild(cell);
+        });
+        const avg = average(pixels);
+        row.innerHTML = `<strong>${label}</strong>`;
+        row.appendChild(strip);
+        const metrics = document.createElement("div");
+        metrics.className = "metrics";
+        metrics.innerHTML = `Brightness ${avg.brightness}%<br>Saturation ${avg.saturation}%`;
+        row.appendChild(metrics);
+        samples.appendChild(row);
+      });
+    }
+
+    function renderDetail() {
+      const detail = document.getElementById("detail");
+      const riskClass = selected.risk === "high" ? " high" : selected.risk === "medium" ? " medium" : "";
+      detail.innerHTML = `
+        <span class="risk${riskClass}">${selected.risk} risk</span>
+        <h2>${selected.title}</h2>
+        <p>${selected.summary}</p>
+        <div class="detail-section">
+          <h3>What It Means</h3>
+          <ul>${selected.changes.map(item => `<li>${item}</li>`).join("")}</ul>
+        </div>
+        <div class="detail-section">
+          <h3>Source Anchor</h3>
+          <p><code>${selected.source}</code></p>
+        </div>
+        <div class="detail-section">
+          <h3>Decision</h3>
+          <p>${selected.decision}</p>
+        </div>
+      `;
+    }
+
+    function renderAll() {
+      renderSpine();
+      renderControls();
+      renderSamples();
+      renderDetail();
+    }
+
+    renderAll();
+  </script>
+</body>
+</html>

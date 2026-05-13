@@ -10,6 +10,7 @@
 
 #include <ArduinoJson.h>
 #include <ESPAsyncWebServer.h>
+#include <stddef.h>
 #include <stdint.h>
 
 namespace lightwaveos {
@@ -77,8 +78,9 @@ public:
 
 private:
     static constexpr size_t MAX_HANDLERS = 192;  // Capacity for all current commands (126 registered) plus ~50% headroom
-    static WsCommandEntry s_handlers[MAX_HANDLERS];
+    static WsCommandEntry* s_handlers;
     static size_t s_handlerCount;
+    static bool ensureStorage();
     
     /**
      * @brief Fast string comparison optimized for command routing

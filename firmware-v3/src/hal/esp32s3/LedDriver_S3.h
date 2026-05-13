@@ -40,6 +40,8 @@ public:
     bool isInitialized() const override { return m_initialized; }
     const LedDriverStats& getStats() const override { return m_stats; }
     void resetStats() override;
+    void setDithering(bool enabled) override;
+    bool isDitheringEnabled() const override { return m_ditheringEnabled; }
     bool isShowInProgress() const override { return m_showInProgress.load(std::memory_order_relaxed); }
 
 private:
@@ -50,6 +52,7 @@ private:
     uint16_t m_stripCounts[2] = {0, 0};
     uint16_t m_totalLeds = 0;
     uint8_t m_brightness = 0;
+    bool m_ditheringEnabled = true;
     bool m_initialized = false;
     bool m_dual = false;
 
@@ -57,12 +60,16 @@ private:
     CRGB m_strip2[kMaxLedsPerStrip];
 
 #ifndef NATIVE_BUILD
+    CRGB m_txStrip1[kMaxLedsPerStrip];
+    CRGB m_txStrip2[kMaxLedsPerStrip];
     CLEDController* m_ctrl1 = nullptr;
     CLEDController* m_ctrl2 = nullptr;
     SemaphoreHandle_t m_showMutex = nullptr;
 #endif
 
     static constexpr uint32_t kMinShowGapUs = 250;  ///< Small settle gap between show() calls
+    static constexpr uint32_t kWireTimeUs = 5600;   ///< 2x160 WS2812 wire-time guard for TX buffer reuse
+    uint32_t m_lastShowStartUs = 0;
     uint32_t m_lastShowEndUs = 0;
     std::atomic<bool> m_showInProgress{false};
 
@@ -70,6 +77,9 @@ private:
 
     void updateShowStats(uint32_t showUs);
     void applyColorCorrection(const LedStripConfig& config);
+#ifndef NATIVE_BUILD
+    void syncBuffersToFastLED();
+#endif
 };
 
 } // namespace hal

@@ -11,6 +11,8 @@
 #include "core/actors/RendererActor.h"
 #include "audio/contracts/ControlBus.h"
 
+#include <cstdlib>
+
 #ifndef NATIVE_BUILD
 #include <esp_heap_caps.h>
 #include <esp_system.h>
@@ -29,6 +31,21 @@ static inline CaptureTap tapFromRaw(uint8_t raw) {
     return static_cast<CaptureTap>(raw);
 }
 
+static void* allocateCapturePsram(size_t bytes) {
+#if defined(NATIVE_BUILD)
+    return std::calloc(1, bytes);
+#elif defined(BOARD_HAS_PSRAM)
+    return heap_caps_calloc(1, bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+#else
+    (void)bytes;
+    return nullptr;
+#endif
+}
+
+static const char* bufferLocation(const void* ptr) {
+    return ptr ? "PSRAM" : "missing";
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // init — allocate PSRAM scratch buffers
 // ══════════════════════════════════════════════════════════════════════
@@ -37,22 +54,17 @@ void CaptureStreamer::init() {
     if (m_initialised) return;
     m_initialised = true;
 
-#if !defined(NATIVE_BUILD) && defined(BOARD_HAS_PSRAM)
-    if (auto* capture = static_cast<CRGB*>(
-            heap_caps_calloc(kLedCount, sizeof(CRGB),
-                             MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT))) {
-        m_dumpFrameScratch = capture;
-    }
-    if (auto* frameBuf = static_cast<uint8_t*>(
-            heap_caps_calloc(kFrameBufSize, 1,
-                             MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT))) {
-        m_frameBuf = frameBuf;
-    }
-#endif
+    m_dumpFrameScratch = static_cast<CRGB*>(
+        allocateCapturePsram(kLedCount * sizeof(CRGB)));
+    m_frameBuf = static_cast<uint8_t*>(
+        allocateCapturePsram(kFrameBufSize));
+    m_taskFrameBuf = static_cast<CRGB*>(
+        allocateCapturePsram(kLedCount * sizeof(CRGB)));
 
-    LW_LOGI("Capture buffers: dumpFrame=%s frameBuf=%s",
-            (m_dumpFrameScratch != m_dumpFrameFallback) ? "PSRAM" : "DRAM",
-            (m_frameBuf != m_frameBufFallback) ? "PSRAM" : "DRAM");
+    LW_LOGI("Capture buffers: dumpFrame=%s frameBuf=%s taskFrame=%s",
+            bufferLocation(m_dumpFrameScratch),
+            bufferLocation(m_frameBuf),
+            bufferLocation(m_taskFrameBuf));
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -62,6 +74,10 @@ void CaptureStreamer::init() {
 size_t CaptureStreamer::assembleFrame(
         CRGB* frame,
         lightwaveos::actors::RendererActor* ren) {
+    if (!frame || !m_frameBuf || !ren) {
+        return 0;
+    }
+
     uint8_t* buf = m_frameBuf;
     size_t pos = 0;
 
@@ -250,6 +266,10 @@ void CaptureStreamer::captureProducerTaskFn(void* param) {
         if (!self->m_taskRunning) break;
 
         CRGB* frame = self->m_taskFrameBuf;
+        if (!frame || !self->m_frameBuf) {
+            txDropped++;
+            continue;
+        }
         if (!ren->getCapturedFrame(tap, frame)) {
             continue;
         }
@@ -263,6 +283,10 @@ void CaptureStreamer::captureProducerTaskFn(void* param) {
         // --- Assemble frame into bulk buffer ---
         uint32_t assembleStart = micros();
         size_t pos = self->assembleFrame(frame, ren);
+        if (pos == 0) {
+            txDropped++;
+            continue;
+        }
         uint32_t assembleDur = micros() - assembleStart;
         assembleTotalUs += assembleDur;
         if (assembleDur > assembleMaxUs) assembleMaxUs = assembleDur;
@@ -307,6 +331,7 @@ void CaptureStreamer::tick(uint32_t nowUs) {
 #else
     if (!m_streamActive || !m_renderer) return;
 #endif
+    if (!m_dumpFrameScratch || !m_frameBuf) return;
 
     if (nowUs - m_streamLastPushUs < m_streamIntervalUs) return;
 
@@ -323,6 +348,10 @@ void CaptureStreamer::tick(uint32_t nowUs) {
     // --- Assemble frame into bulk buffer ---
     uint32_t assembleStart = micros();
     size_t pos = assembleFrame(frame, m_renderer);
+    if (pos == 0) {
+        m_streamDropped++;
+        return;
+    }
     uint32_t assembleDur = micros() - assembleStart;
     m_assembleTotalUs += assembleDur;
     if (assembleDur > m_assembleMaxUs) m_assembleMaxUs = assembleDur;
@@ -393,6 +422,10 @@ bool CaptureStreamer::handleCommand(const String& input) {
         else if (subcmd.indexOf('c') >= 0) { tap = CaptureTap::TAP_C_PRE_WS2812; valid = true; }
 
         if (valid && m_renderer) {
+            if (!m_dumpFrameScratch) {
+                Serial.println("[CAPTURE] ERROR: capture scratch unavailable");
+                return true;
+            }
             CRGB* frame = m_dumpFrameScratch;
             // If we have no captured frame yet, force a one-shot capture and retry.
             if (!m_renderer->getCapturedFrame(tap, frame)) {
@@ -451,6 +484,12 @@ bool CaptureStreamer::handleCommand(const String& input) {
         if (spaceIdx >= 0) {
             int parsed = streamArgs.substring(spaceIdx + 1).toInt();
             if (parsed >= 1 && parsed <= 60) targetFps = parsed;
+        }
+
+        if (!m_frameBuf || !m_dumpFrameScratch || !m_taskFrameBuf) {
+            Serial.println("[CAPTURE] ERROR: capture buffers unavailable");
+            m_streamActive = false;
+            return true;
         }
 
         // Enable capture mode for the requested tap

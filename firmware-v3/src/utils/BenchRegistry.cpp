@@ -116,19 +116,19 @@ BENCH_REGISTER_TOGGLE(
     "audio.lookahead",
     ::lightwaveos::bench::g_bench_audio_lookahead,
     true,
-    "lookahead spike smoothing (Wave 2: AudioActor observer)")
+    "ControlBus lookahead spike smoothing on/off")
 
 BENCH_REGISTER_TOGGLE(
     "audio.zone_agc",
     ::lightwaveos::bench::g_bench_audio_zone_agc,
     true,
-    "zone AGC on bands[] frequency response (Wave 2: AudioActor observer)")
+    "ControlBus zone AGC on bands[] frequency response on/off")
 
 BENCH_REGISTER_TOGGLE(
     "audio.chroma_zone_agc",
     ::lightwaveos::bench::g_bench_audio_chroma_zone_agc,
     true,
-    "zone AGC on chroma[12] pitch-class field (Wave 2: AudioActor observer)")
+    "ControlBus zone AGC on chroma[12] pitch-class field on/off")
 
 BENCH_REGISTER_TOGGLE(
     "effect.fade_to_black",

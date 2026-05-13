@@ -1,0 +1,4158 @@
+================================================================================
+BUNDLE: firmware-v3 actor model entry points
+DESCRIPTION: AudioActor, RendererActor, ShowDirectorActor, NodeOrchestrator, Actor base, ActorSystem, SynqMatrix director
+GENERATED: 2026-05-13
+================================================================================
+
+
+================================================================================
+FILE: firmware-v3/src/core/actors/Actor.h
+================================================================================
+
+/**
+ * @file Actor.h
+ * @brief Base Actor class for LightwaveOS v2 cross-core communication
+ *
+ * The Actor Model provides thread-safe, lock-free communication between
+ * cores on the ESP32-S3. Each Actor runs on a pinned core and communicates
+ * exclusively via message queues, eliminating race conditions.
+ *
+ * Architecture:
+ *   Core 0 (Network/Input): NetworkActor, HmiActor, PluginManagerActor
+ *   Core 1 (Rendering): RendererActor, StateStoreActor
+ *
+ * @author LightwaveOS Team
+ * @version 2.0.0
+ */
+
+#pragma once
+
+#include <cstdint>
+#include <cstring>
+
+#ifdef NATIVE_BUILD
+// Native build - use mocks
+#include "mocks/freertos_mock.h"
+#else
+// ESP32 build - use real FreeRTOS
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/queue.h>
+#include <Arduino.h>
+#endif
+
+namespace lightwaveos {
+namespace actors {
+
+// ============================================================================
+// Message Types
+// ============================================================================
+
+/**
+ * @brief All message types in the system
+ *
+ * Message types are categorized:
+ * - 0x00-0x1F: Effect commands
+ * - 0x20-0x3F: Zone commands
+ * - 0x40-0x5F: Transition commands
+ * - 0x60-0x7F: System commands
+ * - 0x80-0xFF: Events (notifications)
+ */
+enum class MessageType : uint8_t {
+    // Effect commands (0x00-0x1F)
+    SET_EFFECT          = 0x00,
+    SET_BRIGHTNESS      = 0x01,
+    SET_SPEED           = 0x02,
+    SET_PALETTE         = 0x03,
+    SET_SATURATION      = 0x04,
+    SET_INTENSITY       = 0x05,
+    SET_COMPLEXITY      = 0x06,
+    SET_VARIATION       = 0x07,
+    SET_HUE             = 0x08,
+    SET_MOOD            = 0x09,  // Sensory Bridge mood (0-255): reactive to smooth
+    SET_FADE_AMOUNT     = 0x0A,  // Trail fade speed (0-255): 0=no fade, higher=faster
+    SET_EDGE_MIXER_MODE = 0x0B,  // param1 = EdgeMixerMode (0=mirror, 1=analogous, 2=complementary)
+    SET_EDGE_MIXER_SPREAD = 0x0C, // param1 = spread degrees (0-60)
+    SET_EDGE_MIXER_STRENGTH = 0x0D, // param1 = strength (0-255)
+    SAVE_EDGE_MIXER_NVS = 0x0E,    // Persist EdgeMixer state to NVS (no params)
+    SET_EDGE_MIXER_SPATIAL  = 0x0F,  // param1 = EdgeMixerSpatial (0-1)
+    SET_EDGE_MIXER_TEMPORAL = 0x10,  // param1 = EdgeMixerTemporal (0-1)
+
+    // Input Merge Layer (0x11-0x1F)
+    MERGE_SUBMIT            = 0x11,  // param1=sourceId, param2=paramIndex, param3=value
+    SET_LED_DITHERING       = 0x12,  // param1 = 0 off, 1 on
+
+    // Zone commands (0x20-0x3F)
+    ZONE_ENABLE         = 0x20,
+    ZONE_DISABLE        = 0x21,
+    ZONE_SET_EFFECT     = 0x22,
+    ZONE_SET_PALETTE    = 0x23,
+    ZONE_SET_BRIGHTNESS = 0x24,
+    ZONE_SET_COUNT      = 0x25,
+
+    // Transition commands (0x40-0x5F)
+    TRIGGER_TRANSITION  = 0x40,
+    SET_TRANSITION_TYPE = 0x41,
+    SET_TRANSITION_TIME = 0x42,
+    CANCEL_TRANSITION   = 0x43,
+    START_TRANSITION    = 0x44,  // param1=effectId, param2=transitionType, param4=durationMs
+
+    // System commands (0x60-0x7F)
+    SHUTDOWN            = 0x60,
+    HEALTH_CHECK        = 0x61,
+    RESET_STATE         = 0x62,
+    SAVE_STATE          = 0x63,
+    LOAD_STATE          = 0x64,
+    PING                = 0x65,
+    PONG                = 0x66,
+
+    // Sync commands (0x68-0x6F)
+    SYNC_REQUEST        = 0x68,
+    SYNC_RESPONSE       = 0x69,
+    SYNC_STATE          = 0x6A,
+
+    // Show control commands (0x70-0x7F)
+    SHOW_LOAD           = 0x70,
+    SHOW_START          = 0x71,
+    SHOW_STOP           = 0x72,
+    SHOW_PAUSE          = 0x73,
+    SHOW_RESUME         = 0x74,
+    SHOW_SEEK           = 0x75,
+    SHOW_UNLOAD         = 0x76,
+
+    // Events/Notifications (0x80-0xFF)
+    EFFECT_CHANGED      = 0x80,
+    FRAME_RENDERED      = 0x81,
+    STATE_UPDATED       = 0x82,
+    PALETTE_CHANGED     = 0x83,
+    ZONE_CHANGED        = 0x84,
+    TRANSITION_COMPLETE = 0x85,
+    ERROR_OCCURRED      = 0x86,
+    HEALTH_STATUS       = 0x87,
+
+    // Degraded-mode events (0x88-0x8F) — DEC-011
+    AUDIO_FAILURE_DETECTED  = 0x88,  // Sustained DMA timeout > 2s
+    AUDIO_FAILURE_RECOVERED = 0x89,  // Audio capture resumed after failure
+
+    // HMI Events (0x90-0x9F)
+    ENCODER_ROTATED     = 0x90,
+    ENCODER_PRESSED     = 0x91,
+    ENCODER_RELEASED    = 0x92,
+
+    // Network Events (0xA0-0xAF)
+    CLIENT_CONNECTED    = 0xA0,
+    CLIENT_DISCONNECTED = 0xA1,
+    COMMAND_RECEIVED    = 0xA2,
+
+    // Show Events (0xB0-0xBF)
+    SHOW_STARTED        = 0xB0,
+    SHOW_STOPPED        = 0xB1,
+    SHOW_PAUSED          = 0xB2,
+    SHOW_RESUMED         = 0xB3,
+    SHOW_CHAPTER_CHANGED = 0xB4,
+    SHOW_COMPLETED       = 0xB5,
+
+    // Audio Events (0xC0-0xCF) - Phase 2
+    AUDIO_TEMPO_ESTIMATE   = 0xC0,  // param4 = bpm * 100 (fixed point)
+    AUDIO_BEAT_OBSERVATION = 0xC1,  // param1 = strength (0-255), param2 = is_downbeat
+    AUDIO_BANDS_UPDATED    = 0xC2,  // Notification that band analysis completed
+    AUDIO_ERROR            = 0xC3,  // param1 = error code
+
+    // Trinity sync commands (0xD0-0xDF)
+    TRINITY_BEAT  = 0xD0,  // param1=bpm_hi, param2=bpm_lo, param3=phase, param4=flags
+    TRINITY_MACRO = 0xD1,  // param1-4 = packed macro values
+    TRINITY_SYNC  = 0xD2,  // param1=action, param4=position_ms
+    TRINITY_SEGMENT = 0xD3, // param1=index, param2-3=labelHash16 (hi/lo), param4=start_ms, _reserved=end_ms
+    STIMULUS_SET_MODE = 0xE0,
+    STIMULUS_CLEAR    = 0xE1
+};
+
+// ============================================================================
+// Message Structure
+// ============================================================================
+
+/**
+ * @brief Fixed-size message structure for queue-based communication
+ *
+ * Design constraints:
+ * - 16 bytes maximum for efficient FreeRTOS queue transfer
+ * - No pointers (prevents use-after-free across cores)
+ * - Timestamp for debugging and ordering
+ *
+ * Parameter usage varies by message type:
+ * - SET_EFFECT: param1=effectId, param4=transitionMs
+ * - SET_BRIGHTNESS: param1=brightness (0-255)
+ * - ZONE_SET_EFFECT: param1=zoneId, param2=effectId
+ * - TRIGGER_TRANSITION: param1=transitionType, param4=durationMs
+ * - START_TRANSITION: param1=effectId, param2=transitionType, param4=durationMs
+ */
+struct Message {
+    MessageType type;       // 1 byte - Message type
+    uint8_t param1;         // 1 byte - Primary parameter
+    uint8_t param2;         // 1 byte - Secondary parameter
+    uint8_t param3;         // 1 byte - Tertiary parameter
+    uint32_t param4;        // 4 bytes - Extended parameter (duration, flags, etc.)
+    uint32_t timestamp;     // 4 bytes - Creation timestamp (millis)
+    uint32_t _reserved;     // 4 bytes - Future use / alignment padding
+    // Total: 16 bytes
+
+    Message()
+        : type(MessageType::HEALTH_CHECK)
+        , param1(0), param2(0), param3(0)
+        , param4(0), timestamp(0), _reserved(0) {}
+
+    Message(MessageType t, uint8_t p1 = 0, uint8_t p2 = 0,
+            uint8_t p3 = 0, uint32_t p4 = 0)
+        : type(t)
+        , param1(p1), param2(p2), param3(p3)
+        , param4(p4)
+        , timestamp(millis())
+        , _reserved(0) {}
+
+    /**
+     * @brief Check if this is a command (vs event/notification)
+     */
+    bool isCommand() const {
+        return static_cast<uint8_t>(type) < 0x80;
+    }
+
+    /**
+     * @brief Check if this is an event/notification
+     */
+    bool isEvent() const {
+        return static_cast<uint8_t>(type) >= 0x80;
+    }
+};
+
+static_assert(sizeof(Message) == 16, "Message must be exactly 16 bytes");
+
+// ============================================================================
+// Actor Configuration
+// ============================================================================
+
+/**
+ * @brief Configuration for Actor creation
+ *
+ * Stack sizes (in words, 4 bytes each):
+ * - RendererActor: 4096 words (16KB) - effect rendering + FastLED
+ * - NetworkActor: 3072 words (12KB) - WebSocket + HTTP handling
+ * - HmiActor: 2048 words (8KB) - encoder polling
+ * - Others: 2048 words (8KB) - default
+ *
+ * Priorities (higher = more important):
+ * - RendererActor: 5 - Must hit 120 FPS
+ * - NetworkActor: 3 - Responsive but not critical
+ * - Others: 2 - Background processing
+ */
+struct ActorConfig {
+    const char* name;           // Task name for debugging
+    uint16_t stackSize;         // Stack size in words (x4 for bytes)
+    uint8_t priority;           // FreeRTOS priority (0-configMAX_PRIORITIES)
+    BaseType_t coreId;          // Core affinity (0 or 1)
+    uint8_t queueSize;          // Message queue depth
+    TickType_t tickInterval;    // Interval for onTick() callback (0 = disabled)
+
+    ActorConfig()
+        : name("Actor")
+        , stackSize(2048)
+        , priority(2)
+        , coreId(0)
+        , queueSize(16)
+        , tickInterval(0) {}
+
+    ActorConfig(const char* n, uint16_t stack, uint8_t prio,
+                BaseType_t core, uint8_t qSize, TickType_t tick = 0)
+        : name(n)
+        , stackSize(stack)
+        , priority(prio)
+        , coreId(core)
+        , queueSize(qSize)
+        , tickInterval(tick) {}
+};
+
+// ============================================================================
+// Actor Base Class
+// ============================================================================
+
+/**
+ * @brief Base class for all Actors in the system
+ *
+ * Lifecycle:
+ * 1. Constructor - Store config, allocate queue
+ * 2. start() - Create FreeRTOS task, call onStart()
+ * 3. run() loop - Receive messages, dispatch to onMessage()
+ * 4. stop() - Signal shutdown, wait for task to exit
+ * 5. Destructor - Clean up queue and resources
+ *
+ * Thread safety:
+ * - send() is thread-safe (can be called from any core)
+ * - sendFromISR() is ISR-safe (interrupt context)
+ * - onMessage() is always called from the Actor's own task
+ */
+class Actor {
+public:
+    /**
+     * @brief Construct an Actor with the given configuration
+     * @param config Actor configuration (name, stack, priority, etc.)
+     */
+    explicit Actor(const ActorConfig& config);
+
+    /**
+     * @brief Virtual destructor - cleans up FreeRTOS resources
+     */
+    virtual ~Actor();
+
+    // Prevent copying (FreeRTOS handles can't be copied)
+    Actor(const Actor&) = delete;
+    Actor& operator=(const Actor&) = delete;
+
+    // ========================================================================
+    // Lifecycle
+    // ========================================================================
+
+    /**
+     * @brief Start the Actor's FreeRTOS task
+     * @return true if task created successfully
+     */
+    bool start();
+
+    /**
+     * @brief Stop the Actor gracefully
+     *
+     * Sends SHUTDOWN message and waits up to 100ms for the task to exit.
+     * If the task doesn't exit in time, it will be forcefully deleted.
+     */
+    void stop();
+
+    /**
+     * @brief Check if the Actor is currently running
+     */
+    bool isRunning() const { return m_running; }
+
+    // ========================================================================
+    // Message Passing
+    // ========================================================================
+
+    /**
+     * @brief Send a message to this Actor's queue
+     *
+     * Thread-safe - can be called from any task on any core.
+     *
+     * @param msg Message to send
+     * @param timeout Ticks to wait if queue is full (0 = don't wait)
+     * @return true if message was queued successfully
+     */
+    bool send(const Message& msg, TickType_t timeout = 0);
+
+    /**
+     * @brief Send a message from an ISR context
+     *
+     * Use this from interrupt handlers. Never blocks.
+     *
+     * @param msg Message to send
+     * @return true if message was queued (may trigger context switch)
+     */
+    bool sendFromISR(const Message& msg);
+
+    /**
+     * @brief Get number of messages waiting in the queue
+     */
+    UBaseType_t getQueueLength() const;
+
+    /**
+     * @brief Get queue utilization percentage (0-100)
+     * @return Utilization percentage, or 0 if queue is null
+     */
+    uint8_t getQueueUtilization() const;
+
+    // ========================================================================
+    // Diagnostics
+    // ========================================================================
+
+    /**
+     * @brief Get the Actor's name
+     */
+    const char* getName() const { return m_config.name; }
+
+    /**
+     * @brief Get the core this Actor runs on
+     */
+    BaseType_t getCoreId() const { return m_config.coreId; }
+
+    /**
+     * @brief Get stack high water mark (minimum free stack ever)
+     *
+     * Useful for tuning stack sizes. If this gets too low, increase
+     * the Actor's stack size.
+     *
+     * @return Minimum free stack in words (multiply by 4 for bytes)
+     */
+    UBaseType_t getStackHighWaterMark() const;
+
+    /**
+     * @brief Get total messages received since start
+     */
+    uint32_t getMessageCount() const { return m_messageCount; }
+
+protected:
+    // ========================================================================
+    // Override in Derived Classes
+    // ========================================================================
+
+    /**
+     * @brief Called once when the Actor starts
+     *
+     * Override to perform initialization that requires the task context
+     * (e.g., initializing hardware that needs to run on a specific core).
+     */
+    virtual void onStart() {}
+
+    /**
+     * @brief Called for each received message
+     *
+     * This is the main message handler. Implement your Actor's logic here.
+     * Always called from the Actor's own task (single-threaded).
+     *
+     * @param msg The received message
+     */
+    virtual void onMessage(const Message& msg) = 0;
+
+    /**
+     * @brief Called periodically when no messages are pending
+     *
+     * Override for time-based work (e.g., rendering frames).
+     * The interval is controlled by config.tickInterval.
+     * If tickInterval is 0, this is never called.
+     */
+    virtual void onTick() {}
+
+    /**
+     * @brief Called when the Actor is stopping
+     *
+     * Override to clean up resources before the task exits.
+     */
+    virtual void onStop() {}
+
+    // ========================================================================
+    // Utilities for Derived Classes
+    // ========================================================================
+
+    /**
+     * @brief Get current tick count (useful for timing)
+     */
+    uint32_t getTickCount() const;
+
+    /**
+     * @brief Sleep for the specified duration
+     * @param ms Milliseconds to sleep
+     */
+    void sleep(uint32_t ms);
+
+    /**
+     * @brief Get the Actor's configuration
+     */
+    const ActorConfig& getConfig() const { return m_config; }
+
+private:
+    /**
+     * @brief Static task entry point (trampoline to run())
+     */
+    static void taskFunction(void* param);
+
+    /**
+     * @brief Main run loop - receives messages and dispatches
+     */
+    void run();
+
+    ActorConfig m_config;               // Configuration
+    TaskHandle_t m_taskHandle;          // FreeRTOS task handle
+    QueueHandle_t m_queue;              // Message queue
+    volatile bool m_running;            // Running flag (atomic on ESP32)
+    volatile bool m_shutdownRequested;  // Shutdown signal
+    uint32_t m_messageCount;            // Diagnostic counter
+};
+
+// ============================================================================
+// Predefined Actor Configurations
+// ============================================================================
+
+namespace ActorConfigs {
+
+/**
+ * @brief Configuration for RendererActor
+ *
+ * Runs on Core 1 at highest priority for deterministic 120 FPS rendering.
+ * Large queue (32) to buffer commands during frame rendering.
+ * Self-clocked tick mode (interval 0): renderer paces itself at 120 FPS.
+ * 
+ * Stack size: 6144 words (24KB) for zone mode safety margin.
+ * Actual usage: ~8-10KB (effect rendering, FastLED, context setup).
+ * High water mark monitoring recommended to verify adequate margin.
+ */
+inline ActorConfig Renderer() {
+    return ActorConfig(
+        "Renderer",     // name
+        4096,           // stackSize (16KB) - reduced for memory constraints
+        5,              // priority (highest)
+        1,              // coreId (Core 1 - application)
+        32,             // queueSize
+        0               // tickInterval (self-clocked in RendererActor::onTick)
+    );
+}
+
+/**
+ * @brief Configuration for NetworkActor
+ *
+ * Runs on Core 0 where WiFi stack runs. Medium priority.
+ * 
+ * Stack size: 3072 words (12KB) with 50% safety margin.
+ * Actual usage: ~6-8KB (WebSocket, HTTP, JSON parsing, mDNS).
+ * High water mark monitoring recommended to verify adequate margin.
+ */
+inline ActorConfig Network() {
+    return ActorConfig(
+        "Network",      // name
+        3072,           // stackSize (12KB) - 50% safety margin over ~6-8KB usage
+        3,              // priority
+        0,              // coreId (Core 0 - system)
+        16,             // queueSize
+        0               // tickInterval (event-driven)
+    );
+}
+
+/**
+ * @brief Configuration for HmiActor
+ *
+ * Runs on Core 0 for I2C encoder polling.
+ * Tick interval of 20ms for 50Hz polling rate.
+ * 
+ * Stack size: 2048 words (8KB) with 50% safety margin.
+ * Actual usage: ~2-4KB (I2C operations, encoder state).
+ * High water mark monitoring recommended to verify adequate margin.
+ */
+inline ActorConfig Hmi() {
+    return ActorConfig(
+        "Hmi",          // name
+        2048,           // stackSize (8KB) - 50% safety margin over ~2-4KB usage
+        2,              // priority
+        0,              // coreId (Core 0 - system)
+        16,             // queueSize
+        pdMS_TO_TICKS(20) // tickInterval (50Hz polling)
+    );
+}
+
+/**
+ * @brief Configuration for StateStoreActor
+ *
+ * Manages persistent state (NVS). Runs on Core 1 with Renderer.
+ * 
+ * Stack size: 2048 words (8KB) with 50% safety margin.
+ * Actual usage: ~2-4KB (NVS operations, state management).
+ * High water mark monitoring recommended to verify adequate margin.
+ */
+inline ActorConfig StateStore() {
+    return ActorConfig(
+        "StateStore",   // name
+        2048,           // stackSize (8KB) - 50% safety margin over ~2-4KB usage
+        2,              // priority
+        1,              // coreId (Core 1)
+        16,             // queueSize
+        0               // tickInterval (event-driven)
+    );
+}
+
+/**
+ * @brief Configuration for SyncManagerActor
+ *
+ * Handles multi-device synchronization. Runs on Core 0 with network.
+ * Tick interval of 100ms for heartbeat/discovery updates.
+ * 
+ * Stack size: 8192 words (32KB) with 50% safety margin.
+ * Actual usage: ~16-20KB (JSON serialization, WebSocket frames, state sync).
+ * High water mark monitoring recommended to verify adequate margin.
+ */
+inline ActorConfig SyncManager() {
+    return ActorConfig(
+        "SyncManager",  // name
+        8192,           // stackSize (32KB) - 50% safety margin over ~16-20KB usage
+        2,              // priority
+        0,              // coreId (Core 0 - network)
+        16,             // queueSize
+        pdMS_TO_TICKS(100) // tickInterval (100ms for heartbeats/discovery)
+    );
+}
+
+/**
+ * @brief Configuration for PluginManagerActor
+ *
+ * Manages plugin lifecycle. Runs on Core 0.
+ */
+inline ActorConfig PluginManager() {
+    return ActorConfig(
+        "PluginMgr",    // name
+        2048,           // stackSize (8KB)
+        2,              // priority
+        0,              // coreId (Core 0)
+        16,             // queueSize
+        0               // tickInterval (event-driven)
+    );
+}
+
+} // namespace ActorConfigs
+
+} // namespace actors
+} // namespace lightwaveos
+
+================================================================================
+FILE: firmware-v3/src/core/actors/ActorSystem.h
+================================================================================
+
+/**
+ * @file ActorSystem.h
+ * @brief Orchestrates all Actors in the LightwaveOS v2 system
+ *
+ * The ActorSystem is the top-level manager that:
+ * - Creates and owns all Actor instances
+ * - Starts/stops Actors in the correct order
+ * - Provides access to Actors for external code
+ * - Handles system-wide events (shutdown, etc.)
+ *
+ * Startup order:
+ * 1. StateStoreActor - Load saved state
+ * 2. RendererActor - Initialize LEDs
+ * 3. NetworkActor - Start web server
+ * 4. HmiActor - Start encoder polling
+ * 5. PluginManagerActor - Load plugins
+ * 6. SyncManagerActor - Connect to peers
+ *
+ * Shutdown order: Reverse of startup
+ *
+ * @author LightwaveOS Team
+ * @version 2.0.0
+ */
+
+#pragma once
+
+#include "Actor.h"
+#include "RendererActor.h"
+#include "ShowDirectorActor.h"
+#include "../bus/MessageBus.h"
+#include "../../config/features.h"
+#include "../../config/effect_ids.h"
+#include <memory>
+
+// Audio integration (Phase 2)
+#if FEATURE_AUDIO_SYNC
+#include "../../audio/AudioActor.h"
+#include "../../audio/contracts/ControlBus.h"
+#include "../../audio/contracts/SnapshotBuffer.h"
+#endif
+
+// AMOLED test rig display
+#if FEATURE_AMOLED_DISPLAY
+#include "../../hal/display/DisplayActor.h"
+#endif
+
+namespace lightwaveos {
+namespace actors {
+
+// ============================================================================
+// System State
+// ============================================================================
+
+/**
+ * @brief Overall system state
+ */
+enum class SystemState : uint8_t {
+    UNINITIALIZED = 0,  // Not yet started
+    STARTING,           // Actors being created
+    RUNNING,            // All actors running
+    STOPPING,           // Shutdown in progress
+    STOPPED             // All actors stopped
+};
+
+/**
+ * @brief System-wide statistics
+ */
+struct SystemStats {
+    uint32_t uptimeMs;              // Time since start
+    uint32_t totalMessages;         // Total messages processed
+    uint32_t heapFreeBytes;         // Current free heap
+    uint32_t heapMinFreeBytes;      // Minimum free heap ever
+    uint32_t spiramFreeBytes;       // Current free SPIRAM
+    uint8_t activeActors;           // Number of running actors
+
+    SystemStats()
+        : uptimeMs(0), totalMessages(0)
+        , heapFreeBytes(0), heapMinFreeBytes(0)
+        , spiramFreeBytes(0)
+        , activeActors(0) {}
+};
+
+// ============================================================================
+// ActorSystem Class
+// ============================================================================
+
+/**
+ * @brief Top-level Actor orchestration
+ *
+ * Singleton class that manages the lifecycle of all Actors.
+ *
+ * Usage:
+ *   ActorSystem::instance().init();
+ *   ActorSystem::instance().start();
+ *   // ... application running ...
+ *   ActorSystem::instance().shutdown();
+ */
+class ActorSystem {
+public:
+    /**
+     * @brief Get the singleton instance
+     */
+    static ActorSystem& instance();
+
+    // Prevent copying
+    ActorSystem(const ActorSystem&) = delete;
+    ActorSystem& operator=(const ActorSystem&) = delete;
+
+    // ========================================================================
+    // Lifecycle
+    // ========================================================================
+
+    /**
+     * @brief Initialize the system (create actors)
+     *
+     * Creates all Actor instances but does not start them.
+     * Call this once during setup().
+     *
+     * @return true if all actors created successfully
+     */
+    bool init();
+
+    /**
+     * @brief Start all actors
+     *
+     * Starts actors in dependency order. Call after init().
+     *
+     * @return true if all actors started successfully
+     */
+    bool start();
+
+    /**
+     * @brief Shutdown all actors gracefully
+     *
+     * Stops actors in reverse order. Blocks until complete.
+     */
+    void shutdown();
+
+    /**
+     * @brief Get current system state
+     */
+    SystemState getState() const { return m_state; }
+
+    /**
+     * @brief Check if system is running
+     */
+    bool isRunning() const { return m_state == SystemState::RUNNING; }
+
+    // ========================================================================
+    // Actor Access
+    // ========================================================================
+
+    /**
+     * @brief Get the RendererActor
+     *
+     * Returns nullptr if not initialized.
+     */
+    RendererActor* getRenderer() { return m_renderer.get(); }
+    const RendererActor* getRenderer() const { return m_renderer.get(); }
+
+    /**
+     * @brief Get the ShowDirectorActor
+     *
+     * Returns nullptr if not initialized.
+     */
+    ShowDirectorActor* getShowDirector() { return m_showDirector.get(); }
+    const ShowDirectorActor* getShowDirector() const { return m_showDirector.get(); }
+
+#if FEATURE_AUDIO_SYNC
+    /**
+     * @brief Get the AudioActor (Phase 2)
+     *
+     * Returns nullptr if not initialized or FEATURE_AUDIO_SYNC disabled.
+     */
+    lightwaveos::audio::AudioActor* getAudio() { return m_audio.get(); }
+    const lightwaveos::audio::AudioActor* getAudio() const { return m_audio.get(); }
+#endif
+
+#if FEATURE_AMOLED_DISPLAY
+    /**
+     * @brief Get the DisplayActor (AMOLED test rig)
+     */
+    lightwaveos::display::DisplayActor* getDisplay() { return m_display.get(); }
+#endif
+
+    // Future: getNetwork(), getHmi(), getStateStore(), etc.
+
+    // ========================================================================
+    // Convenience Commands
+    // ========================================================================
+
+    /**
+     * @brief Set the current effect
+     *
+     * Sends a SET_EFFECT message to the RendererActor.
+     *
+     * @param effectId Effect ID to set (stable namespaced EffectId)
+     * @return true if message was sent
+     */
+    bool setEffect(EffectId effectId);
+
+    /**
+     * @brief Start a transition to a new effect (thread-safe)
+     *
+     * Sends a START_TRANSITION message to the RendererActor.
+     *
+     * @param effectId Target effect ID (stable namespaced EffectId)
+     * @param transitionType Transition type (0-11)
+     * @return true if message was sent
+     */
+    bool startTransition(EffectId effectId, uint8_t transitionType);
+
+    /**
+     * @brief Set brightness
+     * @param brightness Brightness level (0-255)
+     */
+    bool setBrightness(uint8_t brightness);
+
+    /**
+     * @brief Set animation speed
+     * @param speed Speed level (1-50)
+     */
+    bool setSpeed(uint8_t speed);
+
+    /**
+     * @brief Set palette
+     * @param paletteIndex Palette index
+     */
+    bool setPalette(uint8_t paletteIndex);
+
+    /**
+     * @brief Set intensity
+     * @param intensity Intensity level (0-255)
+     */
+    bool setIntensity(uint8_t intensity);
+
+    /**
+     * @brief Set saturation
+     * @param saturation Saturation level (0-255)
+     */
+    bool setSaturation(uint8_t saturation);
+
+    /**
+     * @brief Set complexity
+     * @param complexity Complexity level (0-255)
+     */
+    bool setComplexity(uint8_t complexity);
+
+    /**
+     * @brief Set variation
+     * @param variation Variation level (0-255)
+     */
+    bool setVariation(uint8_t variation);
+
+    /**
+     * @brief Set global hue
+     * @param hue Hue (0-255)
+     */
+    bool setHue(uint8_t hue);
+
+    /**
+     * @brief Set audio mood (Sensory Bridge pattern)
+     * @param mood 0-255: 0=reactive, 255=smooth
+     */
+    bool setMood(uint8_t mood);
+
+    /**
+     * @brief Set fade amount (trail effect)
+     * @param fadeAmount 0-255: 0=no fade, higher=faster fade
+     */
+    bool setFadeAmount(uint8_t fadeAmount);
+
+    /**
+     * @brief Set edge mixer mode
+     * @param mode 0=mirror, 1=analogous, 2=complementary
+     */
+    bool setEdgeMixerMode(uint8_t mode);
+
+    /**
+     * @brief Set edge mixer spread
+     * @param spread Hue spread in degrees (0-60)
+     */
+    bool setEdgeMixerSpread(uint8_t spread);
+
+    /**
+     * @brief Set edge mixer strength
+     * @param strength Mix strength (0-255)
+     */
+    bool setEdgeMixerStrength(uint8_t strength);
+
+    /**
+     * @brief Set edge mixer spatial mode
+     * @param spatial 0=uniform, 1=centre_gradient
+     */
+    bool setEdgeMixerSpatial(uint8_t spatial);
+
+    /**
+     * @brief Set edge mixer temporal mode
+     * @param temporal 0=static, 1=rms_gate
+     */
+    bool setEdgeMixerTemporal(uint8_t temporal);
+
+    /**
+     * @brief Persist EdgeMixer state to NVS
+     */
+    bool saveEdgeMixerToNVS();
+
+    /**
+     * @brief Set LED output dithering
+     * @param enabled true=enable FastLED temporal dithering
+     */
+    bool setLedDithering(bool enabled);
+
+#if FEATURE_AUDIO_SYNC
+    // ========================================================================
+    // Trinity Sync Commands (Offline ML Analysis)
+    // ========================================================================
+
+    /**
+     * @brief Inject Trinity beat event
+     * @param bpm BPM from Trinity analysis
+     * @param phase01 Beat phase [0,1)
+     * @param tick True if this is a beat boundary
+     * @param downbeat True if this is a downbeat
+     * @param beatInBar Position in bar (0-3 for 4/4)
+     * @return true if message was sent
+     */
+    bool trinityBeat(float bpm, float phase01, bool tick, bool downbeat, int beatInBar);
+
+    /**
+     * @brief Update Trinity macro values
+     * @param energy Overall energy (0-1)
+     * @param vocal Vocal presence (0-1)
+     * @param bass Bass weight (0-1)
+     * @param perc Percussiveness (0-1)
+     * @param bright Brightness (0-1)
+     * @return true if message was sent
+     */
+    bool trinityMacro(float energy, float vocal, float bass, float perc, float bright);
+
+    /**
+     * @brief Trinity sync control (start/stop/pause/resume/seek)
+     * @param action 0=start, 1=stop, 2=pause, 3=resume, 4=seek
+     * @param positionSec Position in seconds
+     * @param bpm BPM (optional, used for start/seek)
+     * @return true if message was sent
+     */
+    bool trinitySync(uint8_t action, float positionSec, float bpm = 120.0f);
+
+    /**
+     * @brief Inject Trinity structure segment change
+     * @param index Segment index (0-255)
+     * @param labelHash16 16-bit hash of segment label (stable identifier, avoids string storage)
+     * @param startSec Segment start time (seconds)
+     * @param endSec Segment end time (seconds)
+     * @return true if message was sent
+     */
+    bool trinitySegment(uint8_t index, uint16_t labelHash16, float startSec, float endSec);
+#endif
+
+#if FEATURE_AUDIO_SYNC
+    uint8_t getStimulusMode() const;
+    bool setStimulusMode(uint8_t mode);
+    bool clearStimulus();
+    bool copyStimulusFrame(lightwaveos::audio::ControlBusFrame& out) const;
+    bool publishStimulusFrame(const lightwaveos::audio::ControlBusFrame& frame);
+    const lightwaveos::audio::SnapshotBuffer<lightwaveos::audio::ControlBusFrame>& getStimulusControlBusBuffer() const;
+#endif
+
+    // ========================================================================
+    // Diagnostics
+    // ========================================================================
+
+    /**
+     * @brief Get system statistics
+     */
+    SystemStats getStats() const;
+
+    /**
+     * @brief Print system status to serial
+     */
+    void printStatus();
+
+    /**
+     * @brief Get uptime in milliseconds
+     */
+    uint32_t getUptimeMs() const;
+
+private:
+    // Private constructor for singleton
+    ActorSystem();
+    ~ActorSystem();
+
+    // Actor instances (using unique_ptr for RAII cleanup)
+    std::unique_ptr<RendererActor> m_renderer;
+    std::unique_ptr<ShowDirectorActor> m_showDirector;
+#if FEATURE_AUDIO_SYNC
+    std::unique_ptr<lightwaveos::audio::AudioActor> m_audio;  // Phase 2: Audio capture and DSP
+#endif
+#if FEATURE_AMOLED_DISPLAY
+    std::unique_ptr<lightwaveos::display::DisplayActor> m_display;  // AMOLED test rig
+#endif
+    // Future: std::unique_ptr<NetworkActor> m_network;
+    // Future: std::unique_ptr<HmiActor> m_hmi;
+    // Future: std::unique_ptr<StateStoreActor> m_stateStore;
+    // Future: std::unique_ptr<SyncManagerActor> m_syncManager;
+    // Future: std::unique_ptr<PluginManagerActor> m_pluginManager;
+
+    // State
+    SystemState m_state;
+    uint32_t m_startTime;
+#if FEATURE_AUDIO_SYNC
+    lightwaveos::audio::SnapshotBuffer<lightwaveos::audio::ControlBusFrame> m_stimulusControlBusBuffer;
+    lightwaveos::audio::ControlBusFrame m_stimulusLastFrame;
+    uint32_t m_stimulusLastPublishMs = 0;
+    uint8_t m_stimulusMode = 0;
+    SemaphoreHandle_t m_stimulusMutex = nullptr;
+#endif
+};
+
+} // namespace actors
+} // namespace lightwaveos
+
+================================================================================
+FILE: firmware-v3/src/audio/AudioActor.h
+================================================================================
+
+/**
+ * @file AudioActor.h
+ * @brief Actor for audio capture and processing pipeline
+ *
+ * The AudioActor runs on Core 0 and handles:
+ * - I2S audio capture from SPH0645 microphone
+ * - 256-sample hop capture at 62.5 Hz (Tab5 parity)
+ * - Future: Goertzel frequency analysis, beat detection
+ *
+ * Architecture:
+ *   AudioActor (Core 0, Priority 4)
+ *     |
+ *     +-> AudioCapture (I2S DMA)
+ *     |
+ *     +-> [Phase 2: AudioProcessor]
+ *     |
+ *     +-> [Phase 2: ControlBus output]
+ *
+ * The actor ticks every 16ms (matching hop duration) to capture
+ * audio samples. Processing is deferred to Phase 2 implementation.
+ *
+ * Thread Safety:
+ * - All capture/processing runs in the actor's task (Core 0)
+ * - Results are published via MessageBus (lock-free)
+ *
+ * @author LightwaveOS Team
+ * @version 2.0.0
+ */
+
+#pragma once
+
+#include "../config/features.h"
+
+#if FEATURE_AUDIO_SYNC
+
+#include <atomic>
+#include <cmath>
+
+#include "../core/actors/Actor.h"
+#include "../config/audio_config.h"
+#include "contracts/AudioTime.h"
+#include "contracts/ControlBus.h"
+#include "contracts/SnapshotBuffer.h"
+#include "TranslationEngine.h"
+#if FEATURE_AUDIO_BACKEND_ESV11 || FEATURE_AUDIO_BACKEND_PIPELINECORE
+#include "pipeline/STMExtractor.h"
+#endif
+
+#if FEATURE_AUDIO_BACKEND_ESV11
+#include "backends/esv11/EsV11Backend.h"
+#include "backends/esv11/EsV11Adapter.h"
+#include "onset/OnsetDetector.h"
+#elif FEATURE_AUDIO_BACKEND_PIPELINECORE
+#include "AudioCapture.h"
+#include "AudioTuning.h"
+#include "pipeline/PipelineCore.h"
+#include "pipeline/BeatTracker.h"
+#include "pipeline/PipelineAdapter.h"
+#if FEATURE_STYLE_DETECTION
+#include "StyleDetector.h"
+#endif
+#else
+#include "AudioCapture.h"
+#include "AudioTuning.h"
+#include "GoertzelAnalyzer.h"
+#include "ChromaAnalyzer.h"
+#if FEATURE_STYLE_DETECTION
+#include "StyleDetector.h"
+#endif
+// Tempo tracker
+#include "tempo/TempoTracker.h"
+#endif
+
+#if FEATURE_AUDIO_BENCHMARK
+#include "AudioBenchmarkMetrics.h"
+#include "AudioBenchmarkRing.h"
+#endif
+
+namespace lightwaveos {
+namespace audio {
+
+/**
+ * @brief AudioActor state
+ */
+enum class AudioActorState : uint8_t {
+    UNINITIALIZED = 0,  // Not started
+    INITIALIZING,       // Starting up
+    RUNNING,            // Normal operation
+    PAUSED,             // Temporarily paused (muted)
+    ERROR               // Initialization failed
+};
+
+/**
+ * @brief Audio actor statistics
+ */
+struct AudioActorStats {
+    uint32_t tickCount;          // Total ticks processed
+    uint32_t captureSuccessCount; // Successful captures
+    uint32_t captureFailCount;   // Failed captures
+    uint32_t lastTickTimeUs;     // Time of last tick
+    AudioActorState state;       // Current state
+
+    void reset() {
+        tickCount = 0;
+        captureSuccessCount = 0;
+        captureFailCount = 0;
+        lastTickTimeUs = 0;
+        state = AudioActorState::UNINITIALIZED;
+    }
+};
+
+/**
+ * @brief Phase 1 Diagnostic: Audio pipeline health metrics
+ * 
+ * Tracks capture rate, publish rate, and frame freshness for
+ * systematic debugging of audio availability issues.
+ * Modeled after Emotiscope's proven diagnostic approach.
+ */
+struct AudioPipelineDiagnostics {
+    // === Phase 1.1: Capture Rate Diagnostics ===
+    uint64_t diagStartTimeUs = 0;      ///< When diagnostics started
+    uint32_t captureAttempts = 0;      ///< Total capture attempts
+    uint32_t captureSuccesses = 0;     ///< Successful captures
+    uint32_t captureDmaTimeouts = 0;   ///< DMA timeout count
+    uint32_t captureReadErrors = 0;    ///< Read error count
+    
+    // === Phase 1.2: Publish Diagnostics ===
+    uint32_t publishCount = 0;         ///< Frames published to SnapshotBuffer
+    uint32_t publishSeqGaps = 0;       ///< Sequence number gaps detected
+    uint32_t lastPublishSeq = 0;       ///< Last published sequence number
+    
+    // === Phase 2.1: I2S/ES8311 Hardware Validation ===
+    int16_t lastRawMin = 0;            ///< Min raw sample in last hop (pre-DC block)
+    int16_t lastRawMax = 0;            ///< Max raw sample in last hop (pre-DC block)
+    float lastRawRms = 0.0f;           ///< RMS of raw samples (pre-DC block)
+    bool samplesNonZero = false;       ///< True if samples vary (not all zeros/constant)
+    uint32_t zeroHopCount = 0;         ///< Count of hops with all-zero samples
+    
+    // === Phase 2.3: Timing/Latency Diagnostics ===
+    uint64_t lastCaptureStartUs = 0;   ///< Start of last capture
+    uint64_t lastCaptureEndUs = 0;     ///< End of last capture
+    uint64_t lastProcessEndUs = 0;     ///< End of last processHop()
+    uint64_t lastPublishTimeUs = 0;    ///< Timestamp of last publish
+    uint32_t maxCaptureLatencyUs = 0;  ///< Max capture duration (I2S read)
+    uint32_t maxProcessLatencyUs = 0;  ///< Max processHop() duration
+    uint32_t avgCaptureLatencyUs = 0;  ///< Exponential moving average of capture latency
+    uint32_t avgProcessLatencyUs = 0;  ///< Exponential moving average of process latency
+    
+    void reset() {
+        diagStartTimeUs = 0;
+        captureAttempts = 0;
+        captureSuccesses = 0;
+        captureDmaTimeouts = 0;
+        captureReadErrors = 0;
+        publishCount = 0;
+        publishSeqGaps = 0;
+        lastPublishSeq = 0;
+        lastRawMin = 0;
+        lastRawMax = 0;
+        lastRawRms = 0.0f;
+        samplesNonZero = false;
+        zeroHopCount = 0;
+        lastCaptureStartUs = 0;
+        lastCaptureEndUs = 0;
+        lastProcessEndUs = 0;
+        lastPublishTimeUs = 0;
+        maxCaptureLatencyUs = 0;
+        maxProcessLatencyUs = 0;
+        avgCaptureLatencyUs = 0;
+        avgProcessLatencyUs = 0;
+    }
+};
+
+/**
+ * @brief Snapshot of DSP state for diagnostics
+ */
+struct AudioDspState {
+    float rmsRaw = 0.0f;
+    float rmsMapped = 0.0f;
+    float rmsPreGain = 0.0f;
+    float fluxMapped = 0.0f;
+
+    float agcGain = 1.0f;
+    float dcEstimate = 0.0f;
+    float noiseFloor = 0.0f;
+
+    int16_t minSample = 0;
+    int16_t maxSample = 0;
+    int16_t peakCentered = 0;
+    float meanSample = 0.0f;
+    uint16_t clipCount = 0;
+};
+
+/**
+ * @brief Actor responsible for audio capture and processing
+ *
+ * Runs on Core 0 at priority 4 (below Renderer at 5).
+ * Tick interval is 16ms to match the 256-sample hop size at 16kHz.
+ *
+ * Phase 1 (Current):
+ * - Initialize AudioCapture on start
+ * - Capture hops in onTick()
+ * - Track statistics
+ *
+ * Phase 2 (Future):
+ * - Add AudioProcessor for Goertzel analysis
+ * - Publish band energies to ControlBus
+ * - Beat detection and onset events
+ */
+class AudioActor : public actors::Actor {
+public:
+    /**
+     * @brief Construct the AudioActor
+     *
+     * Uses configuration from audio_config.h for timing and core affinity.
+     */
+    AudioActor();
+
+#if FEATURE_AUDIO_BACKEND_ESV11
+    esv11::EsV11Backend& esBackend() { return m_esBackend; }
+#endif
+
+    /**
+     * @brief Destructor
+     */
+    ~AudioActor() override;
+
+    // ========================================================================
+    // State Accessors
+    // ========================================================================
+
+    /**
+     * @brief Get current state
+     */
+    AudioActorState getState() const { return m_state; }
+
+    /**
+     * @brief Get audio actor statistics
+     */
+    const AudioActorStats& getStats() const { return m_stats; }
+
+    /**
+     * @brief Get audio capture statistics
+     */
+#if !FEATURE_AUDIO_BACKEND_ESV11
+    const CaptureStats& getCaptureStats() const { return m_capture.getStats(); }
+#endif
+
+#if !FEATURE_AUDIO_BACKEND_ESV11
+#if defined(CHIP_ESP32_P4) && CHIP_ESP32_P4
+    /**
+     * @brief Get current microphone gain in dB
+     * @return Gain in dB (0, 6, 12, 18, 24, 30, 36, 42), or -1 if not supported
+     */
+    int8_t getMicGainDb() const { return m_capture.getMicGainDb(); }
+
+    /**
+     * @brief Set microphone input gain
+     * @param gainDb Gain in dB (must be 0, 6, 12, 18, 24, 30, 36, or 42)
+     * @return true if gain was set successfully
+     */
+    bool setMicGainDb(int8_t gainDb) { return m_capture.setMicGainDb(gainDb); }
+#endif
+#endif // !FEATURE_AUDIO_BACKEND_ESV11
+
+    /**
+     * @brief Get pipeline diagnostics (Phase 1 debugging)
+     */
+    const AudioPipelineDiagnostics& getDiagnostics() const { return m_diag; }
+
+    /**
+     * @brief Print comprehensive pipeline diagnostics to serial
+     * 
+     * Called by 'adbg diag' serial command or automatically every 10 seconds.
+     * Includes capture rate, publish rate, sample health, and timing.
+     */
+    void printDiagnostics();
+
+    /**
+     * @brief Check if audio capture is working
+     */
+    bool isCapturing() const { return m_state == AudioActorState::RUNNING; }
+
+    // ========================================================================
+    // Control
+    // ========================================================================
+
+    /**
+     * @brief Pause audio capture
+     *
+     * Stops capturing but keeps I2S initialized.
+     */
+    void pause();
+
+    /**
+     * @brief Resume audio capture
+     *
+     * Resumes capturing after pause.
+     */
+    void resume();
+
+    /**
+     * @brief Reset statistics
+     */
+    void resetStats();
+
+    // ========================================================================
+    // One-Shot Debug Output Methods (called by serial commands)
+    // ========================================================================
+
+    /**
+     * @brief Print health summary (mic level, RMS, AGC state)
+     *
+     * Called by 'dbg status' or 'adbg status' serial command.
+     * Prints regardless of verbosity level (user-triggered).
+     */
+    void printStatus();
+
+    /**
+     * @brief Print current 8-band and 64-bin spectrum
+     *
+     * Called by 'dbg spectrum' or 'adbg spectrum' serial command.
+     * Prints regardless of verbosity level (user-triggered).
+     */
+    void printSpectrum();
+
+    /**
+     * @brief Print beat tracking state (BPM, phase, confidence)
+     *
+     * Called by 'dbg beat' or 'adbg beat' serial command.
+     * Prints regardless of verbosity level (user-triggered).
+     */
+    void printBeat();
+
+
+    // ========================================================================
+    // Buffer Access (for Phase 2 processing)
+    // ========================================================================
+
+    /**
+     * @brief Get the most recent hop buffer
+     *
+     * Returns pointer to internal buffer containing last captured hop.
+     * Valid only after successful capture. May be overwritten on next tick.
+     *
+     * @return Pointer to HOP_SIZE int16_t samples, or nullptr if no capture
+     */
+    const int16_t* getLastHop() const;
+
+    /**
+     * @brief Check if a new hop is available since last check
+     *
+     * Clears the flag when called.
+     *
+     * @return true if new hop available
+     */
+    bool hasNewHop();
+
+    // ========================================================================
+    // Phase 2: Cross-Core Access
+    // ========================================================================
+
+    /**
+     * @brief Get the ControlBus snapshot buffer for cross-core reads
+     *
+     * RendererActor calls this to get a reference to the SnapshotBuffer,
+     * then reads snapshots by value for thread-safe access.
+     *
+     * @return Reference to the ControlBusFrame SnapshotBuffer
+     */
+    const SnapshotBuffer<ControlBusFrame>& getControlBusBuffer() const {
+        return *m_controlBusBuffer;
+    }
+
+    bool hasControlBusBuffer() const { return m_controlBusBuffer.IsReady(); }
+
+    /**
+     * @brief Get current sample index (monotonic)
+     */
+    uint64_t getSampleIndex() const { return m_sampleIndex; }
+
+    /**
+     * @brief Get hop count since start
+     */
+    uint32_t getHopCount() const { return m_hopCount; }
+
+#if !FEATURE_AUDIO_BACKEND_ESV11
+    /**
+     * @brief Get current audio pipeline tuning (by value)
+     */
+    AudioPipelineTuning getPipelineTuning() const;
+
+    /**
+     * @brief Update audio pipeline tuning
+     */
+    void setPipelineTuning(const AudioPipelineTuning& tuning);
+
+    /**
+     * @brief Reset DSP state (AGC, DC estimate, noise floor)
+     */
+    void resetDspState();
+
+    /**
+     * @brief Get last DSP diagnostics snapshot
+     */
+    AudioDspState getDspState() const;
+
+    // ========================================================================
+    // Phase 2A: ControlBus Access for API
+    // ========================================================================
+
+    /**
+     * @brief Snapshot of Zone AGC runtime state for API responses.
+     */
+    struct ZoneAgcSnapshot {
+        bool enabled = false;
+        bool lookaheadEnabled = false;
+        float followers[CONTROLBUS_NUM_ZONES] = {0.0f};
+        float maxMags[CONTROLBUS_NUM_ZONES] = {0.0f};
+    };
+
+    /**
+     * @brief Get a thread-safe snapshot of Zone AGC state.
+     */
+    ZoneAgcSnapshot getZoneAgcSnapshot() const;
+
+    /**
+     * @brief Set Zone AGC enabled state.
+     */
+    void setZoneAgcEnabled(bool enabled);
+
+    /**
+     * @brief Set spike-detection lookahead enabled state.
+     */
+    void setLookaheadEnabled(bool enabled);
+
+    /**
+     * @brief Set Zone AGC attack/release rates.
+     */
+    void setZoneAgcRates(float attackRate, float releaseRate);
+
+    /**
+     * @brief Set minimum zone floor for AGC.
+     */
+    void setZoneMinFloor(float minFloor);
+
+    /**
+     * @brief Get a thread-safe copy of spike detection stats.
+     */
+    SpikeDetectionStats getSpikeDetectionStats() const;
+
+    /**
+     * @brief Reset spike detection statistics.
+     */
+    void resetSpikeDetectionStats();
+
+    /**
+     * @brief Get a thread-safe copy of the latest ControlBus frame.
+     */
+    ControlBusFrame getControlBusFrameSnapshot() const;
+
+    // ========================================================================
+    // Phase 2C: Noise Calibration (SensoryBridge pattern)
+    // ========================================================================
+
+    /**
+     * @brief Start noise calibration procedure
+     *
+     * Begins a 3-second (configurable) silent measurement period.
+     * During this time, the system accumulates RMS and band energies
+     * to establish a per-band noise floor.
+     *
+     * @param durationMs How long to measure (default 3000ms)
+     * @param safetyMultiplier Multiply measured floor by this (default 1.2x)
+     * @return true if calibration started, false if already running
+     */
+    bool startNoiseCalibration(uint32_t durationMs = 3000, float safetyMultiplier = 1.2f);
+
+    /**
+     * @brief Cancel an in-progress calibration
+     */
+    void cancelNoiseCalibration();
+
+    /**
+     * @brief Get current calibration state
+     */
+    CalibrationState getCalibrationState() const { return m_noiseCalibration.state; }
+
+    /**
+     * @brief Get calibration result (valid only when state == COMPLETE)
+     */
+    const NoiseCalibrationResult& getCalibrationResult() const { return m_noiseCalibration.result; }
+
+    /**
+     * @brief Get full calibration state for detailed status
+     */
+    const NoiseCalibrationState& getNoiseCalibrationState() const { return m_noiseCalibration; }
+
+    /**
+     * @brief Apply calibration results to current tuning
+     *
+     * Copies measured noise floors to perBandNoiseFloors and enables them.
+     * Call this after calibration completes successfully.
+     *
+     * @return true if results were applied, false if no valid calibration
+     */
+    bool applyCalibrationResults();
+
+    // ========================================================================
+    // TempoTracker / PipelineCore Beat Integration
+    // ========================================================================
+
+#if FEATURE_AUDIO_BACKEND_PIPELINECORE
+    // Beat data flows through ControlBusFrame — no TempoTracker exposure
+    bool isTempoEnabled() const { return true; }
+#else
+    /**
+     * @brief Get const reference to TempoTracker for diagnostics
+     */
+    const TempoTracker& getTempo() const { return m_tempo; }
+
+    /**
+     * @brief Get mutable reference to TempoTracker for phase advancement
+     *
+     * Called by ActorSystem to give RendererActor access to advancePhase().
+     * RendererActor calls advancePhase() at 120 FPS in the render loop.
+     */
+    TempoTracker& getTempoMut() { return m_tempo; }
+
+    /**
+     * @brief Check if tempo tracking is initialized
+     */
+    bool isTempoEnabled() const { return true; }  // Always enabled when audio is running
+#endif
+
+    // ========================================================================
+    // Phase 2B: Benchmark Access
+    // ========================================================================
+
+#if FEATURE_AUDIO_BENCHMARK
+    /**
+     * @brief Get aggregated benchmark statistics
+     *
+     * Returns stats computed from the ring buffer samples.
+     * Updated every ~1 second (62 hops).
+     *
+     * @return Reference to the benchmark stats struct
+     */
+    const AudioBenchmarkStats& getBenchmarkStats() const { return m_benchmarkStats; }
+
+    /**
+     * @brief Get the raw timing sample ring buffer
+     *
+     * For WebSocket streaming or detailed analysis. Contains
+     * last ~1 second of per-hop timing data.
+     *
+     * @return Reference to the ring buffer
+     */
+    const AudioBenchmarkRing& getBenchmarkRing() const { return m_benchmarkRing; }
+
+    /**
+     * @brief Reset benchmark statistics
+     *
+     * Clears aggregated stats and peaks. Ring buffer continues
+     * to receive new samples.
+     */
+    void resetBenchmarkStats() { m_benchmarkStats.reset(); }
+#endif
+#endif // !FEATURE_AUDIO_BACKEND_ESV11
+
+    /**
+     * @brief Emit one-shot storage-region diagnostics for the ControlBus snapshot buffer.
+     */
+    void logControlBusBufferPlacement() const;
+
+protected:
+    // ========================================================================
+    // Actor Overrides
+    // ========================================================================
+
+    /**
+     * @brief Initialize audio capture hardware
+     *
+     * Called when actor task starts on Core 0.
+     */
+    void onStart() override;
+
+    /**
+     * @brief Handle incoming messages
+     *
+     * Supported messages:
+     * - SHUTDOWN: Stop actor
+     * - HEALTH_CHECK: Respond with status
+     */
+    void onMessage(const actors::Message& msg) override;
+
+    /**
+     * @brief Capture one hop of audio samples
+     *
+     * Called every 16ms (matching hop duration).
+     */
+    void onTick() override;
+
+    /**
+     * @brief Cleanup audio capture hardware
+     *
+     * Called when actor is stopping.
+     */
+    void onStop() override;
+
+private:
+    // ========================================================================
+    // Internal State
+    // ========================================================================
+
+#if FEATURE_AUDIO_BACKEND_ESV11 || FEATURE_AUDIO_BACKEND_PIPELINECORE
+    STMExtractor m_stmExtractor;
+#endif
+
+#if FEATURE_TRANSLATION_ENGINE
+    // Perceptual translation state (persistent across hops, reset on hard DSP reset).
+    TranslationState m_translationState{};
+    AudioTime m_translationLastAudioTime{};
+    bool m_translationHaveLastAudioTime = false;
+    float m_smoothedTempoConfidence = 0.0f;     // Asymmetric follower: instant attack, ~500ms decay
+    uint64_t m_translationLastDebugLogUs = 0ULL;
+#if FEATURE_TRANSLATION_DEBUG
+    bool m_translationLastLatchValid = false;
+    float m_translationLastLatchBpm = 0.0f;
+    float m_translationLastLatchConfidence = 0.0f;
+    uint64_t m_translationLastLatchUs = 0ULL;
+    bool m_translationLastLatchTempoLocked = false;
+    bool m_translationLastLatchBeatTick = false;
+    bool m_translationLastLatchDownbeatTick = false;
+#endif
+#endif
+
+    /// Backend-neutral beat position counter (4/4) for standardized downbeat transport.
+    uint8_t m_standardBeatInBar = 0;
+
+#if FEATURE_AUDIO_BACKEND_ESV11
+    AudioActorState m_state;
+    AudioActorStats m_stats;
+    AudioPipelineDiagnostics m_diag;
+
+    // Lock-free buffer for cross-core sharing with RendererActor.
+    InternalSnapshotBufferOwner<ControlBusFrame> m_controlBusBuffer;
+
+    // Monotonic sample counter (64-bit for no overflow)
+    uint64_t m_sampleIndex = 0;
+
+    // Hop counter since start
+    uint32_t m_hopCount = 0;
+
+
+    // ES backend + adapter
+    esv11::EsV11Backend m_esBackend;
+    esv11::EsV11Adapter m_esAdapter;
+    float m_stmFftBuffer[ControlBusRawInput::BINS_256_COUNT * 2U] = {0.0f};
+    float m_stmBins256[ControlBusRawInput::BINS_256_COUNT] = {0.0f};
+    uint32_t m_esHopSeq = 0;
+    uint8_t m_esChunkCounter = 0;  // Publish every 4 chunks (256 samples @ 12.8kHz = 50 Hz)
+
+    // Surface 3 Tier 1 trace state. Wall time is retained separately so
+    // work-budget counters do not confuse blocking I2S cadence with CPU work.
+    uint64_t m_hopStartUs = 0;
+    uint32_t m_hopAccumWorkUs = 0;
+    // Surface 3 Tier 1 — previous hop-end timestamp for instantaneous hop
+    // rate calculation (audio_hop_freq). Sentinel 0 = first hop, skip emission.
+    uint64_t m_lastHopEndUs = 0;
+    uint32_t m_audioChunkDeadlineMissTotal = 0;
+    uint32_t m_audioHopDeadlineMissTotal = 0;
+
+    // FFT onset detection — TELEMETRY ONLY (demoted from live trigger path).
+    // Band-energy ratio detector below is the live trigger source.
+    OnsetDetector m_onsetDetector;
+    float m_lastOnsetInputRms = 0.0f;
+    float m_lastOnsetNoiseFloor = 0.0f;
+    float m_lastOnsetActivity = 0.0f;
+    uint8_t m_lastOnsetGateFlags = 0;
+
+    // ========================================================================
+    // Band-energy ratio detector (Path B — live trigger source)
+    //
+    // Variance-adaptive threshold on grouped band energies.
+    // Ref: Patin "Frequency Selected Sound Energy Algorithm #1"
+    // Ref: Parallelcube beat detection (variance-adaptive multiplier)
+    // Ref: WLED Sound Reactive (energy threshold + debounce on ESP32)
+    //
+    // Uses existing controlBus.bands[0..7] — no additional FFT work.
+    // ========================================================================
+
+    struct BandRatioConfig {
+        float    varSlope      = -15.0f;   ///< Variance-to-multiplier slope
+        float    varIntercept  = 1.55f;    ///< Multiplier at zero variance
+        float    minMul        = 1.05f;    ///< Floor: prevents firing on steady-state
+        float    maxMul        = 1.55f;    ///< Ceiling: prevents over-suppression in noisy passages
+        uint8_t  refractory    = 8;        ///< Debounce frames (~64ms @ 125 Hz)
+
+        // Raw PCM RMS eligibility gate.
+        // The primary front-door veto: if raw hop RMS (pre-AGC) is below
+        // this threshold, the BR detector does not emit triggers.
+        // Raw PCM is ~0.001 during silence, ~0.01+ during quiet music.
+        // This separates the two jobs: raw RMS answers "any acoustic energy?",
+        // band-ratio answers "which percussion event?".
+        // Measured from K1v2 traces (2026-03-25):
+        //   Silence raw RMS: p50=0.003  p95=0.006  max=0.009
+        //   Music @ 60-65 dB-A: p5=0.015  p50=0.066
+        //   Gate at 0.007: above silence p95 (0.006), below any music.
+        //   Hold at 62 frames (~500ms) bridges 138 BPM inter-beat gaps (435ms).
+        float    brRmsGate     = 0.007f;   ///< Raw hop RMS below this starts hold countdown
+        uint16_t brGateHold    = 62;       ///< Frames to hold gate open after RMS drops (~500ms @ 125 Hz)
+
+        // Per-group absolute energy floors (secondary safety net).
+        // These catch residual AGC-normalised noise that passes the RMS gate.
+        // Set conservatively — primary rejection is the RMS gate above.
+        float    kickAbsFloor  = 0.01f;    ///< bands[0]+bands[1]
+        float    snareAbsFloor = 0.01f;    ///< bands[2]+bands[3]
+        float    hihatAbsFloor = 0.01f;    ///< bands[5]+bands[6]+bands[7]
+    };
+
+    static constexpr uint8_t BAND_HISTORY_SIZE = 125;  ///< ~1 second @ 125 Hz
+
+    struct BandRatioChannel {
+        float    history[125] = {};   ///< Ring buffer of grouped band energies
+        uint8_t  writeIdx     = 0;
+        uint8_t  count        = 0;    ///< Frames written (for warmup priming)
+        float    runSum       = 0.0f; ///< Running sum for O(1) mean
+        float    runSumSq     = 0.0f; ///< Running sum-of-squares for O(1) variance
+        uint32_t lastTrigger  = 0;    ///< Frame count of last trigger (refractory)
+    };
+
+    BandRatioConfig m_bandRatioCfg;
+    uint16_t m_brGateHoldCounter = 0;  ///< Frames remaining in BR gate hold phase
+    BandRatioChannel m_kickChannel;
+    BandRatioChannel m_snareChannel;
+    BandRatioChannel m_hihatChannel;
+    uint32_t m_bandRatioFrame = 0;
+
+    bool bandRatioDetect(BandRatioChannel& ch, float energy, uint8_t refractory, float absFloor) {
+        // Subtract oldest value from running sums before overwriting.
+        if (ch.count >= BAND_HISTORY_SIZE) {
+            const float oldest = ch.history[ch.writeIdx];
+            ch.runSum -= oldest;
+            ch.runSumSq -= oldest * oldest;
+        }
+
+        // Write new value into the ring.
+        ch.history[ch.writeIdx] = energy;
+        ch.runSum += energy;
+        ch.runSumSq += energy * energy;
+        ch.writeIdx = (ch.writeIdx + 1) % BAND_HISTORY_SIZE;
+        if (ch.count < BAND_HISTORY_SIZE) {
+            ++ch.count;
+        }
+
+        // Suppress until the history window is primed.
+        if (ch.count < BAND_HISTORY_SIZE) {
+            return false;
+        }
+
+        // Absolute energy eligibility: ratio is only meaningful once energy
+        // is above a credible minimum.  Post-AGC bands normalise mic noise
+        // into non-trivial energy — this floor rejects that domain.
+        if (energy <= absFloor) {
+            return false;
+        }
+
+        const float n = static_cast<float>(ch.count);
+        const float mean = ch.runSum / n;
+        const float var = std::fmax(0.0f, ch.runSumSq / n - mean * mean);
+        const float rawMul = m_bandRatioCfg.varSlope * var + m_bandRatioCfg.varIntercept;
+        const float mul = std::fmax(m_bandRatioCfg.minMul, std::fmin(m_bandRatioCfg.maxMul, rawMul));
+        const bool aboveMean = (energy > mul * mean);
+        const bool refractoryOpen =
+            (m_bandRatioFrame - ch.lastTrigger) >= static_cast<uint32_t>(refractory);
+
+        if (aboveMean && refractoryOpen) {
+            ch.lastTrigger = m_bandRatioFrame;
+            return true;
+        }
+        return false;
+    }
+
+    // ========================================================================
+    // Audio confidence envelope (novelty-assisted, separate from BR triggers)
+    //
+    // Answers "is music actively present?" using raw RMS + spectral novelty.
+    // Provides a smooth 0..1 signal for visual fade behaviour.
+    // Does NOT touch the BR trigger path — that remains frozen.
+    // ========================================================================
+
+    struct AudioConfidenceConfig {
+        float    rmsFloor       = 0.004f;  ///< Raw RMS below this → confidence can only decay
+        float    noveltyFloor   = 0.01f;   ///< Minimum novelty to count as "changing"
+        uint16_t holdFrames     = 37;      ///< ~300ms @ 125 Hz — hold confidence after signal drops
+        float    releaseAlpha   = 0.005f;  ///< Exponential release (~1.6s to near-zero @ 125 Hz)
+        float    attackAlpha    = 1.0f;    ///< Instant rise (1.0 = immediate)
+    };
+
+    AudioConfidenceConfig m_confidenceCfg;
+    float m_prevBands[CONTROLBUS_NUM_BANDS] = {};  ///< Previous frame bands for novelty delta
+    float m_audioConfidence = 0.0f;                ///< Current envelope value [0,1]
+    uint16_t m_confidenceHoldCounter = 0;          ///< Frames remaining in hold phase
+
+    // ControlBus for Stage B derived features (chord, saliency, silence, liveliness)
+    // ES path bypasses Stage A (input conditioning) but needs Stage B.
+    ControlBus m_controlBus;
+#elif FEATURE_AUDIO_BACKEND_PIPELINECORE
+    // ========================================================================
+    // PipelineCore Backend State
+    // ========================================================================
+
+    // Audio capture driver (same I2S as Goertzel)
+    AudioCapture m_capture;
+
+    // Current state
+    AudioActorState m_state;
+
+    // Statistics
+    AudioActorStats m_stats;
+
+    // Pipeline diagnostics
+    AudioPipelineDiagnostics m_diag;
+
+    // Sample buffer for last captured hop
+    int16_t m_hopBuffer[HOP_SIZE];
+
+    // Flag for new hop availability
+    std::atomic<bool> m_newHopAvailable{false};
+
+    // PipelineCore DSP engine + adapter
+    PipelineCore m_pipeline;
+    PipelineAdapter m_adapter;
+    FeatureFrame m_lastFrame{};
+
+    // Style detector
+#if FEATURE_STYLE_DETECTION
+    StyleDetector m_styleDetector;
+#endif
+
+    // Previous chord root for chord change detection
+    uint8_t m_prevChordRoot = 0;
+
+    // ControlBus state machine (smoothing, attack/release)
+    ControlBus m_controlBus;
+#ifndef NATIVE_BUILD
+    mutable portMUX_TYPE m_controlBusApiMux = portMUX_INITIALIZER_UNLOCKED;
+#endif
+
+    // Lock-free buffer for cross-core sharing with RendererActor.
+    InternalSnapshotBufferOwner<ControlBusFrame> m_controlBusBuffer;
+
+    // Monotonic sample counter (64-bit for no overflow)
+    uint64_t m_sampleIndex = 0;
+
+    // Hop counter since start
+    uint32_t m_hopCount = 0;
+
+    // Capture stall recovery state
+    uint32_t m_consecutiveZeroHops = 0;
+    uint32_t m_lastRecoveryAttemptHop = 0;
+
+    // DMA failure signalling (DEC-011: degraded-mode, D4 § 2.6)
+    uint32_t m_consecutiveDmaTimeouts = 0;
+    bool     m_dmaFailureSignalled    = false;
+
+    // Pipeline tuning
+    AudioPipelineTuning m_pipelineTuning;
+    std::atomic<uint32_t> m_pipelineTuningSeq{0};
+
+    AudioDspState m_dspState;
+    std::atomic<uint32_t> m_dspStateSeq{0};
+    std::atomic<bool> m_dspResetPending{false};
+
+    // Noise Calibration State
+    NoiseCalibrationState m_noiseCalibration;
+
+    // Benchmark Instrumentation
+#if FEATURE_AUDIO_BENCHMARK
+    AudioBenchmarkRing m_benchmarkRing;
+    AudioBenchmarkStats m_benchmarkStats;
+    uint32_t m_benchmarkAggregateCounter = 0;
+    static constexpr uint32_t BENCHMARK_AGGREGATE_INTERVAL = 62;
+    void aggregateBenchmarkStats();
+#endif
+
+    // Internal Methods
+    void captureHop();
+    bool recoverCapturePath();
+    void processHop();
+    float computeRMS(const int16_t* samples, size_t count);
+    void handleCaptureError(CaptureResult result);
+    void processNoiseCalibration(float rms, const float* bands, const float* chroma, uint32_t nowMs);
+
+    // Sensory Bridge parity side-car pipeline
+    void processSbWaveformSidecar(const ControlBusRawInput& raw);
+    void processSbBloomSidecar(const ControlBusRawInput& raw);
+    void updateSbNoveltyAndHueShift();
+
+    // SB parity buffers (3.1.0 waveform)
+    static constexpr uint8_t SB_WAVEFORM_POINTS = CONTROLBUS_WAVEFORM_N;
+    static constexpr uint8_t SB_WAVEFORM_HISTORY = 4;
+    int16_t m_sbWaveformHistory[SB_WAVEFORM_HISTORY][SB_WAVEFORM_POINTS] = {{0}};
+    uint8_t m_sbWaveformHistoryIndex = 0;
+    float m_sbMaxWaveformValFollower = 750.0f;
+    float m_sbWaveformPeakScaled = 0.0f;
+    float m_sbWaveformPeakScaledLast = 0.0f;
+    float m_sbNoteChroma[CONTROLBUS_NUM_CHROMA] = {0};
+    float m_sbChromaMaxVal = 0.0f;
+
+    // SB parity buffers (4.1.1 bloom)
+    static constexpr uint8_t SB_NUM_FREQS = 64;
+    static constexpr uint8_t SB_SPECTRAL_HISTORY = 5;
+    float m_sbSpectrogram[SB_NUM_FREQS] = {0};
+    float m_sbSpectrogramSmooth[SB_NUM_FREQS] = {0};
+    float m_sbChromagramSmooth[CONTROLBUS_NUM_CHROMA] = {0};
+    float m_sbChromagramMaxPeak = 0.001f;
+    int16_t m_sbWaveform[SB_WAVEFORM_POINTS] = {0};
+    float m_sbSpectralHistory[SB_SPECTRAL_HISTORY][SB_NUM_FREQS] = {{0}};
+    float m_sbNoveltyCurve[SB_SPECTRAL_HISTORY] = {0};
+    uint8_t m_sbSpectralHistoryIndex = 0;
+
+    // Auto colour shift (4.1.1)
+    float m_sbHuePosition = 0.0f;
+    float m_sbHueShiftSpeed = 0.0f;
+    float m_sbHuePushDirection = -1.0f;
+    float m_sbHueDestination = 0.0f;
+    float m_sbHueShiftingMix = -0.35f;
+    float m_sbHueShiftingMixTarget = 1.0f;
+    uint32_t m_sbRand = 0x12345678u;
+
+#else
+    // Audio capture driver
+    AudioCapture m_capture;
+
+    // Current state
+    AudioActorState m_state;
+
+    // Statistics
+    AudioActorStats m_stats;
+
+    // Pipeline diagnostics (Phase 1: systematic audio debugging)
+    AudioPipelineDiagnostics m_diag;
+
+    // Sample buffer for last captured hop
+    int16_t m_hopBuffer[HOP_SIZE];
+    int16_t m_hopBufferCentered[HOP_SIZE];
+    int16_t m_prevHopCentered[HOP_SIZE];
+    bool m_prevHopValid = false;
+
+    // Flag for new hop availability (atomic for thread safety on dual-core ESP32)
+    std::atomic<bool> m_newHopAvailable{false};
+
+    // ========================================================================
+    // Phase 2: DSP Processing State
+    // ========================================================================
+
+    // Goertzel frequency analyzer (8 bands, 512-sample window)
+    GoertzelAnalyzer m_analyzer;
+
+    // Chromagram analyzer (12 pitch classes, 512-sample window)
+    ChromaAnalyzer m_chromaAnalyzer;
+
+    // Style detector (MIS Phase 2: adaptive visual response)
+#if FEATURE_STYLE_DETECTION
+    StyleDetector m_styleDetector;
+#endif
+
+    // Previous chord root for chord change detection (StyleDetector/saliency input)
+    uint8_t m_prevChordRoot = 0;
+
+    // ControlBus state machine (smoothing, attack/release)
+    ControlBus m_controlBus;
+#ifndef NATIVE_BUILD
+    mutable portMUX_TYPE m_controlBusApiMux = portMUX_INITIALIZER_UNLOCKED;
+#endif
+
+    // Lock-free buffer for cross-core sharing with RendererActor.
+    InternalSnapshotBufferOwner<ControlBusFrame> m_controlBusBuffer;
+
+    // Monotonic sample counter (64-bit for no overflow)
+    uint64_t m_sampleIndex = 0;
+
+    // Hop counter since start
+    uint32_t m_hopCount = 0;
+
+    // Previous RMS for flux calculation
+    float m_prevRMS = 0.0f;
+
+    // Priority 5: Per-band history for spectral flux
+    float m_prevBands[8] = {0};
+
+    // Last valid frequency bands (persisted between Goertzel updates)
+    float m_lastBands[8] = {0};
+    float m_lastBands64[8] = {0};  // 64-bin analysis folded to 8 bands
+    bool m_analyze64Ready = false;  // True when 64-bin analysis has triggered at least once
+
+    float m_lastRmsRaw = 0.0f;
+    float m_lastRmsMapped = 0.0f;
+    float m_lastFluxMapped = 0.0f;
+    int16_t m_lastMinSample = 0;
+    int16_t m_lastMaxSample = 0;
+    int16_t m_lastPeakCentered = 0;
+    float m_lastMeanSample = 0.0f;
+    float m_lastRmsPreGain = 0.0f;
+    float m_lastAgcGain = 1.0f;
+    float m_lastDcEstimate = 0.0f;
+    uint16_t m_lastClipCount = 0;
+    float m_lastOnsetInputRms = 0.0f;
+    float m_lastOnsetNoiseFloor = 0.0f;
+    float m_lastOnsetActivity = 0.0f;
+    uint8_t m_lastOnsetGateFlags = 0;
+
+    float m_dcEstimate = 0.0f;
+    float m_agcGain = 1.0f;
+    float m_noiseFloor = 0.001f;
+
+    AudioPipelineTuning m_pipelineTuning;
+    std::atomic<uint32_t> m_pipelineTuningSeq{0};
+
+    AudioDspState m_dspState;
+    std::atomic<uint32_t> m_dspStateSeq{0};
+    std::atomic<bool> m_dspResetPending{false};
+
+    // Throttle for Goertzel debug logging (log once per ~2 seconds)
+    uint32_t m_goertzelLogCounter = 0;
+    static constexpr uint32_t GOERTZEL_LOG_INTERVAL = 62;  // ~2 seconds @ 31 Hz
+
+    // Throttle for 64-bin Goertzel logging (log once per ~2 seconds)
+    uint32_t m_goertzel64LogCounter = 0;
+    static constexpr uint32_t GOERTZEL64_LOG_INTERVAL = 62;  // ~2 seconds @ 31 Hz
+
+    // ========================================================================
+    // TempoTracker Beat Tracker
+    // ========================================================================
+
+    /// Tempo tracker
+    TempoTracker m_tempo;
+
+    /// Last tempo output for diagnostics
+    TempoTrackerOutput m_lastTempoOutput;
+
+    /// Cached 64-bin spectrum for tempo tracker novelty input
+    /// Updated every ~94ms when 64-bin analysis completes, used every hop
+    float m_bins64Cached[64] = {0};
+    float m_bins64AdaptiveMax = 0.0001f;  // Sensory Bridge adaptive normalisation follower
+
+    // ========================================================================
+    // Stack Reduction: Large arrays moved from stack to class members
+    // ========================================================================
+    
+    /// Temporary buffer for 64-bin Goertzel analysis (moved from stack to reduce stack usage)
+    float m_bins64Raw[GoertzelAnalyzer::NUM_BINS] = {0};
+    
+    /// Temporary buffer for folded 64-bin bands (moved from stack to reduce stack usage)
+    float m_bands64Folded[8] = {0};
+
+    // ========================================================================
+    // Phase 2C: Noise Calibration State
+    // ========================================================================
+
+    /// Noise calibration state machine (SensoryBridge pattern)
+    NoiseCalibrationState m_noiseCalibration;
+
+    // ========================================================================
+    // Phase 2B: Benchmark Instrumentation
+    // ========================================================================
+
+#if FEATURE_AUDIO_BENCHMARK
+    /// Ring buffer for per-hop timing samples (2KB, ~1 second history)
+    AudioBenchmarkRing m_benchmarkRing;
+
+    /// Aggregated statistics (updated every ~1 second)
+    AudioBenchmarkStats m_benchmarkStats;
+
+    /// Counter for stats aggregation interval
+    uint32_t m_benchmarkAggregateCounter = 0;
+
+    /// Aggregate stats every ~1 second (62 hops at 62.5 Hz)
+    static constexpr uint32_t BENCHMARK_AGGREGATE_INTERVAL = 62;
+
+    /// Aggregate samples from ring buffer into stats
+    void aggregateBenchmarkStats();
+#endif
+
+    // ========================================================================
+    // Internal Methods
+    // ========================================================================
+
+    /**
+     * @brief Perform one capture cycle
+     */
+    void captureHop();
+
+    /**
+     * @brief Process captured hop through DSP pipeline (Phase 2)
+     *
+     * Called after successful capture. Performs:
+     * 1. RMS calculation
+     * 2. Spectral flux calculation
+     * 3. Goertzel band analysis (accumulated over 512 samples)
+     * 4. ControlBus update with smoothing
+     * 5. SnapshotBuffer publish for renderer
+     */
+    void processHop();
+
+    /**
+     * @brief Compute RMS energy of sample buffer
+     *
+     * @param samples Pointer to int16_t samples
+     * @param count Number of samples
+     * @return Normalized RMS value [0.0, 1.0]
+     */
+    float computeRMS(const int16_t* samples, size_t count);
+
+    /**
+     * @brief Handle capture error
+     */
+    void handleCaptureError(CaptureResult result);
+
+    /**
+     * @brief Process noise calibration state machine during hop
+     *
+     * Called by processHop() to accumulate samples during calibration.
+     * Handles state transitions and result computation.
+     *
+     * @param rms Current hop RMS
+     * @param bands Current hop band energies (8 bands)
+     * @param chroma Current hop chroma values (12 bins)
+     * @param nowMs Current time in milliseconds
+     */
+    void processNoiseCalibration(float rms, const float* bands, const float* chroma, uint32_t nowMs);
+
+    // ========================================================================
+    // Sensory Bridge parity side-car pipeline (3.1.0 + 4.1.1)
+    // ========================================================================
+    void processSbWaveformSidecar(const ControlBusRawInput& raw);
+    void processSbBloomSidecar(const ControlBusRawInput& raw);
+    void updateSbNoveltyAndHueShift();
+
+    // Parity buffers/state (3.1.0 waveform)
+    static constexpr uint8_t SB_WAVEFORM_POINTS = CONTROLBUS_WAVEFORM_N;
+    static constexpr uint8_t SB_WAVEFORM_HISTORY = 4;
+    int16_t m_sbWaveformHistory[SB_WAVEFORM_HISTORY][SB_WAVEFORM_POINTS] = {{0}};
+    uint8_t m_sbWaveformHistoryIndex = 0;
+    float m_sbMaxWaveformValFollower = 750.0f;  // Sensory Bridge sweet spot min level
+    float m_sbWaveformPeakScaled = 0.0f;
+    float m_sbWaveformPeakScaledLast = 0.0f;
+    float m_sbNoteChroma[CONTROLBUS_NUM_CHROMA] = {0};
+    float m_sbChromaMaxVal = 0.0f;
+
+    // Parity buffers/state (4.1.1 bloom)
+    static constexpr uint8_t SB_NUM_FREQS = 64;
+    static constexpr uint8_t SB_SPECTRAL_HISTORY = 5;
+    float m_sbSpectrogram[SB_NUM_FREQS] = {0};
+    float m_sbSpectrogramSmooth[SB_NUM_FREQS] = {0};
+    float m_sbChromagramSmooth[CONTROLBUS_NUM_CHROMA] = {0};
+    float m_sbChromagramMaxPeak = 0.001f;
+    int16_t m_sbWaveform[SB_WAVEFORM_POINTS] = {0};
+    float m_sbSpectralHistory[SB_SPECTRAL_HISTORY][SB_NUM_FREQS] = {{0}};
+    float m_sbNoveltyCurve[SB_SPECTRAL_HISTORY] = {0};
+    uint8_t m_sbSpectralHistoryIndex = 0;
+
+    // Auto colour shift (4.1.1)
+    float m_sbHuePosition = 0.0f;
+    float m_sbHueShiftSpeed = 0.0f;
+    float m_sbHuePushDirection = -1.0f;
+    float m_sbHueDestination = 0.0f;
+    float m_sbHueShiftingMix = -0.35f;
+    float m_sbHueShiftingMixTarget = 1.0f;
+    uint32_t m_sbRand = 0x12345678u;
+#endif // FEATURE_AUDIO_BACKEND_ESV11
+};
+
+// ============================================================================
+// Actor Configuration
+// ============================================================================
+
+namespace ActorConfigs {
+
+/**
+ * @brief Ceiling conversion from milliseconds to ticks.
+ * 
+ * Unlike pdMS_TO_TICKS() which floors (8ms -> 0 ticks at 100Hz),
+ * this macro rounds UP so 8ms -> 1 tick. Uses integer math with
+ * +999 to implement ceiling divide by 1000.
+ */
+#define LW_MS_TO_TICKS_CEIL(ms) \
+    ((TickType_t)(((ms) <= 0) ? 0 : \
+      (((uint64_t)(ms) * (uint64_t)configTICK_RATE_HZ + 999ULL) / 1000ULL)))
+
+/**
+ * @brief Ceiling conversion with minimum of 1 tick for non-zero ms.
+ * 
+ * This is the correct macro for actor tick intervals where ms > 0
+ * must result in at least 1 tick to prevent hot loops.
+ */
+#define LW_MS_TO_TICKS_CEIL_MIN1(ms) \
+    ((TickType_t)(((ms) <= 0) ? 0 : \
+      (LW_MS_TO_TICKS_CEIL(ms) == 0 ? 1 : LW_MS_TO_TICKS_CEIL(ms))))
+
+/**
+ * @brief Configuration for AudioActor
+ *
+ * Runs on Core 0 at priority 4 (below Renderer at 5).
+ * 
+ * SCHEDULER-ALIGNED MODE:
+ * With HOP_SIZE=160 @ 16kHz = 10ms = 100 Hz, the hop rate now matches
+ * the FreeRTOS tick rate (CONFIG_FREERTOS_HZ=100). This eliminates
+ * timing drift and multi-hop compensation hacks.
+ */
+inline actors::ActorConfig Audio() {
+    return actors::ActorConfig(
+        "Audio",                                    // name
+        AUDIO_ACTOR_STACK_WORDS,                    // stackSize (16KB)
+        AUDIO_ACTOR_PRIORITY,                       // priority (4)
+        AUDIO_ACTOR_CORE,                           // coreId (0)
+        16,                                         // queueSize
+        // tickInterval semantics:
+        // - FEATURE_AUDIO_BACKEND_ESV11: self-clocked mode (tickInterval=0), onTick blocks on I2S chunk reads
+        // - default LWLS pipeline: periodic tick aligned to hop cadence
+#if FEATURE_AUDIO_BACKEND_ESV11
+        0
+#else
+        LW_MS_TO_TICKS_CEIL_MIN1(AUDIO_ACTOR_TICK_MS) // tickInterval: 10ms = 1 tick @ 100Hz RTOS
+#endif
+    );
+}
+
+} // namespace ActorConfigs
+
+} // namespace audio
+} // namespace lightwaveos
+
+#endif // FEATURE_AUDIO_SYNC
+
+================================================================================
+FILE: firmware-v3/src/core/actors/RendererActor.h
+================================================================================
+
+/**
+ * @file RendererActor.h
+ * @brief Actor responsible for LED rendering at 120 FPS
+ *
+ * The RendererActor is the heart of the visual system. It:
+ * - Runs on Core 1 at highest priority for deterministic timing
+ * - Maintains the LED buffer state
+ * - Executes effect render functions at 120 FPS
+ * - Handles brightness, speed, and palette changes
+ * - Publishes FRAME_RENDERED events for synchronization
+ *
+ * Architecture:
+ *   Commands (from other actors/cores):
+ *     SET_EFFECT, SET_BRIGHTNESS, SET_SPEED, SET_PALETTE, etc.
+ *
+ *   Events (published to MessageBus):
+ *     FRAME_RENDERED - After each successful render
+ *     EFFECT_CHANGED - When effect changes
+ *
+ * Thread Safety:
+ *   The RendererActor owns the LED buffer exclusively.
+ *   Other actors must NOT directly access leds[] or call FastLED.
+ *   Use messages to request state changes.
+ *
+ * @author LightwaveOS Team
+ * @version 2.0.0
+ */
+
+#pragma once
+
+#include "Actor.h"
+#include "../bus/MessageBus.h"
+#include "../diagnostics/VpStackIntrospection.h"
+#include "../../effects/enhancement/ColorCorrectionEngine.h"
+#include "../../effects/enhancement/EdgeMixer.h"
+#include "../../config/features.h"
+#include "../../config/limits.h"
+#include "../../plugins/api/EffectContext.h"
+#include "../../plugins/api/IEffectRegistry.h"
+#include "../../effects/zones/ZoneEffectPool.h"
+
+#include <atomic>
+
+#ifndef NATIVE_BUILD
+#include <FastLED.h>
+#endif
+
+#include "hal/HalFactory.h"
+
+// Audio contracts for Phase 2 integration
+#if FEATURE_AUDIO_SYNC
+#include "../../audio/AudioTuning.h"
+#include "../../audio/contracts/AudioTime.h"
+#include "../../audio/contracts/ControlBus.h"
+#include "../../audio/contracts/MusicalGrid.h"
+#include "../../audio/contracts/SnapshotBuffer.h"
+#include "../../audio/contracts/AudioEffectMapping.h"
+#include "../../audio/contracts/OnsetSemantics.h"
+#include "../../audio/contracts/MotionSemantics.h"
+#include "../../audio/contracts/MotionShaper.h"
+#include "../../serial/ValidationMode.h"
+#include "../../audio/TrinityControlBusProxy.h"
+#if FEATURE_AUDIO_BACKEND_ESV11
+#include "../../audio/backends/esv11/EsBeatClock.h"
+#elif !FEATURE_AUDIO_BACKEND_PIPELINECORE
+// TempoTracker integration (replaces K1)
+#include "../../audio/tempo/TempoTracker.h"
+#endif
+#include "../../utils/LockFreeQueue.h"
+#endif
+
+#if FEATURE_VRMS_METRICS
+#include "../../metrics/VRMSMetrics.h"
+#endif
+#if FEATURE_VRMS_BENCHMARK
+#include "../../metrics/VRMSBenchmark.h"
+#endif
+#if FEATURE_INPUT_MERGE_LAYER
+#include "../../core/merge/InputMergeLayer.h"
+#endif
+
+// Forward declarations
+namespace lightwaveos { namespace zones { class ZoneComposer; } }
+namespace lightwaveos { namespace transitions { class TransitionEngine; enum class TransitionType : uint8_t; } }
+namespace lightwaveos { namespace plugins { class IEffect; namespace runtime { class LegacyEffectAdapter; } } }
+namespace lightwaveos { namespace synqmatrix { struct SynqMatrixSwitchRequest; } }
+// Note: AudioActor forward declaration removed - use #include "../../audio/AudioActor.h" instead
+// to avoid conflict between class forward declaration and using-alias in lightwaveos::audio namespace
+
+namespace lightwaveos {
+namespace actors {
+
+enum class AudioInputMode : uint8_t {
+    Live = 0,
+    Trinity = 1,
+    StimulusOverride = 2
+};
+
+// ============================================================================
+// Configuration
+// ============================================================================
+
+/**
+ * @brief LED strip configuration
+ */
+struct LedConfig {
+    static constexpr uint16_t LEDS_PER_STRIP = 160;
+    static constexpr uint16_t NUM_STRIPS = 2;
+    static constexpr uint16_t TOTAL_LEDS = LEDS_PER_STRIP * NUM_STRIPS;  // 320
+
+    static constexpr uint8_t STRIP1_PIN = chip::gpio::LED_STRIP1_DATA;
+    static constexpr uint8_t STRIP2_PIN = chip::gpio::LED_STRIP2_DATA;
+
+    static constexpr uint16_t TARGET_FPS = 120;
+    static constexpr uint32_t FRAME_TIME_US = 1000000 / TARGET_FPS;  // ~8333us
+
+    static constexpr uint8_t DEFAULT_BRIGHTNESS = 96;
+    static constexpr uint8_t MAX_BRIGHTNESS = 255;  // No power clamping; full range available
+    static constexpr uint8_t DEFAULT_SPEED = 10;
+    static constexpr uint8_t MAX_SPEED = 100;  // Extended range (was 50)
+
+    // Center origin point for effects
+    static constexpr uint8_t CENTER_LED_INDEX = 79;  // LED 79/80 split
+};
+
+/**
+ * @brief Render statistics
+ */
+struct RenderStats {
+    uint32_t framesRendered;      // Total frames since start
+    uint32_t frameDrops;          // Frames that exceeded budget
+    uint32_t avgFrameTimeUs;      // Rolling average frame time
+    uint32_t maxFrameTimeUs;      // Maximum frame time seen
+    uint32_t minFrameTimeUs;      // Minimum frame time seen
+    uint16_t currentFPS;          // Measured FPS
+    uint8_t cpuPercent;           // CPU usage estimate
+
+    RenderStats()
+        : framesRendered(0), frameDrops(0)
+        , avgFrameTimeUs(0), maxFrameTimeUs(0), minFrameTimeUs(UINT32_MAX)
+        , currentFPS(0), cpuPercent(0) {}
+
+    void reset() {
+        framesRendered = 0;
+        frameDrops = 0;
+        avgFrameTimeUs = 0;
+        maxFrameTimeUs = 0;
+        minFrameTimeUs = UINT32_MAX;
+        currentFPS = 0;
+        cpuPercent = 0;
+    }
+};
+
+/**
+ * @brief Renderer compositing mode (Phase 1B — dual-strip independence)
+ *
+ * Unified — current behaviour. ZoneComposer applies. One effect renders
+ *           to a unified 320-LED virtual buffer; RendererActor splits the
+ *           buffer to m_strip1 / m_strip2 via mirror memcpy at showLeds().
+ * Independent — top and bottom strips render different effects. Each effect
+ *           sees a 160-LED buffer with centre at LED 79. ZoneComposer is
+ *           BYPASSED in this mode (Phase 1B scope decision).
+ */
+enum class RendererMode : uint8_t {
+    Unified = 0,
+    Independent = 1
+};
+
+/**
+ * @brief Effect render function signature
+ *
+ * Effects are stateless functions that modify the LED buffer.
+ * They receive a pointer to the buffer and the current state.
+ */
+struct RenderContext {
+    CRGB* leds;                   // LED buffer (320 LEDs)
+    uint16_t numLeds;             // Number of LEDs
+    uint8_t brightness;           // Current brightness (0-255)
+    uint8_t speed;                // Animation speed (1-50)
+    uint8_t hue;                  // Global hue offset
+    // Visual parameters (universal effect controls)
+    uint8_t intensity;            // Effect intensity/amplitude (0-255)
+    uint8_t saturation;           // Color saturation (0-255)
+    uint8_t complexity;           // Effect complexity/detail (0-255)
+    uint8_t variation;            // Effect variation/mode (0-255)
+    uint32_t frameCount;          // Frame counter
+    uint32_t deltaTimeMs;         // Time since last frame
+    CRGBPalette16* palette;       // Current color palette
+};
+
+/**
+ * @brief Effect render function type
+ */
+using EffectRenderFn = void (*)(RenderContext& ctx);
+
+// ============================================================================
+// RendererActor Class
+// ============================================================================
+
+/**
+ * @brief Actor responsible for all LED rendering
+ *
+ * Runs on Core 1 at priority 5 (highest). The onTick() method is called
+ * at ~120 FPS to render the current effect and push data to the strips.
+ *
+ * State changes (effect, brightness, etc.) are received as messages
+ * and applied atomically before the next frame.
+ */
+class RendererActor : public Actor,
+                      public plugins::IEffectRegistry,
+                      public lightwaveos::zones::IZoneEffectSource {
+public:
+    /**
+     * @brief Construct the RendererActor
+     *
+     * Uses the predefined Renderer configuration from ActorConfigs.
+     */
+    RendererActor();
+
+    /**
+     * @brief Destructor
+     */
+    ~RendererActor() override;
+
+    // ========================================================================
+    // State Accessors (read-only, for diagnostics)
+    // ========================================================================
+
+    EffectId getCurrentEffect() const { return m_currentEffect; }
+    uint8_t getBrightness() const { return m_brightness; }
+    uint8_t getSpeed() const { return m_speed; }
+    uint8_t getPaletteIndex() const { return m_paletteIndex; }
+    uint8_t getHue() const { return m_hue; }
+    uint8_t getIntensity() const { return m_intensity; }
+    uint8_t getSaturation() const { return m_saturation; }
+    uint8_t getComplexity() const { return m_complexity; }
+    uint8_t getVariation() const { return m_variation; }
+    uint8_t getMood() const { return m_mood; }
+    uint8_t getFadeAmount() const { return m_fadeAmount; }
+
+    // Phase 1B — dual-strip independence accessors.
+    // Unified is the legacy default (one effect, mirror copy).
+    // Independent renders m_stripEffectId[0] on strip 0 and [1] on strip 1.
+    RendererMode getRendererMode() const { return m_rendererMode; }
+    void setRendererMode(RendererMode mode) { m_rendererMode = mode; }
+    EffectId getStripEffectId(uint8_t stripIdx) const {
+        return (stripIdx < 2) ? m_stripEffectId[stripIdx] : INVALID_EFFECT_ID;
+    }
+    void setStripEffectId(uint8_t stripIdx, EffectId eid) {
+        if (stripIdx < 2) m_stripEffectId[stripIdx] = eid;
+    }
+
+    const RenderStats& getStats() const { return m_stats; }
+    bool isLedOutputBusy() const { return m_ledDriver.isShowInProgress(); }
+    const hal::LedDriverStats& getLedDriverStats() const { return m_ledDriver.getStats(); }
+    bool isLedDitheringEnabled() const { return m_ledDriver.isDitheringEnabled(); }
+
+    struct VpStackSnapshot {
+        EffectId effectId = INVALID_EFFECT_ID;
+        const char* effectName = "Unknown";
+        uint8_t paletteId = 0;
+        const char* paletteName = "Unknown";
+        uint8_t brightness = 0;
+        uint8_t speed = 0;
+        uint8_t intensity = 0;
+        uint8_t saturation = 0;
+        uint8_t complexity = 0;
+        uint8_t variation = 0;
+        uint8_t hue = 0;
+        uint8_t mood = 0;
+        RendererMode rendererMode = RendererMode::Unified;
+        diagnostics::VpTopology topology = diagnostics::VpTopology::Unified;
+        diagnostics::VpSurfaceState surfaces{};
+        RenderStats renderStats{};
+        hal::LedDriverStats ledStats{};
+        uint32_t lastEffectRenderUs = 0;
+        uint32_t avgEffectRenderUs = 0;
+        uint32_t lastColourCorrectionUs = 0;
+        uint32_t avgColourCorrectionUs = 0;
+        uint32_t lastShowLedsUs = 0;
+        uint32_t avgShowLedsUs = 0;
+        uint32_t lastOutputPrepUs = 0;
+        uint32_t avgOutputPrepUs = 0;
+        uint32_t lastPrePacingWorkUs = 0;
+        uint32_t avgPrePacingWorkUs = 0;
+        bool ledDitheringEnabled = true;
+        bool colourCorrectionToggleEnabled = false;
+        bool colourCorrectionSkippedByEffect = false;
+        bool colourCorrectionApplied = false;
+        uint32_t correctionApplyCount = 0;
+        uint32_t correctionSkipCount = 0;
+        enhancement::ColorCorrectionConfig colourConfig{};
+        enhancement::GammaLutStatus gamma{};
+        bool toneMapNeeded = false;
+        bool audioAvailable = false;
+        bool globalSilenceBypassed = false;
+        bool globalSilenceScaleActive = false;
+        bool hardSilenceGateEffect = false;
+        float silentScale = 1.0f;
+        enhancement::EdgeMixerMode edgeMode = enhancement::EdgeMixerMode::MIRROR;
+        enhancement::EdgeMixerSpatial edgeSpatial = enhancement::EdgeMixerSpatial::UNIFORM;
+        enhancement::EdgeMixerTemporal edgeTemporal = enhancement::EdgeMixerTemporal::STATIC;
+        uint8_t edgeSpread = 0;
+        uint8_t edgeStrength = 0;
+        bool captureEnabled = false;
+        uint8_t captureTapMask = 0;
+        EffectId captureEffectId = INVALID_EFFECT_ID;
+        uint8_t capturePaletteId = 0;
+        uint8_t captureBrightness = 0;
+        uint8_t captureSpeed = 0;
+        uint32_t captureFrameIndex = 0;
+        uint32_t captureTimestampUs = 0;
+        bool wireFenceActive = true;
+        uint32_t expectedWireTimeUs = 0;
+    };
+
+    VpStackSnapshot getVpStackSnapshot() const;
+
+    /**
+     * @brief Get a copy of the current LED buffer
+     *
+     * Safe to call from other cores - copies the buffer atomically.
+     *
+     * @param outBuffer Buffer to copy into (must be TOTAL_LEDS size)
+     */
+    void getBufferCopy(CRGB* outBuffer) const;
+
+    // ========================================================================
+    // Effect Registration
+    // ========================================================================
+
+    /**
+     * @brief Register an effect render function (legacy)
+     *
+     * Automatically wraps function pointer in LegacyEffectAdapter.
+     * All effects go through IEffect path.
+     *
+     * @param id Stable namespaced EffectId
+     * @param name Human-readable name
+     * @param fn Render function
+     * @return true if registered successfully
+     */
+    bool registerEffect(EffectId id, const char* name, EffectRenderFn fn);
+
+    /**
+     * @brief Register an IEffect instance (native)
+     *
+     * @param id Stable namespaced EffectId
+     * @param effect IEffect instance pointer
+     * @return true if registered successfully
+     */
+    bool registerEffect(EffectId id, plugins::IEffect* effect) override;
+
+    /**
+     * @brief Register a per-zone instance factory (D-1 keystone).
+     *
+     * Effects opt in to per-zone state isolation by registering a factory
+     * function alongside their singleton. ZoneComposer's pool calls the
+     * factory once per `(effectId, zoneSlot)` pair to construct a fresh
+     * instance with independent internal state.
+     *
+     * Effects WITHOUT a factory continue to use the shared singleton in
+     * the zone path — for multi-zone use of the same effectId this
+     * preserves the pre-D-1 known-bad behaviour. See ADR D-1 for the
+     * migration plan.
+     *
+     * @param id Stable namespaced EffectId
+     * @param factory Factory function (returns a heap-allocated IEffect*)
+     * @return true if registered (effect was already known to the registry)
+     */
+    bool registerEffectFactory(EffectId id,
+                               lightwaveos::zones::EffectFactoryFn factory);
+
+    // ========================================================================
+    // IEffectRegistry Implementation
+    // ========================================================================
+
+    /**
+     * @brief Unregister an effect by ID
+     * @param id Effect ID to unregister
+     * @return true if effect was registered and is now unregistered
+     */
+    bool unregisterEffect(EffectId id) override;
+
+    /**
+     * @brief Check if an effect is registered
+     * @param id Effect ID to check
+     * @return true if effect is registered
+     */
+    bool isEffectRegistered(EffectId id) const override;
+
+    /**
+     * @brief Get registered effect count
+     * @return Number of registered effects
+     */
+    uint16_t getRegisteredCount() const override;
+
+    /**
+     * @brief Get number of registered effects
+     */
+    uint16_t getEffectCount() const { return m_registryCount; }
+
+    /**
+     * @brief Get effect name by ID
+     */
+    const char* getEffectName(EffectId id) const;
+
+    /**
+     * @brief Get IEffect instance by ID
+     * @param id Effect ID
+     * @return IEffect pointer, or nullptr if not found
+     */
+    plugins::IEffect* getEffectInstance(EffectId id) const override;
+
+    /**
+     * @brief Get registered factory for an effect ID (IZoneEffectSource).
+     * @param id Effect ID
+     * @return Factory function, or nullptr if no factory was registered.
+     */
+    lightwaveos::zones::EffectFactoryFn
+        getEffectFactory(EffectId id) const override;
+
+    /**
+     * @brief Validate effect ID exists in registry
+     * @param effectId Effect ID to validate
+     * @return Valid effect ID, defaults to first registered or INVALID_EFFECT_ID
+     */
+    EffectId validateEffectId(EffectId effectId) const;
+
+    /**
+     * @brief Get EffectId by registry position (for enumeration)
+     * @param index Registry index (0 to getEffectCount()-1)
+     * @return EffectId at that position, or INVALID_EFFECT_ID
+     */
+    EffectId getEffectIdAt(uint16_t index) const {
+        if (index < m_registryCount) return m_registry[index].id;
+        return INVALID_EFFECT_ID;
+    }
+
+    /**
+     * @brief Get pointer to current palette
+     */
+    CRGBPalette16* getPalette() { return &m_currentPalette; }
+
+    /**
+     * @brief Get pointer to LED buffer (for ZoneComposer)
+     */
+    CRGB* getLedBuffer() { return m_leds; }
+
+    /**
+     * @brief Get total number of available palettes
+     */
+    uint8_t getPaletteCount() const;
+
+    /**
+     * @brief Get palette name by ID
+     * @param id Palette ID (0-74)
+     * @return Palette name or "Unknown" if out of range
+     */
+    const char* getPaletteName(uint8_t id) const;
+
+    // ========================================================================
+    // Zone System Integration
+    // ========================================================================
+
+    /**
+     * @brief Set the zone composer for multi-zone rendering
+     * @param composer Pointer to ZoneComposer (nullptr to disable)
+     */
+    void setZoneComposer(zones::ZoneComposer* composer) { m_zoneComposer = composer; }
+
+    /**
+     * @brief Get the current zone composer
+     */
+    zones::ZoneComposer* getZoneComposer() { return m_zoneComposer; }
+
+    // ========================================================================
+    // Transition System Integration
+    // ========================================================================
+
+    /**
+     * @brief Check if a transition is currently active
+     */
+    bool isTransitionActive() const;
+
+    /**
+     * @brief Get the transition engine (for external control)
+     */
+#if FEATURE_TRANSITIONS
+    transitions::TransitionEngine* getTransitionEngine() { return m_transitionEngine; }
+#else
+    transitions::TransitionEngine* getTransitionEngine() { return nullptr; }
+#endif
+
+    // ========================================================================
+    // Audio Integration (Phase 2)
+    // ========================================================================
+
+#if FEATURE_AUDIO_SYNC
+    /**
+     * @brief Set the audio SnapshotBuffer reference
+     *
+     * Called by ActorSystem during initialization to connect the renderer
+     * to the AudioActor's ControlBusFrame buffer.
+     *
+     * @param buffer Pointer to AudioActor's SnapshotBuffer (nullptr to disable)
+     */
+    void setAudioBuffer(const audio::SnapshotBuffer<audio::ControlBusFrame>* buffer) { m_controlBusBuffer = buffer; }
+
+    void setStimulusBuffer(const audio::SnapshotBuffer<audio::ControlBusFrame>* buffer) { m_stimulusControlBusBuffer = buffer; }
+
+    void setAudioInputMode(AudioInputMode mode) { m_audioInputMode = mode; }
+
+    /**
+     * @brief Check if audio integration is active
+     */
+    bool isAudioEnabled() const { return m_controlBusBuffer != nullptr; }
+
+    audio::AudioContractTuning getAudioContractTuning() const;
+    void setAudioContractTuning(const audio::AudioContractTuning& tuning);
+
+    /**
+     * @brief Get the cached ControlBusFrame for audio streaming
+     *
+     * Copy latest cached frame.
+     */
+    void copyCachedAudioFrame(audio::ControlBusFrame& out) const {
+        out = m_lastControlBus;
+    }
+
+    /**
+     * @brief Get the latest Layer 2 motion-semantic frame.
+     */
+    const audio::MotionSemanticFrame& getMotionFrame() const {
+        return m_motionEngine.frame();
+    }
+
+    /**
+     * @brief Get the latest Layer 3 temporal shaping output.
+     */
+    const audio::MotionShaping& getMotionShaping() const {
+        return m_motionShaper.shaping();
+    }
+
+    /**
+     * @brief Get the cached MusicalGridSnapshot for beat event streaming
+     *
+     * Copy latest cached snapshot.
+     */
+    void copyLastMusicalGrid(audio::MusicalGridSnapshot& out) const {
+        out = m_lastMusicalGrid;
+    }
+
+    /**
+     * @brief Copy both cached audio snapshots atomically for network consumers.
+     */
+    void copyCachedAudioSnapshot(audio::ControlBusFrame& outFrame,
+                                 audio::MusicalGridSnapshot& outGrid) const {
+        outFrame = m_lastControlBus;
+        outGrid = m_lastMusicalGrid;
+    }
+
+    /**
+     * @brief Get current audio sync mode for status/telemetry.
+     *
+     * - "trinity" when Trinity sync is active and proxy is fresh.
+     * - "es" (or LWLS internal backend) otherwise.
+     */
+    const char* getAudioSyncMode() const {
+        // NOTE: This is intentionally coarse-grained and mirrors the render-time
+        // gating used when selecting TrinityControlBusProxy vs live audio.
+        return (m_trinitySyncActive && m_trinityProxy.isActive() && !m_trinitySyncPaused)
+            ? "trinity"
+            : "es";
+    }
+
+    /**
+     * @brief Snapshot of bands + rms/flux for serial debug (e.g. "bands" command).
+     * Lock-free: renderer writes to double buffer, getter reads the other slot.
+     */
+    struct BandsDebugSnapshot {
+        float bands[8] = {0};
+        float bass = 0.0f;   ///< (bands[0]+bands[1])/2
+        float mid = 0.0f;    ///< (bands[2]+bands[3]+bands[4])/3
+        float treble = 0.0f; ///< (bands[5]+bands[6]+bands[7])/3
+        float rms = 0.0f;
+        float flux = 0.0f;
+        uint32_t hop_seq = 0;
+        bool valid = false;
+    };
+
+    /**
+     * @brief Get latest bands snapshot for validation (serial "bands" command).
+     * Thread-safe: reads from the slot the renderer is not currently writing.
+     */
+    void getBandsDebugSnapshot(BandsDebugSnapshot& out) const;
+
+#if FEATURE_VRMS_METRICS
+    metrics::VRMSVector getVrmsVector() const { return m_vrmsMetrics.getLatestVector(); }
+#endif
+#if FEATURE_INPUT_MERGE_LAYER
+    uint8_t getMergedParam(uint8_t idx) const { return m_mergeLayer.getMerged(idx); }
+#endif
+
+#if !FEATURE_AUDIO_BACKEND_ESV11 && !FEATURE_AUDIO_BACKEND_PIPELINECORE
+    // ========================================================================
+    // TempoTracker Integration (replaces K1)
+    // ========================================================================
+
+    /**
+     * @brief Set the TempoTracker reference for phase advancement
+     *
+     * Called by ActorSystem during initialization to connect the renderer
+     * to AudioActor's TempoTracker instance. The renderer calls
+     * advancePhase() at 120 FPS for smooth beat tracking.
+     *
+     * @param tempo Pointer to AudioActor's TempoTracker (nullptr to disable)
+     */
+    void setTempo(lightwaveos::audio::TempoTracker* tempo) {
+        m_tempo = tempo;
+    }
+
+    /**
+     * @brief Check if tempo integration is active
+     */
+    bool isTempoEnabled() const { return m_tempo != nullptr; }
+
+    /**
+     * @brief Get current tempo output (read-only access for diagnostics)
+     * @return TempoTrackerOutput with BPM, phase, confidence, beat_tick
+     */
+    lightwaveos::audio::TempoTrackerOutput getTempoOutput() const {
+        if (m_tempo) {
+            return m_tempo->getOutput();
+        }
+        return lightwaveos::audio::TempoTrackerOutput{};
+    }
+#elif FEATURE_AUDIO_BACKEND_PIPELINECORE
+    bool isTempoEnabled() const { return true; }
+#endif // !FEATURE_AUDIO_BACKEND_ESV11 && !FEATURE_AUDIO_BACKEND_PIPELINECORE
+#endif
+
+    // ========================================================================
+    // Frame Capture System (for testbed)
+    // ========================================================================
+
+    /**
+     * @brief Frame capture tap points
+     */
+    enum class CaptureTap : uint8_t {
+        TAP_A_PRE_CORRECTION = 0,   // After renderFrame(), before processBuffer()
+        TAP_B_POST_CORRECTION = 1,  // After processBuffer(), before showLeds()
+        TAP_C_PRE_WS2812 = 2        // After showLeds() copy, before FastLED.show()
+    };
+
+    /**
+     * @brief Enable/disable frame capture mode
+     * @param enabled True to enable capture, false to disable
+     * @param tapMask Bitmask of taps to capture (bit 0=Tap A, bit 1=Tap B, bit 2=Tap C)
+     */
+    void setCaptureMode(bool enabled, uint8_t tapMask = 0x07);
+
+    /**
+     * @brief Check if capture mode is enabled
+     */
+    bool isCaptureModeEnabled() const { return m_captureEnabled; }
+
+    /**
+     * @brief Enable/disable audio debug logging (serial 'a' command)
+     */
+    void setAudioDebugEnabled(bool enabled) { m_audioDebugEnabled = enabled; }
+    bool isAudioDebugEnabled() const { return m_audioDebugEnabled; }
+
+    /**
+     * @brief Get captured frame for a specific tap
+     * @param tap Tap point to retrieve
+     * @param outBuffer Buffer to copy into (must be TOTAL_LEDS size)
+     * @return true if frame was captured, false if not available
+     */
+    bool getCapturedFrame(CaptureTap tap, CRGB* outBuffer) const;
+
+    /**
+     * @brief Queue a parameter update to be applied on the render thread
+     */
+    bool enqueueEffectParameterUpdate(EffectId effectId, const char* name, float value);
+
+    /**
+     * @brief Get capture metadata (effect ID, palette ID, frame index, timestamp)
+     */
+    struct CaptureMetadata {
+        EffectId effectId = INVALID_EFFECT_ID;
+        uint8_t paletteId = 0;
+        uint8_t brightness = 0;
+        uint8_t speed = 0;
+        uint32_t frameIndex = 0;
+        uint32_t timestampUs = 0;
+    };
+    CaptureMetadata getCaptureMetadata() const;
+
+    /**
+     * @brief Force a single render/capture cycle for the requested tap.
+     *
+     * This is intended for on-demand serial `capture dump` requests, to avoid
+     * returning "No frame captured" when the caller requests a dump before the
+     * next normal render tick has produced a captured frame.
+     *
+     * IMPORTANT: This method must not permanently mutate the live LED state
+     * buffer used by buffer-feedback effects. It snapshots and restores `m_leds`.
+     */
+    void forceOneShotCapture(CaptureTap tap);
+
+protected:
+    // ========================================================================
+    // Actor Overrides
+    // ========================================================================
+
+    void onStart() override;
+    void onMessage(const Message& msg) override;
+    void onTick() override;
+    void onStop() override;
+
+private:
+    // ========================================================================
+    // Cross-Core Unsafe — use ActorSystem::startTransition() from Core 0
+    // ========================================================================
+
+    /** @brief Start transition (Core 1 internal only — unsafe from Core 0) */
+    void startTransition(EffectId newEffectId, uint8_t transitionType);
+
+    /** @brief Start random transition (Core 1 internal only — unsafe from Core 0) */
+    void startRandomTransition(EffectId newEffectId);
+
+    // ========================================================================
+    // Internal Methods
+    // ========================================================================
+
+    /**
+     * @brief Initialize FastLED and LED buffers
+     */
+    void initLeds();
+
+    /**
+     * @brief Render current effect to LED buffer
+     */
+    void renderFrame();
+
+    /**
+     * @brief Render one effect to one strip (Phase 1B Independent mode)
+     *
+     * Configures m_effectContext to point at the requested strip's 160-LED
+     * buffer with centre at LED 79, then dispatches the effect's render().
+     * Falls back to clearing the strip buffer if the effect is unregistered.
+     */
+    void renderStripIndependent(uint8_t stripIdx, EffectId eid, uint32_t deltaTimeMs
+#if FEATURE_AUDIO_SYNC
+                                , const audio::ControlBusFrame& audioFrame
+                                , bool audioAvailable
+                                , bool trinityActive
+#endif
+    );
+
+    void applyPendingAudioContractTuning();
+    void applyPendingEffectParameterUpdates();
+
+#if FEATURE_AUDIO_SYNC
+    void updateSharedOnsetContext(const audio::ControlBusFrame& frame,
+                                  const audio::MusicalGridSnapshot& grid,
+                                  bool available,
+                                  bool trinityActive,
+                                  uint32_t nowMs,
+                                  float dtSeconds);
+    void populateAudioContextForRender(plugins::AudioContext& out,
+                                       const audio::ControlBusFrame& frame,
+                                       const audio::MusicalGridSnapshot& grid,
+                                       bool available,
+                                       bool trinityActive,
+                                       bool includeBehaviorContext);
+    void queueSynqMatrixTransition(const synqmatrix::SynqMatrixSwitchRequest& request,
+                                          EffectId previousEffectId);
+    bool processSynqMatrixTransition(uint32_t nowMs);
+    void syncSynqMatrixTransitionTelemetry(uint32_t nowMs);
+#endif
+
+    /**
+     * @brief Push LED buffer to physical strips
+     */
+    void showLeds();
+
+    /**
+     * @brief Update frame timing statistics
+     */
+    void updateStats(uint32_t frameTimeUs, uint32_t rawFrameTimeUs);
+
+    /**
+     * @brief Handle SET_EFFECT message
+     */
+    void handleSetEffect(EffectId effectId);
+
+    /**
+     * @brief Handle START_TRANSITION message (thread-safe)
+     */
+    void handleStartTransition(EffectId effectId, uint8_t transitionType);
+
+    /**
+     * @brief Handle SET_BRIGHTNESS message
+     */
+    void handleSetBrightness(uint8_t brightness);
+
+    /**
+     * @brief Handle SET_SPEED message
+     */
+    void handleSetSpeed(uint8_t speed);
+
+    /**
+     * @brief Handle SET_PALETTE message
+     */
+    void handleSetPalette(uint8_t paletteIndex);
+    void handleSetIntensity(uint8_t intensity);
+    void handleSetSaturation(uint8_t saturation);
+    void handleSetComplexity(uint8_t complexity);
+    void handleSetVariation(uint8_t variation);
+    void handleSetHue(uint8_t hue);
+    void handleSetMood(uint8_t mood);
+    void handleSetFadeAmount(uint8_t fadeAmount);
+
+    // ========================================================================
+    // State
+    // ========================================================================
+
+    // LED buffers
+    CRGB* m_strip1;
+    CRGB* m_strip2;
+    CRGB m_leds[LedConfig::TOTAL_LEDS];  // Unified buffer
+
+    // Current state
+    EffectId m_currentEffect;
+    bool m_effectInitialized;  // Track if current effect has been init()'d
+    bool m_currentEffectValid;        // Cached: m_currentEffect passes validateEffectId()
+    EffectId m_validatedEffectId;     // Cached result of last successful validation
+    uint8_t m_brightness;
+    uint8_t m_speed;
+    uint8_t m_paletteIndex;
+    uint8_t m_hue;
+    /**
+     * @brief Timestamp (millis()) of the most recent user-driven hue write.
+     *
+     * The render loop applies a slow `m_hue += 1` per-frame auto-rotation so
+     * palette-driven effects keep their colour rotation feel. Without
+     * gating, that auto-rotation overwrites a user-set hue value within
+     * ~4 s at 60 fps — making the iOS Hue slider feel non-functional.
+     *
+     * Gate: auto-rotation is suppressed for `kHueAutoRotatePauseMs` after
+     * each `handleSetHue()` call. Once that window elapses the rotation
+     * resumes, restoring "set and forget" feel for users who don't touch
+     * the slider after applying their colour preference.
+     */
+    uint32_t m_hueLastUserSetMs;
+    uint8_t m_intensity;
+    uint8_t m_saturation;
+    uint8_t m_complexity;
+    uint8_t m_variation;
+    uint8_t m_mood;
+    uint8_t m_fadeAmount;
+
+    // Phase 1B — dual-strip independence state.
+    // m_rendererMode == Unified: legacy mirror path.
+    // m_rendererMode == Independent: per-strip dispatch using m_stripEffectId[].
+    RendererMode m_rendererMode = RendererMode::Unified;
+    EffectId m_stripEffectId[2] = { INVALID_EFFECT_ID, INVALID_EFFECT_ID };
+
+    // Palette
+    CRGBPalette16 m_currentPalette;
+
+    // Effect registry - append-only, keyed by stable EffectId
+    //
+    // Uses linear scan for lookups. For 162 effects on ESP32 at 240 MHz,
+    // scan time is <1us per lookup - negligible vs the 8.3ms frame budget.
+    static constexpr uint16_t MAX_EFFECTS = limits::MAX_EFFECTS;
+    struct EffectRegistration {
+        EffectId id;
+        const char* name;
+        plugins::IEffect* effect;   // All effects are IEffect instances (native or adapter)
+        plugins::runtime::LegacyEffectAdapter* legacyAdapter;  // Owned, nullptr if native
+        // D-1 keystone: optional per-zone instance factory. nullptr means the
+        // effect has not opted in to per-zone isolation; ZoneComposer falls
+        // back to the singleton for multi-zone use of the same effectId.
+        lightwaveos::zones::EffectFactoryFn factory;
+        bool active;
+    };
+    EffectRegistration m_registry[MAX_EFFECTS];
+    uint16_t m_registryCount;
+
+    // Lookup helpers
+    EffectRegistration* findById(EffectId id);
+    const EffectRegistration* findById(EffectId id) const;
+
+    struct EffectParamUpdate {
+        EffectId effectId;
+        char name[24];  // Max param name ~12 chars; was 64 (saves 640 bytes across 16-entry queue)
+        float value;
+    };
+    static constexpr uint8_t PARAM_QUEUE_SIZE = 16;
+    EffectParamUpdate m_paramQueue[PARAM_QUEUE_SIZE];
+    std::atomic<uint8_t> m_paramQueueHead{0};
+    std::atomic<uint8_t> m_paramQueueTail{0};
+
+    // Timing
+    uint32_t m_lastFrameTime;
+    uint32_t m_frameCount;
+    float m_effectTimeSeconds;
+    float m_effectTimeSecondsRaw;
+    float m_effectFrameAccumulator;
+    uint32_t m_effectFrameCount;
+
+    // Statistics
+    RenderStats m_stats;
+    uint32_t m_lastEffectRenderUs = 0;
+    uint32_t m_avgEffectRenderUs = 0;
+    uint32_t m_lastColourCorrectionUs = 0;
+    uint32_t m_avgColourCorrectionUs = 0;
+    uint32_t m_lastShowLedsUs = 0;
+    uint32_t m_avgShowLedsUs = 0;
+    uint32_t m_lastOutputPrepUs = 0;
+    uint32_t m_avgOutputPrepUs = 0;
+    uint32_t m_lastPrePacingWorkUs = 0;
+    uint32_t m_avgPrePacingWorkUs = 0;
+
+    hal::LedDriver m_ledDriver;
+
+    // Zone system
+    zones::ZoneComposer* m_zoneComposer;
+
+    // Reusable EffectContext to avoid large per-frame stack allocations.
+    // This is especially important when FEATURE_AUDIO_SYNC is enabled, because
+    // EffectContext contains an AudioContext by value.
+    plugins::EffectContext m_effectContext;
+
+#if FEATURE_AUDIO_SYNC
+    // ZoneComposer compatibility context. Single-effect and independent-strip
+    // paths populate m_effectContext.audio directly to avoid an extra full
+    // ControlBusFrame copy after the renderer-owned snapshot is already stable.
+    plugins::AudioContext m_sharedAudioCtx;
+    plugins::OnsetContext m_sharedOnsetCtx{};
+    audio::OnsetSemanticTrackerState m_onsetTrackerState{};
+    audio::MotionSemanticEngine m_motionEngine;  ///< Layer 2: ControlBusFrame -> 6-axis motion-semantic frame
+    audio::MotionShaper m_motionShaper;          ///< Layer 3: onset-driven temporal envelope shaping
+#endif
+
+    // ========================================================================
+    // Validation Mode (Stage 3B: perceptual testing)
+    // ========================================================================
+
+    serial::ValidationMode m_validationMode{m_leds, LedConfig::TOTAL_LEDS};
+
+    /// Lock-free command queue: Core 0 writes, Core 1 reads
+    static constexpr uint8_t VAL_CMD_QUEUE_SIZE = 4;
+    static constexpr uint16_t VAL_CMD_MAX_LEN = 256;
+    char m_valCmdQueue[VAL_CMD_QUEUE_SIZE][VAL_CMD_MAX_LEN];
+    std::atomic<uint8_t> m_valCmdHead{0};
+    std::atomic<uint8_t> m_valCmdTail{0};
+
+public:
+    /**
+     * @brief Enqueue a VAL: command from Core 0 for processing on Core 1.
+     * @return true if enqueued, false if queue full
+     */
+    bool enqueueValidationCommand(const char* cmd) {
+        uint8_t head = m_valCmdHead.load(std::memory_order_relaxed);
+        uint8_t next = (head + 1) % VAL_CMD_QUEUE_SIZE;
+        if (next == m_valCmdTail.load(std::memory_order_acquire)) return false;
+        strncpy(m_valCmdQueue[head], cmd, VAL_CMD_MAX_LEN - 1);
+        m_valCmdQueue[head][VAL_CMD_MAX_LEN - 1] = '\0';
+        m_valCmdHead.store(next, std::memory_order_release);
+        return true;
+    }
+
+    /** @brief Check if validation mode is actively rendering */
+    bool isValidationActive() const { return m_validationMode.isActive(); }
+
+    // Transition system
+#if FEATURE_TRANSITIONS
+    transitions::TransitionEngine* m_transitionEngine;
+    CRGB m_transitionSourceBuffer[LedConfig::TOTAL_LEDS];
+    EffectId m_pendingEffect;
+    bool m_transitionPending;
+#endif
+
+    // Frame capture system (for testbed)
+    bool m_captureEnabled;
+    uint8_t m_captureTapMask;  // Bitmask: bit 0=Tap A, bit 1=Tap B, bit 2=Tap C
+    // Last time (millis) a consumer successfully drained a tap. If no drain occurs
+    // for longer than CAPTURE_DRAIN_TIMEOUT_MS while capture is enabled, onTick()
+    // auto-disables capture to prevent the producer latch from persisting forever
+    // after a serial / consumer session drops without issuing "capture stop".
+    // Written by getCapturedFrame() (consumer task) and setCaptureMode(); read by
+    // onTick() (renderer). Single-word uint32_t — naturally atomic on ESP32; a
+    // torn read only shifts the timeout by at most one tick, which is irrelevant
+    // at a 10 s timeout.
+    mutable volatile uint32_t m_captureLastDrainMs;
+    static constexpr uint32_t CAPTURE_DRAIN_TIMEOUT_MS = 10000;
+    
+    // Performance metrics for color correction
+    uint32_t m_correctionSkipCount;   // Number of frames where correction was skipped
+    uint32_t m_correctionApplyCount;  // Number of frames where correction was applied
+    // Capture buffers can be sizeable; allocate lazily (prefer PSRAM) when capture is enabled.
+    CRGB* m_captureBlock;
+    CRGB* m_captureTapA;  // Pre-correction
+    CRGB* m_captureTapB;  // Post-correction
+    CRGB* m_captureTapC;  // Pre-WS2812 (per-strip, interleaved)
+    CaptureMetadata m_captureMetadata;
+    bool m_captureTapAValid;
+    bool m_captureTapBValid;
+    bool m_captureTapCValid;
+    CRGB m_captureScratch[LedConfig::TOTAL_LEDS]; // Scratch buffer for forceOneShotCapture (avoids 1920-byte stack alloc)
+
+    // ========================================================================
+    // Audio State (Phase 2 - Audio Sync)
+    // ========================================================================
+
+#if FEATURE_AUDIO_SYNC
+    bool m_songAwareDirectorTransitionQueued = false;
+    bool m_songAwareDirectorTransitionPreparing = false;
+    bool m_songAwareDirectorTransitionActiveNotified = false;
+    EffectId m_songAwareDirectorPreviousEffect = INVALID_EFFECT_ID;
+    EffectId m_songAwareDirectorTargetEffect = INVALID_EFFECT_ID;
+    const char* m_songAwareDirectorTargetFamily = "none";
+    const char* m_songAwareDirectorTargetLanguage = "none";
+    const char* m_songAwareDirectorTransitionReason = "none";
+
+    /**
+     * MusicalGrid PLL - owned by renderer for 120 FPS Tick()
+     *
+     * This is the key insight from the plan: MusicalGrid.Tick() must be
+     * called in the RENDER domain at 120 FPS for smooth beat phase, not
+     * in the audio domain at 62.5 Hz. This gives "PLL freewheel" behavior
+     * where beat phase stays smooth even if audio stalls momentarily.
+     */
+#if FEATURE_AUDIO_BACKEND_ESV11
+    audio::esv11::EsBeatClock m_esBeatClock;
+#else
+    audio::MusicalGrid m_musicalGrid;
+#endif
+
+    /// Last ControlBusFrame read from AudioActor (by-value copy)
+    audio::ControlBusFrame m_lastControlBus;
+
+    /// Last MusicalGridSnapshot (populated by MusicalGrid or ES beat clock)
+    audio::MusicalGridSnapshot m_lastMusicalGrid;
+
+    /// Sequence number from last SnapshotBuffer read (for change detection)
+    uint32_t m_lastControlBusSeq = 0;
+
+#if FEATURE_AUDIO_SYNC
+    /// Trinity ControlBus proxy for offline ML analysis sync
+    audio::TrinityControlBusProxy m_trinityProxy;
+
+    /// Trinity sync state
+    bool m_trinitySyncActive = false;
+    bool m_trinitySyncPaused = false;
+    float m_trinitySyncPosition = 0.0f;
+
+    /// Trinity structure segment state (optional; driven by host)
+    uint8_t m_trinitySegmentIndex = 0xFF;     // 0xFF = unknown/unset
+    uint16_t m_trinitySegmentLabelHash = 0;   // 16-bit hash of label string (FNV-1a fold)
+    uint32_t m_trinitySegmentStartMs = 0;
+    uint32_t m_trinitySegmentEndMs = 0;
+#endif
+
+    // Audio availability latch (hysteresis) removed: keep simple gate based on
+    // sequence_changed || age_within_tolerance for predictability.
+
+    /// AudioTime from last ControlBus read (for extrapolation)
+    audio::AudioTime m_lastAudioTime;
+
+    /// micros() when we last read a new ControlBus frame
+    uint64_t m_lastAudioMicros = 0;
+
+    audio::AudioContractTuning m_audioContractTuning;
+    audio::AudioContractTuning m_audioContractPending;
+    std::atomic<uint32_t> m_audioContractSeq{0};
+    std::atomic<bool> m_audioContractDirty{false};
+
+    /**
+     * Pointer to AudioActor's SnapshotBuffer (set during init)
+     *
+     * This is a raw pointer because AudioActor owns the buffer, and
+     * we just read from it via the lock-free ReadLatest() method.
+     * Set to nullptr if AudioActor isn't running.
+     */
+    const audio::SnapshotBuffer<audio::ControlBusFrame>* m_controlBusBuffer = nullptr;
+    const audio::SnapshotBuffer<audio::ControlBusFrame>* m_stimulusControlBusBuffer = nullptr;
+
+    AudioInputMode m_audioInputMode = AudioInputMode::Live;
+    bool m_stimulusHasFrame = false;
+
+    /// Cached result of hasActiveMappings() - updated on effect change only
+    bool m_effectHasAudioMappings = false;
+
+    /// Extra gate for reactive effects in high-ID range (140+).
+    float m_highIdReactiveSilenceGate = 1.0f;
+    float m_highIdReactiveActivityGate = 0.0f;
+
+    /// Audio debug logging toggle (serial 'a' command)
+    bool m_audioDebugEnabled = false;
+
+    /// Bands debug snapshot (double buffer for lock-free read from serial handler)
+    mutable BandsDebugSnapshot m_bandsDebugSnapshot[2];
+    mutable std::atomic<uint8_t> m_bandsDebugWriteIndex{0};
+
+#if FEATURE_VRMS_METRICS
+    metrics::VRMSMetricsEngine m_vrmsMetrics;
+#endif
+#if FEATURE_VRMS_BENCHMARK
+    metrics::VRMSBenchmark m_vrmsBenchmark;
+#endif
+#if FEATURE_INPUT_MERGE_LAYER
+    merge::InputMergeLayer m_mergeLayer;
+#endif
+
+    // ========================================================================
+    // TempoTracker Integration (replaces K1)
+    // ========================================================================
+
+    /**
+     * Pointer to AudioActor's TempoTracker (set during init)
+     *
+     * The renderer calls advancePhase() at 120 FPS for smooth beat tracking.
+     * AudioActor calls updateNovelty() and updateTempo() per audio hop.
+     * Set to nullptr if AudioActor isn't running.
+     */
+#if !FEATURE_AUDIO_BACKEND_ESV11 && !FEATURE_AUDIO_BACKEND_PIPELINECORE
+    lightwaveos::audio::TempoTracker* m_tempo = nullptr;
+#endif
+#endif
+
+    /**
+     * @brief Capture frame at specified tap point
+     * @param tap Tap point to capture
+     * @param sourceBuffer Source buffer to copy from
+     */
+    void captureFrame(CaptureTap tap, const CRGB* sourceBuffer);
+};
+
+} // namespace actors
+} // namespace lightwaveos
+
+================================================================================
+FILE: firmware-v3/src/core/actors/RendererNode.h
+================================================================================
+
+/**
+ * @file RendererNode.h
+ * @brief Compatibility header - forwards to RendererActor.h
+ *
+ * This header provides backward compatibility for code that references
+ * RendererNode (the old name) instead of RendererActor (the new name).
+ */
+
+#pragma once
+
+#include "RendererActor.h"
+
+namespace lightwaveos {
+namespace nodes {
+    // Type alias for backward compatibility
+    using RendererNode = actors::RendererActor;
+} // namespace nodes
+} // namespace lightwaveos
+
+================================================================================
+FILE: firmware-v3/src/core/actors/ShowDirectorActor.h
+================================================================================
+
+/**
+ * @file ShowDirectorActor.h
+ * @brief Actor responsible for orchestrating choreographed light shows
+ *
+ * LightwaveOS v2 - Show System
+ *
+ * The ShowDirectorActor manages multi-minute light shows with:
+ * - Timed cues (effect changes, parameter sweeps, transitions)
+ * - Chapter-based narrative structure
+ * - Integration with NarrativeEngine for tension modulation
+ * - Message-based communication with RendererActor
+ *
+ * Architecture:
+ *   Commands (from other actors):
+ *     SHOW_LOAD, SHOW_START, SHOW_STOP, SHOW_PAUSE, SHOW_RESUME, SHOW_SEEK
+ *
+ *   Events (published to MessageBus):
+ *     SHOW_STARTED, SHOW_STOPPED, SHOW_PAUSED, SHOW_RESUMED, SHOW_CHAPTER_CHANGED
+ *
+ * @author LightwaveOS Team
+ * @version 2.0.0
+ */
+
+#pragma once
+
+#include "Actor.h"
+#include "../bus/MessageBus.h"
+#include "../shows/ShowTypes.h"
+#include "../shows/CueScheduler.h"
+#include "../shows/ParameterSweeper.h"
+#include "../narrative/NarrativeEngine.h"
+#include "../../config/features.h"
+
+// Forward declarations
+struct ShowDefinition;
+
+namespace lightwaveos {
+namespace actors {
+
+/**
+ * @brief Actor responsible for show orchestration
+ *
+ * Runs on Core 0 at priority 2 (background processing).
+ * Updates at 20Hz (50ms tick interval) to process cues and parameter sweeps.
+ */
+class ShowDirectorActor : public Actor {
+public:
+    /**
+     * @brief Construct the ShowDirectorActor
+     */
+    ShowDirectorActor();
+
+    /**
+     * @brief Destructor
+     */
+    ~ShowDirectorActor() override;
+
+    // ========================================================================
+    // State Accessors (read-only, for diagnostics)
+    // ========================================================================
+
+    bool hasShow() const { return m_currentShow != nullptr; }
+    bool isPlaying() const { return m_state.playing && !m_state.paused; }
+    bool isPaused() const { return m_state.paused; }
+    float getProgress() const;
+    uint8_t getCurrentChapter() const { return m_state.currentChapterIndex; }
+    uint8_t getCurrentShowId() const { return m_state.currentShowId; }
+    uint32_t getElapsedMs() const { return m_state.getElapsedMs(); }
+    uint32_t getRemainingMs() const;
+
+protected:
+    // ========================================================================
+    // Actor Lifecycle
+    // ========================================================================
+
+    void onStart() override;
+    void onMessage(const Message& msg) override;
+    void onTick() override;
+    void onStop() override;
+
+private:
+    // ========================================================================
+    // Show Control
+    // ========================================================================
+
+    bool loadShow(const ShowDefinition* show);
+    bool loadShowById(uint8_t showId);
+    void unloadShow();
+    void startShow();
+    void stopShow();
+    void pauseShow();
+    void resumeShow();
+    void seekShow(uint32_t timeMs);
+
+    // ========================================================================
+    // Show Update
+    // ========================================================================
+
+    void updateShow();
+    void executeCue(const ShowCue& cue);
+    void updateChapter(uint32_t elapsedMs);
+    void handleShowEnd();
+    uint8_t getChapterForTime(uint32_t timeMs) const;
+
+    // ========================================================================
+    // Narrative Integration
+    // ========================================================================
+
+    void modulateNarrative(uint8_t phase, uint8_t tension);
+    void setNarrativePhase(lightwaveos::effects::NarrativePhase phase, uint32_t durationMs);
+
+#if FEATURE_AUDIO_SYNC
+    // ========================================================================
+    // Trinity Semantic Bridge (PRISM/Trinity → ShowDirector)
+    // ========================================================================
+
+    /**
+     * @brief Apply semantic segment changes (trinity.segment) when no show is playing.
+     *
+     * Segment events are published by RendererActor on MessageBus when the host
+     * updates the current PRISM/Trinity structural segment.
+     *
+     * The bridge maps segment labels (hashed) into:
+     * - NarrativeEngine phase + tempo
+     * - Smooth parameter sweeps (brightness/speed) via ParameterSweeper
+     *
+     * This provides a lightweight semantic → parameter pipeline without any
+     * heap allocation in render paths.
+     */
+    void handleTrinitySegment(const Message& msg);
+
+    uint8_t m_lastTrinitySegmentIndex = 0xFF;
+    uint16_t m_lastTrinitySegmentLabelHash = 0;
+#endif
+
+    // ========================================================================
+    // Parameter Sweeper Callbacks
+    // ========================================================================
+
+    static void applyParamValue(ParamId param, uint8_t zone, uint8_t value);
+    static uint8_t getParamValue(ParamId param, uint8_t zone);
+
+    // ========================================================================
+    // Message Sending Helpers
+    // ========================================================================
+
+    void sendToRenderer(const Message& msg);
+    void publishShowEvent(MessageType eventType, uint8_t param1 = 0, uint8_t param2 = 0);
+
+    // ========================================================================
+    // Member Variables
+    // ========================================================================
+
+    const ShowDefinition* m_currentShow;  // PROGMEM pointer
+    ShowPlaybackState m_state;
+    shows::CueScheduler m_cueScheduler;
+    shows::ParameterSweeper m_paramSweeper;
+    ShowCue m_cueBuffer[shows::CueScheduler::MAX_CUES_PER_FRAME];
+
+    // Reference to RendererActor for sending commands
+    Actor* m_rendererActor;
+
+    // NarrativeEngine reference
+    narrative::NarrativeEngine* m_narrative;
+};
+
+} // namespace actors
+} // namespace lightwaveos
+
+================================================================================
+FILE: firmware-v3/src/core/actors/NodeOrchestrator.h
+================================================================================
+
+/**
+ * @file NodeOrchestrator.h
+ * @brief Compatibility header - forwards to ActorSystem.h
+ *
+ * This header provides backward compatibility for code that references
+ * NodeOrchestrator (the old name) instead of ActorSystem (the new name).
+ */
+
+#pragma once
+
+#include "ActorSystem.h"
+
+namespace lightwaveos {
+namespace nodes {
+    // Type alias for backward compatibility
+    using NodeOrchestrator = actors::ActorSystem;
+} // namespace nodes
+} // namespace lightwaveos
+
+================================================================================
+FILE: firmware-v3/src/core/synqmatrix/SynqMatrix.h
+================================================================================
+
+/**
+ * @file SynqMatrix.h
+ * @brief Runtime-only synq-matrix parameter and visual-language director.
+ */
+
+#pragma once
+
+#include <atomic>
+#include <cstdint>
+
+#include "../../config/effect_ids.h"
+#include "../../config/features.h"
+
+#if FEATURE_AUDIO_SYNC
+#include "../../audio/contracts/ControlBus.h"
+#include "../../audio/contracts/MusicalGrid.h"
+#endif
+
+namespace lightwaveos {
+namespace synqmatrix {
+
+enum class SynqMatrixMode : uint8_t {
+    Off = 0,
+    Assist = 1,
+    Director = 2
+};
+
+enum class SynqMatrixProfile : uint8_t {
+    Subtle = 0,
+    Balanced = 1,
+    High = 2
+};
+
+enum class SynqMatrixOwner : uint8_t {
+    None = 0,
+    Director = 1,
+    Manual = 2,
+    Show = 3
+};
+
+enum class SynqMatrixSuppressedReason : uint8_t {
+    None = 0,
+    Disabled = 1,
+    NoAudio = 2,
+    LowConfidence = 3,
+    UnsupportedMode = 4,
+    ManualOwner = 5,
+    ShowOwner = 6,
+    SwitchingDisabled = 7,
+    Dwell = 8,
+    Cooldown = 9,
+    RateLimit = 10,
+    Health = 11,
+    SameEffect = 12,
+    TargetUnavailable = 13,
+    BootGrace = 14,
+    EnableGrace = 15,
+    CandidateUnstable = 16,
+    AntiThrash = 17,
+    TransitionActive = 18,
+    HealthRecovering = 19,
+    BoundaryDeferred = 20,
+    AllowlistDisabled = 21,
+    ImpossibleTransition = 22
+};
+
+enum class SynqMatrixState : uint8_t {
+    Unknown = 0,
+    Silence = 1,
+    Ambient = 2,
+    Steady = 3,
+    Build = 4,
+    Drop = 5,
+    Breakdown = 6,
+    Dense = 7,
+    Transition = 8
+};
+
+enum class SynqMatrixLastAction : uint8_t {
+    None = 0,
+    ParameterUpdate = 1,
+    EffectSwitch = 2,
+    SwitchSuppressed = 3
+};
+
+enum class SynqMatrixActionPlan : uint8_t {
+    None = 0,
+    ParameterModulation = 1,
+    PaletteShift = 2,
+    ColourModifierShift = 3,
+    EdgeMixerAdjust = 4,
+    ZoneComposerAdjust = 5,
+    EffectSwitch = 6
+};
+
+enum class SynqMatrixIntent : uint8_t {
+    QuietHold = 0,
+    CalmHold = 1,
+    ReadableMotion = 2,
+    BuildPressure = 3,
+    DropImpact = 4,
+    ReleaseSpace = 5,
+    LegibilityControl = 6,
+    TransitionBridge = 7
+};
+
+enum class SynqMatrixBoundaryGate : uint8_t {
+    NotRequired = 0,
+    WaitingForBoundary = 1,
+    BeatBoundary = 2,
+    DownbeatBoundary = 3,
+    PhaseFallback = 4
+};
+
+enum class SynqMatrixSwitchReason : uint8_t {
+    None = 0,
+    AmbientPosture = 1,
+    SteadyReadability = 2,
+    BuildPressure = 3,
+    DropImpact = 4,
+    BreakdownRelease = 5,
+    DenseLegibility = 6,
+    TransitionBridge = 7
+};
+
+enum class SynqMatrixClassificationReason : uint8_t {
+    None = 0,
+    NoAudio = 1,
+    SilentFrame = 2,
+    LowConfidence = 3,
+    DropOnset = 4,
+    SpectralTransition = 5,
+    QuietBreakdown = 6,
+    DenseEnergy = 7,
+    BuildEnergy = 8,
+    AmbientLowEnergy = 9,
+    SteadyDefault = 10
+};
+
+static constexpr uint8_t kSynqMatrixMaxPolicySnapshotCount = 12;
+
+struct SynqMatrixConfig {
+    bool enabled = false;
+    SynqMatrixMode mode = SynqMatrixMode::Off;
+    SynqMatrixProfile profile = SynqMatrixProfile::Balanced;
+    bool familyMorphing = false;
+    bool constrainedSwitching = false;
+    bool switchingEnabled = false;
+    float sensitivity = 1.0f;
+    float intensityScalar = 1.0f;
+    float motionScalar = 1.0f;
+    float confidenceFloor = 0.20f;
+};
+
+struct SynqMatrixStatus {
+    bool enabled = false;
+    SynqMatrixMode effectiveMode = SynqMatrixMode::Off;
+    SynqMatrixProfile profile = SynqMatrixProfile::Balanced;
+    SynqMatrixOwner owner = SynqMatrixOwner::None;
+    SynqMatrixSuppressedReason suppressedReason = SynqMatrixSuppressedReason::Disabled;
+    SynqMatrixSuppressedReason previousSuppressedReason = SynqMatrixSuppressedReason::Disabled;
+    SynqMatrixClassificationReason classificationReason = SynqMatrixClassificationReason::None;
+    SynqMatrixState rawSongState = SynqMatrixState::Unknown;
+    SynqMatrixState previousSongState = SynqMatrixState::Unknown;
+    SynqMatrixState currentSongState = SynqMatrixState::Unknown;
+    SynqMatrixState candidateSongState = SynqMatrixState::Unknown;
+    SynqMatrixLastAction lastAction = SynqMatrixLastAction::None;
+    SynqMatrixIntent intent = SynqMatrixIntent::QuietHold;
+    SynqMatrixActionPlan actionPlan = SynqMatrixActionPlan::None;
+    SynqMatrixBoundaryGate boundaryGate = SynqMatrixBoundaryGate::NotRequired;
+    bool boundaryReady = false;
+    bool waitingForBoundary = false;
+    float boundaryConfidence = 0.0f;
+    float confidence = 0.0f;
+    float selectionScore = 0.0f;
+    uint32_t parameterUpdates = 0;
+    uint32_t automaticEffectSwitches = 0;
+    uint32_t lastDecisionAtMs = 0;
+    uint32_t lastSwitchAtMs = 0;
+    uint32_t stateAgeMs = 0;
+    uint32_t candidateAgeMs = 0;
+    uint32_t candidateHoldRemainingMs = 0;
+    uint32_t dwellRemainingMs = 0;
+    uint32_t cooldownRemainingMs = 0;
+    uint32_t bootGraceRemainingMs = 0;
+    uint32_t enableGraceRemainingMs = 0;
+    uint32_t switchWindowRemainingMs = 0;
+    uint8_t switchesInWindow = 0;
+    uint8_t maxSwitchesPerWindow = 0;
+    uint32_t antiThrashRemainingMs = 0;
+    uint16_t activeEffectId = INVALID_EFFECT_ID;
+    uint16_t previousEffectId = INVALID_EFFECT_ID;
+    uint16_t selectedEffectId = INVALID_EFFECT_ID;
+    uint16_t lastSwitchFromEffectId = INVALID_EFFECT_ID;
+    uint16_t lastSwitchToEffectId = INVALID_EFFECT_ID;
+    const char* activeEffectName = "Unknown";
+    const char* selectedFamily = "none";
+    const char* selectedVisualLanguage = "none";
+    const char* lastSwitchReason = "none";
+    bool transitionActive = false;
+    uint16_t transitionPreviousEffectId = INVALID_EFFECT_ID;
+    uint16_t transitionTargetEffectId = INVALID_EFFECT_ID;
+    uint32_t transitionStartedAtMs = 0;
+    uint32_t transitionDurationMs = 0;
+    uint32_t transitionRemainingMs = 0;
+    float transitionProgress = 0.0f;
+    uint32_t showSkips = 0;
+    uint32_t failures = 0;
+    uint32_t rmtErrors = 0;
+    uint32_t underruns = 0;
+    bool healthDegraded = false;
+    uint32_t healthCleanForMs = 0;
+    uint32_t healthCleanWindowRemainingMs = 0;
+    float rms = 0.0f;
+    float flux = 0.0f;
+    float bpm = 0.0f;
+    float audioConfidence = 0.0f;
+};
+
+struct SynqMatrixParams {
+    uint16_t effectId = INVALID_EFFECT_ID;
+    uint8_t brightness = 0;
+    uint8_t speed = 1;
+    uint8_t intensity = 0;
+    uint8_t saturation = 0;
+    uint8_t complexity = 0;
+    uint8_t variation = 0;
+    uint8_t hue = 0;
+};
+
+struct SynqMatrixHealthCounters {
+    uint32_t showSkips = 0;
+    uint32_t failures = 0;
+    uint32_t rmtErrors = 0;
+    uint32_t underruns = 0;
+};
+
+struct SynqMatrixContext {
+    SynqMatrixHealthCounters health;
+};
+
+struct SynqMatrixSwitchRequest {
+    bool requested = false;
+    uint16_t targetEffectId = INVALID_EFFECT_ID;
+    const char* targetFamily = "none";
+    const char* targetVisualLanguage = "none";
+    const char* reason = "none";
+};
+
+struct SynqMatrixPolicySnapshot {
+    SynqMatrixState state = SynqMatrixState::Unknown;
+    uint16_t effectId = INVALID_EFFECT_ID;
+    const char* family = "none";
+    const char* visualLanguage = "none";
+    SynqMatrixSwitchReason reason = SynqMatrixSwitchReason::None;
+    float minConfidence = 1.0f;
+    bool enabled = true;
+};
+
+struct SynqMatrixSelectionSnapshot {
+    bool valid = false;
+    SynqMatrixPolicySnapshot policy;
+    float score = 0.0f;
+};
+
+struct SynqMatrixAllowlistSnapshot {
+    uint8_t count = 0;
+    SynqMatrixPolicySnapshot policies[kSynqMatrixMaxPolicySnapshotCount] = {};
+};
+
+struct SynqMatrixDebugSnapshot {
+    SynqMatrixConfig config;
+    SynqMatrixStatus status;
+    SynqMatrixAllowlistSnapshot allowlist;
+    uint32_t bootGraceMs = 0;
+    uint32_t postEnableGraceMs = 0;
+    uint32_t stableStateHoldMs = 0;
+    uint32_t dropStateHoldMs = 0;
+    uint32_t minimumDwellMs = 0;
+    uint32_t switchCooldownMs = 0;
+    uint32_t switchWindowMs = 0;
+    uint8_t maxSwitchesPerWindow = 0;
+    uint32_t antiThrashWindowMs = 0;
+    uint32_t healthCleanWindowMs = 0;
+};
+
+struct SynqMatrixRuntimeState {
+    SynqMatrixConfig config;
+    SynqMatrixStatus status;
+    uint16_t policyAllowMask = 0;
+    uint32_t manualSuppressUntilMs = 0;
+    uint32_t showSuppressUntilMs = 0;
+    uint32_t bootGraceUntilMs = 0;
+    uint32_t enableGraceUntilMs = 0;
+    uint32_t healthCleanSinceMs = 0;
+    uint32_t healthLastDegradedAtMs = 0;
+    uint32_t antiThrashUntilMs = 0;
+};
+
+class SynqMatrix {
+public:
+    static SynqMatrix& instance();
+
+    void reset();
+    void resetCounters();
+    void setConfig(const SynqMatrixConfig& config);
+    SynqMatrixConfig getConfig() const;
+    SynqMatrixStatus getStatus() const;
+    SynqMatrixRuntimeState exportRuntimeState() const;
+    void restoreRuntimeState(const SynqMatrixRuntimeState& state);
+    SynqMatrixDebugSnapshot getDebugSnapshot() const;
+    SynqMatrixSelectionSnapshot resolveSelection(SynqMatrixState state,
+                                                float confidence,
+                                                uint16_t activeEffectId) const;
+    static uint8_t policyCount();
+    static bool policySnapshot(uint8_t index, SynqMatrixPolicySnapshot& snapshot);
+    static uint8_t copyPolicyTable(SynqMatrixPolicySnapshot* out, uint8_t capacity);
+    static SynqMatrixAllowlistSnapshot policyTableSnapshot();
+    SynqMatrixAllowlistSnapshot getAllowlistSnapshot() const;
+    bool setPolicyAllowed(SynqMatrixState state, bool enabled);
+    bool isPolicyAllowed(SynqMatrixState state) const;
+    void resetPolicyAllowlist();
+    void markManualControl(uint32_t nowMs);
+    void markShowControl(uint32_t nowMs);
+    bool isShowOwnerActive(uint32_t nowMs) const;
+
+#if FEATURE_AUDIO_SYNC
+    bool tick(const audio::ControlBusFrame& frame,
+                          const audio::MusicalGridSnapshot& grid,
+                          bool audioAvailable,
+                          uint32_t nowMs,
+                          uint16_t activeEffectId,
+                          const SynqMatrixContext& context,
+                          SynqMatrixSwitchRequest& request);
+    void notifySwitchApplied(uint16_t previousEffectId,
+                             uint16_t targetEffectId,
+                             uint32_t nowMs,
+                             const char* activeEffectName);
+    void notifySwitchRejected(uint16_t targetEffectId,
+                              uint32_t nowMs,
+                              SynqMatrixSuppressedReason reason);
+    void notifyTransitionStarted(uint16_t previousEffectId,
+                                 uint16_t targetEffectId,
+                                 uint32_t nowMs,
+                                 uint32_t durationMs);
+    void notifyTransitionCompleted(uint32_t nowMs);
+    bool apply(const audio::ControlBusFrame& frame,
+               const audio::MusicalGridSnapshot& grid,
+               bool audioAvailable,
+               float dtSeconds,
+               uint32_t nowMs,
+               SynqMatrixParams& params);
+#endif
+
+private:
+    static float clamp01(float value);
+    static uint8_t clampU8(int value, uint8_t minValue, uint8_t maxValue);
+    static uint16_t scaleFloat(float value);
+    static float unscaleFloat(uint16_t value);
+
+#if FEATURE_AUDIO_SYNC
+    struct SynqMatrixFeatureSnapshot {
+        float energy = 0.0f;
+        float slowEnergy = 0.0f;
+        float fastSlowRatio = 1.0f;
+        float flux = 0.0f;
+        float onsetStrength = 0.0f;
+        float beatStrength = 0.0f;
+        float tempoConfidence = 0.0f;
+        float liveliness = 0.0f;
+        float saliency = 0.0f;
+        float adaptiveFloor = 0.0f;
+        bool boundaryReady = false;
+        SynqMatrixBoundaryGate boundaryGate = SynqMatrixBoundaryGate::WaitingForBoundary;
+        float boundaryConfidence = 0.0f;
+    };
+
+    SynqMatrixFeatureSnapshot buildFeatureSnapshot(const audio::ControlBusFrame& frame,
+                                                  const audio::MusicalGridSnapshot& grid,
+                                                  bool audioAvailable,
+                                                  float dtSeconds);
+    SynqMatrixState classifyState(const audio::ControlBusFrame& frame,
+                                 const SynqMatrixFeatureSnapshot& features,
+                                 bool audioAvailable,
+                                 float confidence);
+    SynqMatrixState updateStableState(SynqMatrixState rawState,
+                                     float confidence,
+                                     uint32_t nowMs);
+    void updateAudioSummary(const audio::ControlBusFrame& frame, bool audioAvailable);
+#endif
+    SynqMatrixIntent planIntent(SynqMatrixState state) const;
+    SynqMatrixActionPlan resolveActionPlan(SynqMatrixMode mode,
+                                          SynqMatrixProfile profile,
+                                          SynqMatrixState state,
+                                          bool switching) const;
+#if FEATURE_AUDIO_SYNC
+    bool transitionIsAllowed(SynqMatrixState from,
+                             SynqMatrixState to,
+                             const SynqMatrixFeatureSnapshot& features) const;
+    void updateIntentTelemetry(SynqMatrixState state,
+                               SynqMatrixActionPlan actionPlan,
+                               const SynqMatrixFeatureSnapshot& features);
+#endif
+    void setSuppressed(SynqMatrixSuppressedReason reason, SynqMatrixOwner owner);
+    void updateRemainingGates(uint32_t nowMs);
+    void updateTransitionTelemetry(uint32_t nowMs);
+    void updateHealthTracking(SynqMatrixHealthCounters health, uint32_t nowMs);
+    bool graceSuppresses(uint32_t nowMs, SynqMatrixSuppressedReason& reason);
+    bool wouldCreateAbaSwitch(uint16_t activeEffectId, uint16_t targetEffectId, uint32_t nowMs) const;
+    bool healthIsDegraded(SynqMatrixHealthCounters health) const;
+    float scorePolicy(SynqMatrixState state, float confidence, const SynqMatrixPolicySnapshot& policy) const;
+
+    std::atomic<bool> m_enabled{false};
+    std::atomic<uint8_t> m_mode{static_cast<uint8_t>(SynqMatrixMode::Off)};
+    std::atomic<uint8_t> m_profile{static_cast<uint8_t>(SynqMatrixProfile::Balanced)};
+    std::atomic<bool> m_familyMorphing{false};
+    std::atomic<bool> m_constrainedSwitching{false};
+    std::atomic<bool> m_switchingEnabled{false};
+    std::atomic<uint16_t> m_sensitivityQ1000{1000};
+    std::atomic<uint16_t> m_intensityScalarQ1000{1000};
+    std::atomic<uint16_t> m_motionScalarQ1000{1000};
+    std::atomic<uint16_t> m_confidenceFloorQ1000{200};
+
+    std::atomic<uint8_t> m_effectiveMode{static_cast<uint8_t>(SynqMatrixMode::Off)};
+    std::atomic<uint8_t> m_owner{static_cast<uint8_t>(SynqMatrixOwner::None)};
+    std::atomic<uint8_t> m_suppressedReason{static_cast<uint8_t>(SynqMatrixSuppressedReason::Disabled)};
+    std::atomic<uint8_t> m_previousSuppressedReason{static_cast<uint8_t>(SynqMatrixSuppressedReason::Disabled)};
+    std::atomic<uint8_t> m_classificationReason{static_cast<uint8_t>(SynqMatrixClassificationReason::None)};
+    std::atomic<uint8_t> m_rawSongState{static_cast<uint8_t>(SynqMatrixState::Unknown)};
+    std::atomic<uint8_t> m_previousSongState{static_cast<uint8_t>(SynqMatrixState::Unknown)};
+    std::atomic<uint8_t> m_currentSongState{static_cast<uint8_t>(SynqMatrixState::Unknown)};
+    std::atomic<uint8_t> m_lastAction{static_cast<uint8_t>(SynqMatrixLastAction::None)};
+    std::atomic<uint8_t> m_intent{static_cast<uint8_t>(SynqMatrixIntent::QuietHold)};
+    std::atomic<uint8_t> m_actionPlan{static_cast<uint8_t>(SynqMatrixActionPlan::None)};
+    std::atomic<uint8_t> m_boundaryGate{static_cast<uint8_t>(SynqMatrixBoundaryGate::NotRequired)};
+    std::atomic<bool> m_boundaryReady{false};
+    std::atomic<bool> m_waitingForBoundary{false};
+    std::atomic<uint16_t> m_boundaryConfidenceQ1000{0};
+    std::atomic<uint16_t> m_confidenceQ1000{0};
+    std::atomic<uint16_t> m_driveQ1000{0};
+    std::atomic<uint16_t> m_slowEnergyQ1000{0};
+    std::atomic<uint16_t> m_adaptiveFloorQ1000{40};
+    std::atomic<uint16_t> m_selectionScoreQ1000{0};
+    std::atomic<uint32_t> m_parameterUpdates{0};
+    std::atomic<uint32_t> m_automaticEffectSwitches{0};
+    std::atomic<uint32_t> m_lastDecisionAtMs{0};
+    std::atomic<uint32_t> m_lastSwitchAtMs{0};
+    std::atomic<uint32_t> m_stateAgeMs{0};
+    std::atomic<uint32_t> m_candidateAgeMs{0};
+    std::atomic<uint32_t> m_candidateHoldRemainingMs{0};
+    std::atomic<uint32_t> m_dwellRemainingMs{0};
+    std::atomic<uint32_t> m_cooldownRemainingMs{0};
+    std::atomic<uint32_t> m_bootGraceUntilMs{3000};
+    std::atomic<uint32_t> m_enableGraceUntilMs{0};
+    std::atomic<bool> m_enableGracePending{false};
+    std::atomic<uint32_t> m_switchWindowRemainingMs{0};
+    std::atomic<uint32_t> m_antiThrashUntilMs{0};
+    std::atomic<uint32_t> m_activeEffectId{INVALID_EFFECT_ID};
+    std::atomic<uint32_t> m_previousEffectId{INVALID_EFFECT_ID};
+    std::atomic<uint32_t> m_selectedEffectId{INVALID_EFFECT_ID};
+    std::atomic<uint8_t> m_selectedPolicyIndex{0};
+    std::atomic<uint8_t> m_lastSwitchReason{static_cast<uint8_t>(SynqMatrixSwitchReason::None)};
+    std::atomic<uint16_t> m_rmsQ1000{0};
+    std::atomic<uint16_t> m_fluxQ1000{0};
+    std::atomic<uint16_t> m_bpmQ10{0};
+    std::atomic<uint16_t> m_audioConfidenceQ1000{0};
+    std::atomic<uint32_t> m_showSkips{0};
+    std::atomic<uint32_t> m_failures{0};
+    std::atomic<uint32_t> m_rmtErrors{0};
+    std::atomic<uint32_t> m_underruns{0};
+    std::atomic<uint32_t> m_manualSuppressUntilMs{0};
+    std::atomic<uint32_t> m_showSuppressUntilMs{0};
+    std::atomic<uint32_t> m_lastEvaluationAtMs{0};
+    std::atomic<uint32_t> m_stateEnteredAtMs{0};
+    std::atomic<uint8_t> m_candidateState{static_cast<uint8_t>(SynqMatrixState::Unknown)};
+    std::atomic<uint32_t> m_candidateSinceMs{0};
+    std::atomic<uint32_t> m_switchWindowStartMs{0};
+    std::atomic<uint8_t> m_switchesInWindow{0};
+    std::atomic<uint32_t> m_lastSwitchFromEffectId{INVALID_EFFECT_ID};
+    std::atomic<uint32_t> m_lastSwitchToEffectId{INVALID_EFFECT_ID};
+    std::atomic<bool> m_transitionActive{false};
+    std::atomic<uint32_t> m_transitionPreviousEffectId{INVALID_EFFECT_ID};
+    std::atomic<uint32_t> m_transitionTargetEffectId{INVALID_EFFECT_ID};
+    std::atomic<uint32_t> m_transitionStartedAtMs{0};
+    std::atomic<uint32_t> m_transitionDurationMs{0};
+    std::atomic<uint32_t> m_transitionRemainingMs{0};
+    std::atomic<uint16_t> m_transitionProgressQ1000{0};
+    std::atomic<bool> m_healthDegraded{false};
+    std::atomic<uint32_t> m_healthCleanSinceMs{0};
+    std::atomic<uint32_t> m_healthLastDegradedAtMs{0};
+    std::atomic<uint32_t> m_healthCleanForMs{0};
+    std::atomic<uint32_t> m_healthCleanWindowRemainingMs{0};
+    std::atomic<uint16_t> m_policyAllowMask{0x01FF};
+};
+
+const char* songAwareModeName(SynqMatrixMode mode);
+const char* songAwareProfileName(SynqMatrixProfile profile);
+const char* songAwareOwnerName(SynqMatrixOwner owner);
+const char* songAwareSuppressedReasonName(SynqMatrixSuppressedReason reason);
+const char* songAwareStateName(SynqMatrixState state);
+const char* songAwareLastActionName(SynqMatrixLastAction action);
+const char* songAwareActionPlanName(SynqMatrixActionPlan action);
+const char* songAwareIntentName(SynqMatrixIntent intent);
+const char* songAwareBoundaryGateName(SynqMatrixBoundaryGate gate);
+const char* songAwareSwitchReasonName(SynqMatrixSwitchReason reason);
+const char* songAwareClassificationReasonName(SynqMatrixClassificationReason reason);
+SynqMatrixMode parseSynqMatrixMode(const char* value, bool* ok = nullptr);
+SynqMatrixProfile parseSynqMatrixProfile(const char* value, bool* ok = nullptr);
+SynqMatrixState parseSynqMatrixState(const char* value, bool* ok = nullptr);
+
+} // namespace synqmatrix
+} // namespace lightwaveos

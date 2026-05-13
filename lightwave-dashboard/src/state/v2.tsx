@@ -4,9 +4,86 @@ import { V2Client } from '../services/v2/client';
 import { v2Api } from '../services/v2/api';
 import type { V2AuthMode } from '../services/v2/config';
 import { buildV2BaseUrl, buildV2WsUrl, loadV2Settings, saveV2Settings } from '../services/v2/config';
-import type { V2DeviceInfo, V2DeviceStatus, V2EffectCategories, V2EffectCurrent, V2EffectsList, V2PaletteCurrent, V2PalettesList, V2Parameters, V2ZonesState } from '../services/v2/types';
+import type { V2DeviceInfo, V2DeviceStatus, V2EffectCategories, V2EffectCurrent, V2EffectsList, V2PaletteCurrent, V2PalettesList, V2Parameters, V2WsEvent, V2Zone, V2ZonesState } from '../services/v2/types';
 import { V2ApiError } from '../services/v2/types';
 import { V2WsClient, type WsStatus } from '../services/v2/ws';
+
+// ---------------------------------------------------------------------------
+// Exported pure reducer/extractor helpers (used by tests and internal handlers)
+// ---------------------------------------------------------------------------
+
+/**
+ * Extracts a partial V2Parameters snapshot from any WS event shape that
+ * carries parameter fields. Handles: 'status', 'parameters', 'parameters.changed'.
+ * Returns null when the event carries no recognisable parameter data.
+ */
+export function extractWsParameters(ev: V2WsEvent | Record<string, unknown>): Partial<V2Parameters> | null {
+  const e = ev as Record<string, unknown>;
+  // parameters.changed response shape: { type, success, data: { updated, current } }
+  if (e['type'] === 'parameters.changed' && e['data'] && typeof e['data'] === 'object') {
+    const d = e['data'] as Record<string, unknown>;
+    if (d['current']) return d['current'] as Partial<V2Parameters>;
+  }
+  // Direct parameter field shape: 'parameters' or 'status' events with inline fields
+  if (e['type'] === 'parameters' || e['type'] === 'status') {
+    // Exclude non-parameter envelope fields; return remaining fields as a partial parameter snapshot
+    const excluded = new Set(['type', 'timestamp', 'success']);
+    const rest = Object.fromEntries(Object.entries(e).filter(([k]) => !excluded.has(k)));
+    return rest as Partial<V2Parameters>;
+  }
+  return null;
+}
+
+/**
+ * Merges a partial parameter update onto an existing V2Parameters snapshot.
+ */
+export function mergeParameters(current: V2Parameters, partial: Partial<V2Parameters>): V2Parameters {
+  return { ...current, ...partial };
+}
+
+/**
+ * Extracts a V2ZonesState from a 'zones.list' WS event.
+ * Returns null for unrecognised event types.
+ */
+export function extractZonesList(ev: V2WsEvent | Record<string, unknown>): V2ZonesState | null {
+  const e = ev as Record<string, unknown>;
+  if (e['type'] !== 'zones.list') return null;
+  return {
+    enabled: e['enabled'] as boolean,
+    zoneCount: e['zoneCount'] as number,
+    segments: e['segments'] as V2ZonesState['segments'],
+    zones: e['zones'] as V2Zone[],
+  };
+}
+
+/**
+ * Applies a 'zones.changed' event to an existing V2ZonesState.
+ * Matches the zone by its wire `id` field (1-indexed, post-B2 d53092ad) — NOT by array index.
+ * Handles both flat (top-level zoneId) and wrapped (data.zoneId) event shapes.
+ */
+export function reduceZonesChanged(state: V2ZonesState, ev: V2WsEvent | Record<string, unknown>): V2ZonesState | null {
+  const e = ev as Record<string, unknown>;
+  if (e['type'] !== 'zones.changed') return null;
+
+  let wireZoneId: number;
+  let current: Partial<V2Zone>;
+
+  // Wrapped shape: { type, success, data: { zoneId, updated, current } }
+  if (e['data'] && typeof e['data'] === 'object') {
+    const d = e['data'] as Record<string, unknown>;
+    wireZoneId = d['zoneId'] as number;
+    current = (d['current'] ?? {}) as Partial<V2Zone>;
+  } else {
+    // Flat shape (standard V2WsEvent): { type, zoneId, updated, current }
+    wireZoneId = e['zoneId'] as number;
+    current = (e['current'] ?? {}) as Partial<V2Zone>;
+  }
+
+  const updatedZones = state.zones.map(zone =>
+    zone.id === wireZoneId ? { ...zone, ...current } : zone
+  );
+  return { ...state, zones: updatedZones };
+}
 
 export interface V2ConnectionState {
   httpOk: boolean;
@@ -119,14 +196,10 @@ export const V2Provider: React.FC<React.PropsWithChildren<{ autoConnect?: boolea
           setConnection(prev => ({ ...prev, lastOkAt: Date.now() }));
         }
         if (ev.type === 'zones.changed') {
-          const zoneEv = ev as { type: 'zones.changed'; zoneId: number; current: Partial<import('../services/v2/types').V2Zone> };
           setZones(prev => {
             if (!prev) return prev;
-            const updatedZones = [...prev.zones];
-            if (updatedZones[zoneEv.zoneId]) {
-              updatedZones[zoneEv.zoneId] = { ...updatedZones[zoneEv.zoneId], ...zoneEv.current };
-            }
-            return { ...prev, zones: updatedZones };
+            // Match zone by wire id field (1-indexed, post-B2 d53092ad) rather than array index.
+            return reduceZonesChanged(prev, ev) ?? prev;
           });
           setConnection(prev => ({ ...prev, lastOkAt: Date.now() }));
         }

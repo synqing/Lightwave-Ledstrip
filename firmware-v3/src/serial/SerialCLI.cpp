@@ -24,6 +24,7 @@
 #include "core/actors/RendererActor.h"
 #include "core/narrative/NarrativeEngine.h"
 #include "core/persistence/ZoneConfigManager.h"
+#include "core/synqmatrix/SynqMatrix.h"
 #include "core/shows/DynamicShowStore.h"
 
 #include "effects/enhancement/EdgeMixer.h"
@@ -87,6 +88,419 @@ using namespace lightwaveos::narrative;
 namespace lightwaveos {
 namespace serial {
 
+namespace {
+
+lightwaveos::synqmatrix::SynqMatrixRuntimeState g_synqMatrixRestorePoint;
+bool g_synqMatrixRestorePointValid = false;
+
+const char* boolName(bool value) {
+    return value ? "true" : "false";
+}
+
+const char* onOffName(bool value) {
+    return value ? "on" : "off";
+}
+
+void printSynqMatrixStatus() {
+    const auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
+    const auto st = lightwaveos::synqmatrix::SynqMatrix::instance().getStatus();
+    const char* activeEffectName = st.activeEffectName;
+    RendererActor* ren = ActorSystem::instance().getRenderer();
+    if (ren != nullptr) {
+        activeEffectName = ren->getEffectName(static_cast<EffectId>(st.activeEffectId));
+    }
+    Serial.printf("synqMatrix: enabled=%s mode=%s profile=%s switchingEnabled=%s familyMorphing=%s sensitivity=%.3f intensityScalar=%.3f motionScalar=%.3f confidenceFloor=%.3f\n",
+                  boolName(cfg.enabled),
+                  lightwaveos::synqmatrix::synqMatrixModeName(cfg.mode),
+                  lightwaveos::synqmatrix::synqMatrixProfileName(cfg.profile),
+                  boolName(cfg.switchingEnabled),
+                  boolName(cfg.familyMorphing),
+                  cfg.sensitivity,
+                  cfg.intensityScalar,
+                  cfg.motionScalar,
+                  cfg.confidenceFloor);
+    Serial.printf("synqMatrix_status: mode=%s profile=%s owner=%s suppressed=%s state=%s intent=%s confidence=%.3f lastAction=%s actionPlan=%s boundary=%s ready=%s activeEffect=0x%04X activeEffectName=\"%s\" parameterUpdates=%lu automaticEffectSwitches=%lu lastDecisionAtMs=%lu\n",
+                  lightwaveos::synqmatrix::synqMatrixModeName(st.effectiveMode),
+                  lightwaveos::synqmatrix::synqMatrixProfileName(st.profile),
+                  lightwaveos::synqmatrix::synqMatrixOwnerName(st.owner),
+                  lightwaveos::synqmatrix::synqMatrixSuppressedReasonName(st.suppressedReason),
+                  lightwaveos::synqmatrix::synqMatrixStateName(st.currentState),
+                  lightwaveos::synqmatrix::synqMatrixIntentName(st.intent),
+                  st.confidence,
+                  lightwaveos::synqmatrix::synqMatrixLastActionName(st.lastAction),
+                  lightwaveos::synqmatrix::synqMatrixActionPlanName(st.actionPlan),
+                  lightwaveos::synqmatrix::synqMatrixBoundaryGateName(st.boundaryGate),
+                  boolName(st.boundaryReady),
+                  static_cast<unsigned>(st.activeEffectId),
+                  activeEffectName,
+                  static_cast<unsigned long>(st.parameterUpdates),
+                  static_cast<unsigned long>(st.automaticEffectSwitches),
+                  static_cast<unsigned long>(st.lastDecisionAtMs));
+    Serial.printf("synqMatrix_director: selectedEffect=0x%04X selectedFamily=%s selectedVisualLanguage=%s lastSwitchAtMs=%lu dwellRemainingMs=%lu cooldownRemainingMs=%lu lastSwitchReason=%s\n",
+                  static_cast<unsigned>(st.selectedEffectId),
+                  st.selectedFamily,
+                  st.selectedVisualLanguage,
+                  static_cast<unsigned long>(st.lastSwitchAtMs),
+                  static_cast<unsigned long>(st.dwellRemainingMs),
+                  static_cast<unsigned long>(st.cooldownRemainingMs),
+                  st.lastSwitchReason);
+    Serial.printf("synqMatrix_health: show_skips=%lu failures=%lu rmt_errors=%lu underruns=%lu\n",
+                  static_cast<unsigned long>(st.showSkips),
+                  static_cast<unsigned long>(st.failures),
+                  static_cast<unsigned long>(st.rmtErrors),
+                  static_cast<unsigned long>(st.underruns));
+    Serial.printf("synqMatrix_audio: RMS=%.3f flux=%.3f BPM=%.1f confidence=%.3f\n",
+                  st.rms,
+                  st.flux,
+                  st.bpm,
+                  st.audioConfidence);
+}
+
+void printSynqMatrixCompactStatus() {
+    const auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
+    const auto st = lightwaveos::synqmatrix::SynqMatrix::instance().getStatus();
+    Serial.printf("sa: enabled=%s mode=%s profile=%s switching=%s state=%s intent=%s confidence=%.2f gate=%s boundary=%s action=%s\n",
+                  boolName(cfg.enabled),
+                  lightwaveos::synqmatrix::synqMatrixModeName(cfg.mode),
+                  lightwaveos::synqmatrix::synqMatrixProfileName(cfg.profile),
+                  boolName(cfg.switchingEnabled),
+                  lightwaveos::synqmatrix::synqMatrixStateName(st.currentState),
+                  lightwaveos::synqmatrix::synqMatrixIntentName(st.intent),
+                  st.confidence,
+                  lightwaveos::synqmatrix::synqMatrixSuppressedReasonName(st.suppressedReason),
+                  lightwaveos::synqmatrix::synqMatrixBoundaryGateName(st.boundaryGate),
+                  lightwaveos::synqmatrix::synqMatrixActionPlanName(st.actionPlan));
+}
+
+void captureSynqMatrixRestorePoint() {
+    g_synqMatrixRestorePoint = lightwaveos::synqmatrix::SynqMatrix::instance().exportRuntimeState();
+    g_synqMatrixRestorePointValid = true;
+}
+
+void printSynqMatrixPolicySnapshot(const lightwaveos::synqmatrix::SynqMatrixPolicySnapshot& policy) {
+    Serial.printf("  state=%s enabled=%s effect=0x%04X family=%s visualLanguage=%s reason=%s minConfidence=%.3f\n",
+                  lightwaveos::synqmatrix::synqMatrixStateName(policy.state),
+                  boolName(policy.enabled),
+                  static_cast<unsigned>(policy.effectId),
+                  policy.family,
+                  policy.visualLanguage,
+                  lightwaveos::synqmatrix::synqMatrixSwitchReasonName(policy.reason),
+                  policy.minConfidence);
+}
+
+void printSynqMatrixAllowlist() {
+    const auto allowlist = lightwaveos::synqmatrix::SynqMatrix::instance().getAllowlistSnapshot();
+    Serial.printf("synqMatrix_allowlist: count=%u\n", allowlist.count);
+    for (uint8_t i = 0; i < allowlist.count; ++i) {
+        printSynqMatrixPolicySnapshot(allowlist.policies[i]);
+    }
+}
+
+void printSynqMatrixPolicy() {
+    const auto debug = lightwaveos::synqmatrix::SynqMatrix::instance().getDebugSnapshot();
+    Serial.println("synqMatrix_policy:");
+    Serial.printf("  bootGraceMs=%lu postEnableGraceMs=%lu stableStateHoldMs=%lu dropStateHoldMs=%lu\n",
+                  static_cast<unsigned long>(debug.bootGraceMs),
+                  static_cast<unsigned long>(debug.postEnableGraceMs),
+                  static_cast<unsigned long>(debug.stableStateHoldMs),
+                  static_cast<unsigned long>(debug.dropStateHoldMs));
+    Serial.printf("  minimumDwellMs=%lu switchCooldownMs=%lu switchWindowMs=%lu maxSwitchesPerWindow=%u\n",
+                  static_cast<unsigned long>(debug.minimumDwellMs),
+                  static_cast<unsigned long>(debug.switchCooldownMs),
+                  static_cast<unsigned long>(debug.switchWindowMs),
+                  debug.maxSwitchesPerWindow);
+    Serial.printf("  antiThrashWindowMs=%lu healthCleanWindowMs=%lu allowlistCount=%u\n",
+                  static_cast<unsigned long>(debug.antiThrashWindowMs),
+                  static_cast<unsigned long>(debug.healthCleanWindowMs),
+                  debug.allowlist.count);
+}
+
+void printSynqMatrixHealth() {
+    const auto st = lightwaveos::synqmatrix::SynqMatrix::instance().getStatus();
+    Serial.printf("synqMatrix_health: degraded=%s show_skips=%lu failures=%lu rmt_errors=%lu underruns=%lu cleanForMs=%lu cleanWindowRemainingMs=%lu\n",
+                  boolName(st.healthDegraded),
+                  static_cast<unsigned long>(st.showSkips),
+                  static_cast<unsigned long>(st.failures),
+                  static_cast<unsigned long>(st.rmtErrors),
+                  static_cast<unsigned long>(st.underruns),
+                  static_cast<unsigned long>(st.healthCleanForMs),
+                  static_cast<unsigned long>(st.healthCleanWindowRemainingMs));
+}
+
+void printSynqMatrixDebug() {
+    const auto st = lightwaveos::synqmatrix::SynqMatrix::instance().getStatus();
+    printSynqMatrixStatus();
+    Serial.printf("synqMatrix_debug: rawState=%s previousState=%s candidateState=%s classificationReason=%s previousSuppressed=%s selectionScore=%.3f\n",
+                  lightwaveos::synqmatrix::synqMatrixStateName(st.rawState),
+                  lightwaveos::synqmatrix::synqMatrixStateName(st.previousState),
+                  lightwaveos::synqmatrix::synqMatrixStateName(st.candidateState),
+                  lightwaveos::synqmatrix::synqMatrixClassificationReasonName(st.classificationReason),
+                  lightwaveos::synqmatrix::synqMatrixSuppressedReasonName(st.previousSuppressedReason),
+                  st.selectionScore);
+    Serial.printf("synqMatrix_debug_gates: stateAgeMs=%lu candidateAgeMs=%lu candidateHoldRemainingMs=%lu bootGraceRemainingMs=%lu enableGraceRemainingMs=%lu antiThrashRemainingMs=%lu\n",
+                  static_cast<unsigned long>(st.stateAgeMs),
+                  static_cast<unsigned long>(st.candidateAgeMs),
+                  static_cast<unsigned long>(st.candidateHoldRemainingMs),
+                  static_cast<unsigned long>(st.bootGraceRemainingMs),
+                  static_cast<unsigned long>(st.enableGraceRemainingMs),
+                  static_cast<unsigned long>(st.antiThrashRemainingMs));
+    Serial.printf("synqMatrix_debug_switching: switchesInWindow=%u maxSwitchesPerWindow=%u switchWindowRemainingMs=%lu previousEffect=0x%04X lastFrom=0x%04X lastTo=0x%04X\n",
+                  st.switchesInWindow,
+                  st.maxSwitchesPerWindow,
+                  static_cast<unsigned long>(st.switchWindowRemainingMs),
+                  static_cast<unsigned>(st.previousEffectId),
+                  static_cast<unsigned>(st.lastSwitchFromEffectId),
+                  static_cast<unsigned>(st.lastSwitchToEffectId));
+    Serial.printf("synqMatrix_debug_transition: active=%s previous=0x%04X target=0x%04X startedAtMs=%lu durationMs=%lu remainingMs=%lu progress=%.3f\n",
+                  boolName(st.transitionActive),
+                  static_cast<unsigned>(st.transitionPreviousEffectId),
+                  static_cast<unsigned>(st.transitionTargetEffectId),
+                  static_cast<unsigned long>(st.transitionStartedAtMs),
+                  static_cast<unsigned long>(st.transitionDurationMs),
+                  static_cast<unsigned long>(st.transitionRemainingMs),
+                  st.transitionProgress);
+    printSynqMatrixPolicy();
+    printSynqMatrixAllowlist();
+}
+
+void printSynqMatrixDebugLevel(uint8_t level) {
+    switch (level) {
+        case 0:
+            printSynqMatrixCompactStatus();
+            break;
+        case 1:
+            printSynqMatrixStatus();
+            break;
+        case 2:
+            printSynqMatrixPolicy();
+            printSynqMatrixAllowlist();
+            break;
+        case 3:
+            printSynqMatrixHealth();
+            break;
+        case 4:
+        default:
+            printSynqMatrixDebug();
+            break;
+    }
+}
+
+void restoreSynqMatrixSafeBaseline(ActorSystem& actors) {
+    auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
+    cfg.enabled = false;
+    cfg.mode = lightwaveos::synqmatrix::SynqMatrixMode::Off;
+    cfg.familyMorphing = false;
+    cfg.constrainedSwitching = false;
+    cfg.switchingEnabled = false;
+    lightwaveos::synqmatrix::SynqMatrix::instance().setConfig(cfg);
+    lightwaveos::synqmatrix::SynqMatrix::instance().resetCounters();
+
+    actors.setEffect(EID_SB_K1_WAVEFORM);
+    actors.setBrightness(160);
+    actors.setSpeed(27);
+    actors.setIntensity(128);
+    actors.setSaturation(128);
+    actors.setComplexity(128);
+    actors.setVariation(0);
+    actors.setPalette(10);
+    actors.setEdgeMixerMode(static_cast<uint8_t>(lightwaveos::enhancement::EdgeMixerMode::MIRROR));
+    actors.setEdgeMixerSpatial(static_cast<uint8_t>(lightwaveos::enhancement::EdgeMixerSpatial::UNIFORM));
+    actors.setEdgeMixerTemporal(static_cast<uint8_t>(lightwaveos::enhancement::EdgeMixerTemporal::STATIC));
+}
+
+void cycleSynqMatrixMode() {
+    captureSynqMatrixRestorePoint();
+    auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
+    if (!cfg.enabled || cfg.mode == lightwaveos::synqmatrix::SynqMatrixMode::Off) {
+        cfg.enabled = true;
+        cfg.mode = lightwaveos::synqmatrix::SynqMatrixMode::Assist;
+    } else if (cfg.mode == lightwaveos::synqmatrix::SynqMatrixMode::Assist) {
+        cfg.enabled = true;
+        cfg.mode = lightwaveos::synqmatrix::SynqMatrixMode::Director;
+    } else {
+        cfg.enabled = false;
+        cfg.mode = lightwaveos::synqmatrix::SynqMatrixMode::Off;
+        cfg.switchingEnabled = false;
+        cfg.constrainedSwitching = false;
+    }
+    cfg.familyMorphing = false;
+    lightwaveos::synqmatrix::SynqMatrix::instance().setConfig(cfg);
+    printSynqMatrixCompactStatus();
+}
+
+void cycleSynqMatrixProfile() {
+    captureSynqMatrixRestorePoint();
+    auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
+    switch (cfg.profile) {
+        case lightwaveos::synqmatrix::SynqMatrixProfile::Subtle:
+            cfg.profile = lightwaveos::synqmatrix::SynqMatrixProfile::Balanced;
+            break;
+        case lightwaveos::synqmatrix::SynqMatrixProfile::Balanced:
+            cfg.profile = lightwaveos::synqmatrix::SynqMatrixProfile::High;
+            break;
+        case lightwaveos::synqmatrix::SynqMatrixProfile::High:
+        default:
+            cfg.profile = lightwaveos::synqmatrix::SynqMatrixProfile::Subtle;
+            break;
+    }
+    lightwaveos::synqmatrix::SynqMatrix::instance().setConfig(cfg);
+    printSynqMatrixCompactStatus();
+}
+
+const char* rendererModeName(RendererMode mode) {
+    switch (mode) {
+        case RendererMode::Unified:
+            return "unified";
+        case RendererMode::Independent:
+            return "independent";
+    }
+    return "unknown";
+}
+
+const char* colourCorrectionModeName(enhancement::CorrectionMode mode) {
+    switch (mode) {
+        case enhancement::CorrectionMode::OFF:
+            return "off";
+        case enhancement::CorrectionMode::HSV:
+            return "hsv";
+        case enhancement::CorrectionMode::RGB:
+            return "rgb";
+        case enhancement::CorrectionMode::BOTH:
+            return "both";
+    }
+    return "unknown";
+}
+
+void printVpStackSnapshot(const RendererActor::VpStackSnapshot& snap) {
+    using lightwaveos::diagnostics::authoredSurfaceName;
+    using lightwaveos::diagnostics::correctionSurfaceName;
+    using lightwaveos::diagnostics::outputSurfaceName;
+    using lightwaveos::diagnostics::topologyName;
+
+    Serial.println("\n=== VP Stack Introspection ===");
+    Serial.printf("effect: 0x%04X %s\n",
+                  static_cast<unsigned>(snap.effectId),
+                  snap.effectName ? snap.effectName : "Unknown");
+    Serial.printf("palette: %u %s\n",
+                  snap.paletteId,
+                  snap.paletteName ? snap.paletteName : "Unknown");
+    Serial.printf("controls: brightness=%u speed=%u intensity=%u saturation=%u complexity=%u variation=%u hue=%u mood=%u\n",
+                  snap.brightness, snap.speed, snap.intensity, snap.saturation,
+                  snap.complexity, snap.variation, snap.hue, snap.mood);
+
+    Serial.printf("topology: mode=%s vp=%s authored=%s correction_surface=%s output=%s mismatch=%s\n",
+                  rendererModeName(snap.rendererMode),
+                  topologyName(snap.topology),
+                  authoredSurfaceName(snap.surfaces.authored),
+                  correctionSurfaceName(snap.surfaces.correction),
+                  outputSurfaceName(snap.surfaces.output),
+                  boolName(snap.surfaces.surfaceMismatch));
+
+    Serial.println("layers:");
+    Serial.printf("  1 effect_render: active surface=%s\n",
+                  authoredSurfaceName(snap.surfaces.authored));
+    Serial.printf("  2 colour_correction: %s toggle=%s skipped_by_effect=%s apply_count=%lu skip_count=%lu\n",
+                  snap.colourCorrectionApplied ? "active" : "bypassed",
+                  onOffName(snap.colourCorrectionToggleEnabled),
+                  boolName(snap.colourCorrectionSkippedByEffect),
+                  static_cast<unsigned long>(snap.correctionApplyCount),
+                  static_cast<unsigned long>(snap.correctionSkipCount));
+    Serial.printf("  3 tone_map: %s\n", snap.toneMapNeeded ? "active" : "bypassed");
+    Serial.printf("  4 split/converge: %s -> physical_strips\n",
+                  authoredSurfaceName(snap.surfaces.authored));
+    Serial.printf("  5 silence_policy: global_active=%s bypassed=%s hard_gate_effect=%s silent_scale=%.3f audio=%s\n",
+                  boolName(snap.globalSilenceScaleActive),
+                  boolName(snap.globalSilenceBypassed),
+                  boolName(snap.hardSilenceGateEffect),
+                  snap.silentScale,
+                  boolName(snap.audioAvailable));
+    Serial.printf("  6 edge_mixer: mode=%s spatial=%s temporal=%s spread=%u strength=%u\n",
+                  enhancement::EdgeMixer::modeName(snap.edgeMode),
+                  enhancement::EdgeMixer::spatialName(snap.edgeSpatial),
+                  enhancement::EdgeMixer::temporalName(snap.edgeTemporal),
+                  snap.edgeSpread,
+                  snap.edgeStrength);
+    Serial.printf("  7 led_show: dither=%s wire_fence=%s expected_wire_us=%lu show_skips=%lu failures=%lu rmt_errors=%lu underruns=%lu\n",
+                  onOffName(snap.ledDitheringEnabled),
+                  boolName(snap.wireFenceActive),
+                  static_cast<unsigned long>(snap.expectedWireTimeUs),
+                  static_cast<unsigned long>(snap.ledStats.showSkips),
+                  static_cast<unsigned long>(snap.ledStats.ledShowFailures),
+                  static_cast<unsigned long>(snap.ledStats.rmtErrors),
+                  static_cast<unsigned long>(snap.ledStats.rmtUnderruns));
+    Serial.print("  8 ");
+    printSynqMatrixStatus();
+
+    const auto& cfg = snap.colourConfig;
+    const auto& gamma = snap.gamma;
+    Serial.println("colour:");
+    Serial.printf("  mode=%s hsv_min_sat=%u rgb_white_threshold=%u rgb_target_min=%u saturation_boost=%u\n",
+                  colourCorrectionModeName(cfg.mode),
+                  cfg.hsvMinSaturation,
+                  cfg.rgbWhiteThreshold,
+                  cfg.rgbTargetMin,
+                  cfg.saturationBoostAmount);
+    Serial.printf("  auto_exposure=%s target=%u brown_guardrail=%s v_clamp=%s max_brightness=%u\n",
+                  onOffName(cfg.autoExposureEnabled),
+                  cfg.autoExposureTarget,
+                  onOffName(cfg.brownGuardrailEnabled),
+                  onOffName(cfg.vClampEnabled),
+                  cfg.maxBrightness);
+    Serial.printf("  gamma=%s value=%.3f lut_gen=%lu samples=[%u,%u,%u,%u,%u,%u]\n",
+                  onOffName(gamma.gammaEnabled),
+                  gamma.gammaValue,
+                  static_cast<unsigned long>(gamma.lutGenerationId),
+                  gamma.lut0, gamma.lut32, gamma.lut64,
+                  gamma.lut128, gamma.lut192, gamma.lut255);
+
+    Serial.println("frame:");
+    Serial.printf("  target_fps=%u frames=%lu drops=%lu fps=%u avg_us=%lu min_us=%lu max_us=%lu cpu=%u%%\n",
+                  LedConfig::TARGET_FPS,
+                  static_cast<unsigned long>(snap.renderStats.framesRendered),
+                  static_cast<unsigned long>(snap.renderStats.frameDrops),
+                  snap.renderStats.currentFPS,
+                  static_cast<unsigned long>(snap.renderStats.avgFrameTimeUs),
+                  static_cast<unsigned long>(snap.renderStats.minFrameTimeUs),
+                  static_cast<unsigned long>(snap.renderStats.maxFrameTimeUs),
+                  snap.renderStats.cpuPercent);
+    Serial.printf("  timing: effect_render last_us=%lu avg_us=%lu colour_correction last_us=%lu avg_us=%lu\n",
+                  static_cast<unsigned long>(snap.lastEffectRenderUs),
+                  static_cast<unsigned long>(snap.avgEffectRenderUs),
+                  static_cast<unsigned long>(snap.lastColourCorrectionUs),
+                  static_cast<unsigned long>(snap.avgColourCorrectionUs));
+    Serial.printf("  timing: show_leds last_us=%lu avg_us=%lu pre_pacing_work last_us=%lu avg_us=%lu\n",
+                  static_cast<unsigned long>(snap.lastShowLedsUs),
+                  static_cast<unsigned long>(snap.avgShowLedsUs),
+                  static_cast<unsigned long>(snap.lastPrePacingWorkUs),
+                  static_cast<unsigned long>(snap.avgPrePacingWorkUs));
+    Serial.printf("  timing: output_prep last_us=%lu avg_us=%lu led_driver_show avg_us=%lu\n",
+                  static_cast<unsigned long>(snap.lastOutputPrepUs),
+                  static_cast<unsigned long>(snap.avgOutputPrepUs),
+                  static_cast<unsigned long>(snap.ledStats.avgShowUs));
+    Serial.printf("  led_show: frames=%lu last_us=%lu avg_us=%lu max_us=%lu brightness=%u\n",
+                  static_cast<unsigned long>(snap.ledStats.frameCount),
+                  static_cast<unsigned long>(snap.ledStats.lastShowUs),
+                  static_cast<unsigned long>(snap.ledStats.avgShowUs),
+                  static_cast<unsigned long>(snap.ledStats.maxShowUs),
+                  snap.ledStats.currentBrightness);
+
+    Serial.println("capture:");
+    Serial.printf("  enabled=%s tap_mask=0x%02X last_effect=0x%04X last_palette=%u frame=%lu timestamp_us=%lu\n",
+                  boolName(snap.captureEnabled),
+                  snap.captureTapMask,
+                  static_cast<unsigned>(snap.captureEffectId),
+                  snap.capturePaletteId,
+                  static_cast<unsigned long>(snap.captureFrameIndex),
+                  static_cast<unsigned long>(snap.captureTimestampUs));
+
+    if (snap.surfaces.surfaceMismatch) {
+        Serial.println("warning: colour correction is active on m_leds while the authored surface is physical_strips");
+    }
+    Serial.println("==============================");
+}
+
+} // namespace
+
 // ============================================================================
 // Lifecycle
 // ============================================================================
@@ -107,6 +521,7 @@ void SerialCLI::tick() {
     // Handle serial commands with proper line buffering.
     // This fixes the issue where typing "adbg 2" character-by-character
     // would trigger effect selection for '2' instead of the adbg command.
+    bool shouldProcess = false;
     while (Serial.available()) {
         char c = Serial.read();
 
@@ -121,6 +536,9 @@ void SerialCLI::tick() {
                 case '[': case ']':  // Speed
                 case ',': case '.':  // Palette
                 case 'e':            // EdgeMixer mode cycle
+                case 'D':            // SynqMatrix mode cycle
+                case 'G':            // SynqMatrix profile cycle
+                case 'Q':            // SynqMatrix compact status
                 case 'w': case 'W':  // EdgeMixer spread +/-
                 case '<': case '>':  // EdgeMixer strength -/+
                 case 'y':            // EdgeMixer spatial toggle
@@ -153,6 +571,7 @@ void SerialCLI::tick() {
                 } else {
                     // Process immediately without buffering
                     m_cmdBuffer = String(c);
+                    shouldProcess = true;
                     break; // Exit while loop to process
                 }
                 continue;
@@ -161,6 +580,7 @@ void SerialCLI::tick() {
 
         if (c == '\n' || c == '\r') {
             // End of line — process buffered command
+            shouldProcess = true;
             break;
         } else if (c == 0x7F || c == 0x08) {
             // Backspace — remove last char
@@ -173,8 +593,8 @@ void SerialCLI::tick() {
         }
     }
 
-    // Process buffered command if we have one
-    if (m_cmdBuffer.length() > 0) {
+    // Process a complete line or a single immediate hotkey only.
+    if (shouldProcess && m_cmdBuffer.length() > 0) {
         String input = m_cmdBuffer;
         char firstChar = input[0]; // Save before trim (for space, etc.)
         m_cmdBuffer = ""; // Clear for next command
@@ -294,6 +714,260 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
     }
     else
 #endif
+    if (inputLower == "vp stack" || inputLower == "vpstack" || inputLower == "vp-stack") {
+        handledMulti = true;
+        RendererActor* ren = actors.getRenderer();
+        if (!ren) {
+            Serial.println("VP stack: renderer not available");
+        } else {
+            printVpStackSnapshot(ren->getVpStackSnapshot());
+        }
+    }
+    else
+    if (inputLower == "synqmatrix" || inputLower == "synqmatrix status" ||
+        inputLower == "sa" || inputLower == "sa status") {
+        handledMulti = true;
+        printSynqMatrixCompactStatus();
+    }
+    else
+    if (inputLower == "synqmatrix on" || inputLower == "sa on") {
+        handledMulti = true;
+        captureSynqMatrixRestorePoint();
+        auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
+        cfg.enabled = true;
+        cfg.mode = lightwaveos::synqmatrix::SynqMatrixMode::Assist;
+        cfg.familyMorphing = false;
+        cfg.constrainedSwitching = false;
+        cfg.switchingEnabled = false;
+        lightwaveos::synqmatrix::SynqMatrix::instance().setConfig(cfg);
+        Serial.println("SynqMatrix: 'on' is deprecated; set mode=assist profile unchanged switching=false");
+        printSynqMatrixStatus();
+    }
+    else
+    if (inputLower == "synqmatrix off" || inputLower == "sa off") {
+        handledMulti = true;
+        captureSynqMatrixRestorePoint();
+        auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
+        cfg.enabled = false;
+        cfg.mode = lightwaveos::synqmatrix::SynqMatrixMode::Off;
+        cfg.familyMorphing = false;
+        cfg.constrainedSwitching = false;
+        cfg.switchingEnabled = false;
+        lightwaveos::synqmatrix::SynqMatrix::instance().setConfig(cfg);
+        Serial.println("SynqMatrix: OFF");
+        printSynqMatrixStatus();
+    }
+    else
+    if (inputLower.startsWith("synqmatrix mode ") || inputLower.startsWith("sa mode ")) {
+        handledMulti = true;
+        const int offset = inputLower.startsWith("sa mode ") ? 8 : 15;
+        String modeText = inputLower.substring(offset);
+        modeText.trim();
+        bool ok = false;
+        bool profileOk = false;
+        auto profile = lightwaveos::synqmatrix::parseSynqMatrixProfile(modeText.c_str(), &profileOk);
+        auto mode = lightwaveos::synqmatrix::parseSynqMatrixMode(modeText.c_str(), &ok);
+        if (!ok) {
+            Serial.println("SynqMatrix mode invalid. Use: off|assist|director");
+        } else {
+            captureSynqMatrixRestorePoint();
+            auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
+            if (profileOk && (modeText == "subtle" || modeText == "balanced" || modeText == "high" ||
+                              modeText == "high_energy")) {
+                cfg.profile = profile;
+                cfg.mode = lightwaveos::synqmatrix::SynqMatrixMode::Assist;
+                cfg.enabled = true;
+                Serial.println("SynqMatrix: legacy mode token mapped to profile; mode=assist");
+            } else {
+                cfg.mode = mode;
+                cfg.enabled = (mode != lightwaveos::synqmatrix::SynqMatrixMode::Off);
+                if (modeText == "on" || modeText == "parameter") {
+                    Serial.println("SynqMatrix: legacy mode token mapped to assist");
+                }
+            }
+            cfg.familyMorphing = false;
+            if (cfg.mode != lightwaveos::synqmatrix::SynqMatrixMode::Director) {
+                cfg.constrainedSwitching = false;
+                cfg.switchingEnabled = false;
+            }
+            lightwaveos::synqmatrix::SynqMatrix::instance().setConfig(cfg);
+            printSynqMatrixStatus();
+        }
+    }
+    else
+    if (inputLower.startsWith("synqmatrix profile ") || inputLower.startsWith("sa profile ")) {
+        handledMulti = true;
+        const int offset = inputLower.startsWith("sa profile ") ? 11 : 18;
+        String profileText = inputLower.substring(offset);
+        profileText.trim();
+        bool ok = false;
+        auto profile = lightwaveos::synqmatrix::parseSynqMatrixProfile(profileText.c_str(), &ok);
+        if (!ok) {
+            Serial.println("SynqMatrix profile invalid. Use: subtle|balanced|high");
+        } else {
+            captureSynqMatrixRestorePoint();
+            auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
+            cfg.profile = profile;
+            lightwaveos::synqmatrix::SynqMatrix::instance().setConfig(cfg);
+            printSynqMatrixStatus();
+        }
+    }
+    else
+    if (inputLower == "synqmatrix switch on" || inputLower == "sa switch on" ||
+        inputLower == "synqmatrix switching on" || inputLower == "sa switching on") {
+        handledMulti = true;
+        auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
+        if (!cfg.enabled || cfg.mode != lightwaveos::synqmatrix::SynqMatrixMode::Director) {
+            Serial.println("SynqMatrix switching rejected: Director mode is required");
+        } else {
+            captureSynqMatrixRestorePoint();
+            cfg.familyMorphing = false;
+            cfg.constrainedSwitching = true;
+            cfg.switchingEnabled = true;
+            lightwaveos::synqmatrix::SynqMatrix::instance().setConfig(cfg);
+            Serial.println("SynqMatrix switching: ON");
+        }
+        printSynqMatrixStatus();
+    }
+    else
+    if (inputLower == "synqmatrix switch off" || inputLower == "sa switch off" ||
+        inputLower == "synqmatrix switching off" || inputLower == "sa switching off") {
+        handledMulti = true;
+        captureSynqMatrixRestorePoint();
+        auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
+        cfg.constrainedSwitching = false;
+        cfg.switchingEnabled = false;
+        lightwaveos::synqmatrix::SynqMatrix::instance().setConfig(cfg);
+        Serial.println("SynqMatrix switching: OFF");
+        printSynqMatrixStatus();
+    }
+    else
+    if (inputLower == "synqmatrix wipe" || inputLower == "sa wipe" ||
+        inputLower == "synqmatrix reset" || inputLower == "sa reset") {
+        handledMulti = true;
+        captureSynqMatrixRestorePoint();
+        lightwaveos::synqmatrix::SynqMatrix::instance().reset();
+        if (inputLower.endsWith("reset")) {
+            Serial.println("SynqMatrix: 'reset' is deprecated; use 'wipe'");
+        }
+        Serial.println("SynqMatrix: WIPE");
+        printSynqMatrixStatus();
+    }
+    else
+    if (inputLower == "synqmatrix restore" || inputLower == "sa restore") {
+        handledMulti = true;
+        restoreSynqMatrixSafeBaseline(actors);
+        Serial.println("SynqMatrix: RESTORED safe baseline (0x1302, fixed controls, off)");
+        printSynqMatrixStatus();
+    }
+    else
+    if (inputLower.startsWith("synqmatrix dbg") || inputLower.startsWith("sa dbg") ||
+        inputLower == "synqmatrix debug" || inputLower == "sa debug") {
+        handledMulti = true;
+        uint8_t level = 1;
+        if (inputLower.startsWith("synqmatrix dbg ")) {
+            level = static_cast<uint8_t>(inputLower.substring(14).toInt());
+        } else if (inputLower.startsWith("sa dbg ")) {
+            level = static_cast<uint8_t>(inputLower.substring(7).toInt());
+        } else {
+            Serial.println("SynqMatrix: 'debug' is deprecated; use 'sa dbg 4'");
+            level = 4;
+        }
+        printSynqMatrixDebugLevel(level);
+    }
+    else
+    if (inputLower == "synqmatrix policy" || inputLower == "sa policy") {
+        handledMulti = true;
+        Serial.println("SynqMatrix: 'policy' is deprecated; use 'sa dbg 2'");
+        printSynqMatrixDebugLevel(2);
+    }
+    else
+    if (inputLower == "synqmatrix allowlist" || inputLower == "sa allowlist") {
+        handledMulti = true;
+        Serial.println("SynqMatrix: 'allowlist' is mutable; use 'sa allow <state> on|off' to edit");
+        printSynqMatrixAllowlist();
+    }
+    else
+    if ((inputLower.startsWith("synqmatrix allow ") || inputLower.startsWith("sa allow ")) &&
+        inputLower != "synqmatrix allow reset" && inputLower != "sa allow reset") {
+        handledMulti = true;
+        const int offset = inputLower.startsWith("sa allow ") ? 9 : 16;
+        String args = inputLower.substring(offset);
+        args.trim();
+        int split = args.indexOf(' ');
+        if (split <= 0) {
+            Serial.println("SynqMatrix allow invalid. Use: sa allow <state> on|off");
+        } else {
+            String stateText = args.substring(0, split);
+            String valueText = args.substring(split + 1);
+            stateText.trim();
+            valueText.trim();
+            bool stateOk = false;
+            const auto state = lightwaveos::synqmatrix::parseSynqMatrixState(stateText.c_str(), &stateOk);
+            const bool enable = (valueText == "on" || valueText == "true" || valueText == "1");
+            const bool disable = (valueText == "off" || valueText == "false" || valueText == "0");
+            if (!stateOk || (!enable && !disable)) {
+                Serial.println("SynqMatrix allow invalid. Use: sa allow <state> on|off");
+            } else {
+                captureSynqMatrixRestorePoint();
+                lightwaveos::synqmatrix::SynqMatrix::instance().setPolicyAllowed(state, enable);
+                printSynqMatrixAllowlist();
+            }
+        }
+    }
+    else
+    if (inputLower == "synqmatrix allow reset" || inputLower == "sa allow reset") {
+        handledMulti = true;
+        captureSynqMatrixRestorePoint();
+        lightwaveos::synqmatrix::SynqMatrix::instance().resetPolicyAllowlist();
+        printSynqMatrixAllowlist();
+    }
+    else
+    if (inputLower == "synqmatrix health" || inputLower == "sa health") {
+        handledMulti = true;
+        Serial.println("SynqMatrix: 'health' is deprecated; use 'sa dbg 3'");
+        printSynqMatrixDebugLevel(3);
+    }
+    else
+    if (inputLower == "synqmatrix counters reset" || inputLower == "sa counters reset") {
+        handledMulti = true;
+        captureSynqMatrixRestorePoint();
+        lightwaveos::synqmatrix::SynqMatrix::instance().resetCounters();
+        Serial.println("SynqMatrix counters: RESET");
+        printSynqMatrixHealth();
+    }
+    else
+    if (inputLower.startsWith("dither")) {
+        handledMulti = true;
+        RendererActor* ren = actors.getRenderer();
+        String args = inputLower.substring(6);
+        args.trim();
+
+        if (args.length() == 0 || args == "status") {
+            const bool enabled = ren ? ren->isLedDitheringEnabled() : true;
+            Serial.printf("LED dithering: %s\n", enabled ? "ON" : "OFF");
+            Serial.println("  Usage: dither 0|1|off|on");
+        } else {
+            bool value = false;
+            bool valid = true;
+            if (args == "1" || args == "on" || args == "true") {
+                value = true;
+            } else if (args == "0" || args == "off" || args == "false") {
+                value = false;
+            } else {
+                valid = false;
+            }
+
+            if (!valid) {
+                Serial.println("Invalid dithering value. Use: dither 0|1|off|on");
+            } else if (!actors.setLedDithering(value)) {
+                Serial.println("LED dithering update failed: renderer queue saturated");
+            } else {
+                Serial.printf("LED dithering: %s\n", value ? "ON" : "OFF");
+            }
+        }
+    }
+    else
 #if FEATURE_VRMS_METRICS
     if (inputLower == "vrms") {
         handledMulti = true;
@@ -542,7 +1216,7 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
         if (input.startsWith("ae")) {
             handledMulti = true;
             auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
-            auto& cfg = engine.getConfig();
+            auto cfg = engine.getConfig();
 
             if (input == "ae") {
                 Serial.printf("Auto-exposure: %s, target=%d\n",
@@ -558,14 +1232,17 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
                     String arg = input.substring(startIdx);
                     if (arg == "0") {
                         cfg.autoExposureEnabled = false;
+                        engine.setConfig(cfg);
                         Serial.println("Auto-exposure: OFF");
                     } else if (arg == "1") {
                         cfg.autoExposureEnabled = true;
+                        engine.setConfig(cfg);
                         Serial.println("Auto-exposure: ON");
                     } else {
                         int target = arg.toInt();
                         if (target > 0 && target <= 255) {
                             cfg.autoExposureTarget = target;
+                            engine.setConfig(cfg);
                             Serial.printf("Auto-exposure target: %d\n", target);
                         }
                     }
@@ -779,12 +1456,17 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
         if (input.startsWith("gamma")) {
             handledMulti = true;
             auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
-            auto& cfg = engine.getConfig();
+            auto cfg = engine.getConfig();
 
             if (input == "gamma") {
+                const auto status = engine.getGammaLutStatus();
                 Serial.printf("Gamma: %s, value=%.1f\n",
                               cfg.gammaEnabled ? "ON" : "OFF",
                               cfg.gammaValue);
+                Serial.printf("Gamma LUT: gen=%lu samples[0,32,64,128,192,255]=%u,%u,%u,%u,%u,%u\n",
+                              (unsigned long)status.lutGenerationId,
+                              status.lut0, status.lut32, status.lut64,
+                              status.lut128, status.lut192, status.lut255);
             } else if (input.length() > 5) {
                 // Handle both "gamma1.5" and "gamma 1.5" formats
                 int startIdx = 5;
@@ -795,10 +1477,12 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
                     float val = input.substring(startIdx).toFloat();
                     if (val == 0) {
                         cfg.gammaEnabled = false;
+                        engine.setConfig(cfg);
                         Serial.println("Gamma: OFF");
                     } else if (val >= 1.0f && val <= 3.0f) {
                         cfg.gammaEnabled = true;
                         cfg.gammaValue = val;
+                        engine.setConfig(cfg);
                         Serial.printf("Gamma set to: %.1f\n", val);
                     } else {
                         Serial.println("Invalid gamma. Use 0 (off) or 1.0-3.0");
@@ -1023,7 +1707,7 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
         if (input.startsWith("brown")) {
             handledMulti = true;
             auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
-            auto& cfg = engine.getConfig();
+            auto cfg = engine.getConfig();
 
             if (input == "brown") {
                 Serial.printf("Brown guardrail: %s\n",
@@ -1040,9 +1724,11 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
                     String arg = input.substring(startIdx);
                     if (arg == "0") {
                         cfg.brownGuardrailEnabled = false;
+                        engine.setConfig(cfg);
                         Serial.println("Brown guardrail: OFF");
                     } else if (arg == "1") {
                         cfg.brownGuardrailEnabled = true;
+                        engine.setConfig(cfg);
                         Serial.println("Brown guardrail: ON");
                     }
                 }
@@ -1691,6 +2377,18 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
 
         if (!isEffectKey)
         switch (cmd) {
+        case 'D':
+            cycleSynqMatrixMode();
+            break;
+
+        case 'G':
+            cycleSynqMatrixProfile();
+            break;
+
+        case 'Q':
+            printSynqMatrixCompactStatus();
+            break;
+
 #if FEATURE_AUDIO_SYNC
         case 'x': case 'X':
             // Bands observability (same as top-level "x" / "bands")
@@ -2369,7 +3067,8 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
             {
                 auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
                 auto mode = engine.getMode();
-                auto& cfg = engine.getConfig();
+                const auto& cfg = engine.getConfig();
+                const auto status = engine.getGammaLutStatus();
                 const char* modeNames[] = {"OFF", "HSV", "RGB", "BOTH"};
                 Serial.println("\n=== Color Correction Status ===");
                 Serial.printf("  Mode: %d (%s)\n", (int)mode, modeNames[(int)mode]);
@@ -2379,6 +3078,10 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
                 Serial.printf("  Gamma: %s, value=%.1f\n",
                               cfg.gammaEnabled ? "ON" : "OFF",
                               cfg.gammaValue);
+                Serial.printf("  Gamma LUT: gen=%lu samples[0,32,64,128,192,255]=%u,%u,%u,%u,%u,%u\n",
+                              (unsigned long)status.lutGenerationId,
+                              status.lut0, status.lut32, status.lut64,
+                              status.lut128, status.lut192, status.lut255);
                 Serial.printf("  Brown guardrail: %s\n",
                               cfg.brownGuardrailEnabled ? "ON" : "OFF");
                 Serial.println();
@@ -2389,8 +3092,9 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
             // Toggle auto-exposure
             {
                 auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
-                auto& cfg = engine.getConfig();
+                auto cfg = engine.getConfig();
                 cfg.autoExposureEnabled = !cfg.autoExposureEnabled;
+                engine.setConfig(cfg);
                 Serial.printf("Auto-exposure: %s\n", cfg.autoExposureEnabled ? "ON" : "OFF");
             }
             break;
@@ -2399,22 +3103,26 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
             // Toggle gamma or cycle common values
             {
                 auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
-                auto& cfg = engine.getConfig();
+                auto cfg = engine.getConfig();
                 if (!cfg.gammaEnabled) {
                     // Enable with default 2.2
                     cfg.gammaEnabled = true;
                     cfg.gammaValue = 2.2f;
+                    engine.setConfig(cfg);
                     Serial.printf("Gamma: ON (%.1f)\n", cfg.gammaValue);
                 } else {
                     // Cycle through common values: 2.2 -> 2.5 -> 2.8 -> off
                     if (cfg.gammaValue < 2.3f) {
                         cfg.gammaValue = 2.5f;
+                        engine.setConfig(cfg);
                         Serial.printf("Gamma: %.1f\n", cfg.gammaValue);
                     } else if (cfg.gammaValue < 2.6f) {
                         cfg.gammaValue = 2.8f;
+                        engine.setConfig(cfg);
                         Serial.printf("Gamma: %.1f\n", cfg.gammaValue);
                     } else {
                         cfg.gammaEnabled = false;
+                        engine.setConfig(cfg);
                         Serial.println("Gamma: OFF");
                     }
                 }

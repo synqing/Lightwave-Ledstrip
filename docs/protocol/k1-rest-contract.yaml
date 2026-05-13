@@ -58,6 +58,23 @@ endpoints:
     method: POST
     description: "Generate or rotate OTA token"
 
+  # ── Render Output ──────────────────────────────────────────────────────
+  /api/v1/render/dithering:
+    method: GET
+    description: "Get LED output temporal dithering state"
+    response:
+      enabled: bool
+    consumers: [ios, tab5]
+
+  /api/v1/render/dithering:
+    method: POST
+    description: "Enable or disable LED output temporal dithering"
+    body:
+      enabled: { type: bool, required: true }
+    response:
+      enabled: bool
+    consumers: [ios, tab5]
+
   # ── Effects ────────────────────────────────────────────────────────────
   /api/v1/effects:
     method: GET
@@ -148,6 +165,306 @@ endpoints:
       fadeAmount: { type: uint8, optional: true, description: "REST only" }
     consumers: [ios]
 
+  # ── SynqMatrix Director ──────────────────────────────────────────────────
+  # Canonical paths: /api/v1/synqmatrix/*. Legacy /api/v1/songAware/* aliases
+  # coexist for one release; both routes invoke the same handler.
+  /api/v1/songAware/config:
+    method: GET
+    description: "Get runtime-only SynqMatrix configuration. Mode is the authority boundary; profile is aggression. No NVS persistence."
+    deprecated: true
+    alias_of: "/api/v1/synqmatrix/config"
+    note: "Deprecated 2026-05-13 — use /api/v1/synqmatrix/config canonical name. Both names route to the same handler. Aliases removed at the same firmware release that ships the SynqMatrix algorithmic contract."
+    response:
+      enabled: bool
+      mode: { type: string, enum: [off, assist, director] }
+      profile: { type: string, enum: [subtle, balanced, high] }
+      switchingEnabled: bool
+      familyMorphing: { type: bool, deprecated: true, note: "Accepted for compatibility; unsupported." }
+      constrainedSwitching: { type: bool, deprecated: true, note: "Alias of switchingEnabled for one release." }
+      sensitivity: { type: float, range: "0.0-1.0" }
+      intensityScalar: { type: float, range: "0.0-1.0" }
+      motionScalar: { type: float, range: "0.0-1.0" }
+      confidenceFloor: { type: float, range: "0.0-1.0" }
+    consumers: [ios, tab5, lab]
+
+  /api/v1/synqmatrix/config:
+    method: GET
+    description: "Get runtime-only SynqMatrix configuration. Mode is the authority boundary; profile is aggression. No NVS persistence."
+    response:
+      enabled: bool
+      mode: { type: string, enum: [off, assist, director] }
+      profile: { type: string, enum: [subtle, balanced, high] }
+      switchingEnabled: bool
+      familyMorphing: { type: bool, deprecated: true, note: "Accepted for compatibility; unsupported." }
+      constrainedSwitching: { type: bool, deprecated: true, note: "Alias of switchingEnabled for one release." }
+      sensitivity: { type: float, range: "0.0-1.0" }
+      intensityScalar: { type: float, range: "0.0-1.0" }
+      motionScalar: { type: float, range: "0.0-1.0" }
+      confidenceFloor: { type: float, range: "0.0-1.0" }
+    consumers: [ios, tab5, lab]
+
+  /api/v1/songAware/config:
+    method: [POST, PATCH]
+    description: "Set runtime-only synq-matrix director configuration, or run a bounded runtime action through the existing config route. No NVS persistence."
+    deprecated: true
+    alias_of: "/api/v1/synqmatrix/config"
+    note: "Deprecated 2026-05-13 — use /api/v1/synqmatrix/config canonical name. Both names route to the same handler. Aliases removed at the same firmware release that ships the SynqMatrix algorithmic contract."
+    body:
+      action: { type: string, optional: true, enum: [reset, wipe, restore, countersReset, counters_reset], note: "When present, runs the action instead of applying config fields. reset is a compatibility alias for wipe." }
+      enabled: { type: bool, optional: true }
+      mode: { type: string, optional: true, enum: [off, assist, director], compatibility: "on and parameter map to assist; subtle/balanced/high set profile and map mode to assist for one release." }
+      profile: { type: string, optional: true, enum: [subtle, balanced, high] }
+      switchingEnabled: { type: bool, optional: true }
+      familyMorphing: { type: bool, optional: true, deprecated: true, note: "Accepted for compatibility; unsupported." }
+      constrainedSwitching: { type: bool, optional: true, deprecated: true, note: "Alias of switchingEnabled for one release." }
+      sensitivity: { type: float, optional: true, range: "0.0-1.0" }
+      intensityScalar: { type: float, optional: true, range: "0.0-1.0" }
+      motionScalar: { type: float, optional: true, range: "0.0-1.0" }
+      confidenceFloor: { type: float, optional: true, range: "0.0-1.0" }
+    response:
+      enabled: bool
+      mode: string
+      profile: string
+      switchingEnabled: bool
+      familyMorphing: bool
+      constrainedSwitching: bool
+      sensitivity: float
+      intensityScalar: float
+      motionScalar: float
+      confidenceFloor: float
+    consumers: [ios, tab5, lab]
+
+  /api/v1/songAware/status:
+    method: GET
+    description: "Get runtime synq-matrix director readback for validation. Optional view exposes health/debug/policy/allowlist readbacks without adding extra REST routes."
+    deprecated: true
+    alias_of: "/api/v1/synqmatrix/status"
+    note: "Deprecated 2026-05-13 — use /api/v1/synqmatrix/status canonical name. Both names route to the same handler. Aliases removed at the same firmware release that ships the SynqMatrix algorithmic contract."
+    query_params:
+      view: { type: string, optional: true, enum: [status, health, debug, policy, allowlist], default: status }
+    response:
+      enabled: bool
+      mode: string
+      effectiveMode: string
+      profile: string
+      owner: string
+      suppressedReason: string
+      previousSuppressedReason: string
+      classificationReason: string
+      rawState: string
+      previousState: string
+      currentState: string
+      candidateState: string
+      intent: string
+      actionPlan: string
+      boundaryGate: string
+      boundaryReady: bool
+      waitingForBoundary: bool
+      boundaryConfidence: float
+      confidence: float
+      selectionScore: float
+      lastAction: string
+      activeEffectId: uint16
+      previousEffectId: uint16
+      selectedEffectId: uint16
+      selectedFamily: string
+      selectedVisualLanguage: string
+      lastSwitchReason: string
+      parameterUpdates: uint32
+      automaticEffectSwitches: uint32
+      lastDecisionAtMs: uint32
+      lastSwitchAtMs: uint32
+      stateAgeMs: uint32
+      candidateAgeMs: uint32
+      candidateHoldRemainingMs: uint32
+      dwellRemainingMs: uint32
+      cooldownRemainingMs: uint32
+      bootGraceRemainingMs: uint32
+      enableGraceRemainingMs: uint32
+      switchWindowRemainingMs: uint32
+      switchesInWindow: uint8
+      maxSwitchesPerWindow: uint8
+      antiThrashRemainingMs: uint32
+      lastSwitchFromEffectId: uint16
+      lastSwitchToEffectId: uint16
+      transitionActive: bool
+      transitionPreviousEffectId: uint16
+      transitionTargetEffectId: uint16
+      transitionStartedAtMs: uint32
+      transitionDurationMs: uint32
+      transitionRemainingMs: uint32
+      transitionProgress: float
+      rms: float
+      flux: float
+      bpm: float
+      audioConfidence: float
+      health:
+        healthDegraded: bool
+        showSkips: uint32
+        failures: uint32
+        rmtErrors: uint32
+        underruns: uint32
+        healthCleanForMs: uint32
+        healthCleanWindowRemainingMs: uint32
+    consumers: [ios, tab5, lab]
+
+  /api/v1/songAware/allowlist:
+    method: GET
+    description: "Get the runtime mutable state policy allowlist."
+    deprecated: true
+    alias_of: "/api/v1/synqmatrix/allowlist"
+    note: "Deprecated 2026-05-13 — use /api/v1/synqmatrix/allowlist canonical name. Both names route to the same handler. Aliases removed at the same firmware release that ships the SynqMatrix algorithmic contract."
+    response:
+      count: uint8
+      policies: "array of {state,effectId,family,visualLanguage,reason,minConfidence,enabled}"
+    consumers: [ios, tab5, lab]
+
+  /api/v1/songAware/allowlist:
+    method: PATCH
+    description: "Enable or disable a SynqMatrix state policy row at runtime."
+    deprecated: true
+    alias_of: "/api/v1/synqmatrix/allowlist"
+    note: "Deprecated 2026-05-13 — use /api/v1/synqmatrix/allowlist canonical name. Both names route to the same handler. Aliases removed at the same firmware release that ships the SynqMatrix algorithmic contract."
+    body:
+      state: { type: string, required: true, enum: [unknown, silence, ambient, steady, build, drop, breakdown, dense, transition] }
+      enabled: { type: bool, required: true }
+    response:
+      count: uint8
+      policies: "array of {state,effectId,family,visualLanguage,reason,minConfidence,enabled}"
+    consumers: [ios, tab5, lab]
+
+  /api/v1/songAware/allowlist/reset:
+    method: POST
+    description: "Reset the runtime allowlist so all policy rows are enabled."
+    deprecated: true
+    alias_of: "/api/v1/synqmatrix/allowlist/reset"
+    note: "Deprecated 2026-05-13 — use /api/v1/synqmatrix/allowlist/reset canonical name. Both names route to the same handler. Aliases removed at the same firmware release that ships the SynqMatrix algorithmic contract."
+    consumers: [ios, tab5, lab]
+
+  # Canonical SynqMatrix entries (mirror the legacy entries above).
+  /api/v1/synqmatrix/config:
+    method: [POST, PATCH]
+    description: "Set runtime-only synq-matrix director configuration, or run a bounded runtime action through the existing config route. No NVS persistence."
+    body:
+      action: { type: string, optional: true, enum: [reset, wipe, restore, countersReset, counters_reset], note: "When present, runs the action instead of applying config fields. reset is a compatibility alias for wipe." }
+      enabled: { type: bool, optional: true }
+      mode: { type: string, optional: true, enum: [off, assist, director], compatibility: "on and parameter map to assist; subtle/balanced/high set profile and map mode to assist for one release." }
+      profile: { type: string, optional: true, enum: [subtle, balanced, high] }
+      switchingEnabled: { type: bool, optional: true }
+      familyMorphing: { type: bool, optional: true, deprecated: true, note: "Accepted for compatibility; unsupported." }
+      constrainedSwitching: { type: bool, optional: true, deprecated: true, note: "Alias of switchingEnabled for one release." }
+      sensitivity: { type: float, optional: true, range: "0.0-1.0" }
+      intensityScalar: { type: float, optional: true, range: "0.0-1.0" }
+      motionScalar: { type: float, optional: true, range: "0.0-1.0" }
+      confidenceFloor: { type: float, optional: true, range: "0.0-1.0" }
+    response:
+      enabled: bool
+      mode: string
+      profile: string
+      switchingEnabled: bool
+      familyMorphing: bool
+      constrainedSwitching: bool
+      sensitivity: float
+      intensityScalar: float
+      motionScalar: float
+      confidenceFloor: float
+    consumers: [ios, tab5, lab]
+
+  /api/v1/synqmatrix/status:
+    method: GET
+    description: "Get runtime synq-matrix director readback for validation. Optional view exposes health/debug/policy/allowlist readbacks without adding extra REST routes."
+    query_params:
+      view: { type: string, optional: true, enum: [status, health, debug, policy, allowlist], default: status }
+    response:
+      enabled: bool
+      mode: string
+      effectiveMode: string
+      profile: string
+      owner: string
+      suppressedReason: string
+      previousSuppressedReason: string
+      classificationReason: string
+      rawState: string
+      previousState: string
+      currentState: string
+      candidateState: string
+      intent: string
+      actionPlan: string
+      boundaryGate: string
+      boundaryReady: bool
+      waitingForBoundary: bool
+      boundaryConfidence: float
+      confidence: float
+      selectionScore: float
+      lastAction: string
+      activeEffectId: uint16
+      previousEffectId: uint16
+      selectedEffectId: uint16
+      selectedFamily: string
+      selectedVisualLanguage: string
+      lastSwitchReason: string
+      parameterUpdates: uint32
+      automaticEffectSwitches: uint32
+      lastDecisionAtMs: uint32
+      lastSwitchAtMs: uint32
+      stateAgeMs: uint32
+      candidateAgeMs: uint32
+      candidateHoldRemainingMs: uint32
+      dwellRemainingMs: uint32
+      cooldownRemainingMs: uint32
+      bootGraceRemainingMs: uint32
+      enableGraceRemainingMs: uint32
+      switchWindowRemainingMs: uint32
+      switchesInWindow: uint8
+      maxSwitchesPerWindow: uint8
+      antiThrashRemainingMs: uint32
+      lastSwitchFromEffectId: uint16
+      lastSwitchToEffectId: uint16
+      transitionActive: bool
+      transitionPreviousEffectId: uint16
+      transitionTargetEffectId: uint16
+      transitionStartedAtMs: uint32
+      transitionDurationMs: uint32
+      transitionRemainingMs: uint32
+      transitionProgress: float
+      rms: float
+      flux: float
+      bpm: float
+      audioConfidence: float
+      health:
+        healthDegraded: bool
+        showSkips: uint32
+        failures: uint32
+        rmtErrors: uint32
+        underruns: uint32
+        healthCleanForMs: uint32
+        healthCleanWindowRemainingMs: uint32
+    consumers: [ios, tab5, lab]
+
+  /api/v1/synqmatrix/allowlist:
+    method: GET
+    description: "Get the runtime mutable state policy allowlist."
+    response:
+      count: uint8
+      policies: "array of {state,effectId,family,visualLanguage,reason,minConfidence,enabled}"
+    consumers: [ios, tab5, lab]
+
+  /api/v1/synqmatrix/allowlist:
+    method: PATCH
+    description: "Enable or disable a SynqMatrix state policy row at runtime."
+    body:
+      state: { type: string, required: true, enum: [unknown, silence, ambient, steady, build, drop, breakdown, dense, transition] }
+      enabled: { type: bool, required: true }
+    response:
+      count: uint8
+      policies: "array of {state,effectId,family,visualLanguage,reason,minConfidence,enabled}"
+    consumers: [ios, tab5, lab]
+
+  /api/v1/synqmatrix/allowlist/reset:
+    method: POST
+    description: "Reset the runtime allowlist so all policy rows are enabled."
+    consumers: [ios, tab5, lab]
+
   # ── Factory Presets ────────────────────────────────────────────────────
   /api/v1/factoryPresets:
     method: GET
@@ -164,7 +481,30 @@ endpoints:
   # ── Palettes ───────────────────────────────────────────────────────────
   /api/v1/palettes:
     method: GET
-    description: "List all palettes"
+    description: "List all palettes (paginated)"
+    query_params:
+      offset: { type: int, optional: true, default: 0, note: "V2 pagination" }
+      page: { type: uint16, optional: true, default: 1, note: "Backward-compatible pagination" }
+      limit: { type: uint16, optional: true, default: 20, range: "1-100" }
+      category: { type: string, optional: true, enum: [artistic, scientific, lgpOptimized] }
+      warm: { type: bool, optional: true }
+      cool: { type: bool, optional: true }
+      calm: { type: bool, optional: true }
+      vivid: { type: bool, optional: true }
+      cvd: { type: bool, optional: true }
+    response_item_fields:
+      id: uint8
+      name: string
+      category: string
+      flags:
+        warm: bool
+        cool: bool
+        calm: bool
+        vivid: bool
+        cvdFriendly: bool
+        whiteHeavy: bool
+      avgBrightness: uint8
+      maxBrightness: uint8
     consumers: [ios]
 
   /api/v1/palettes/current:
@@ -250,7 +590,7 @@ endpoints:
 
   /api/v1/audio/mappings/sources:
     method: GET
-    description: "List available audio mapping sources"
+    description: "List available audio mapping sources, including Phase 1.5 render-side ControlBus reuse scalars"
 
   /api/v1/audio/mappings/targets:
     method: GET
@@ -385,18 +725,82 @@ endpoints:
     description: "Set transition config"
 
   # ── Zones ──────────────────────────────────────────────────────────────
+  # Wire-format note (2026-05-02 migration): zoneId is 1-indexed across REST,
+  # WebSocket, and SerialJSON. Valid wire values are 1, 2, 3. Wire value 0
+  # is RESERVED and rejected with HTTP 400 INVALID_VALUE. The path-parameter
+  # `:zoneId` accepts only [1-3]; out-of-range yields 404 NOT_FOUND. The
+  # 1-indexed wire format matches the user-facing Zone 1/2/3 labels (HARD
+  # RULE per feedback_zone_numbering.md). Internal C++ array indexing
+  # remains 0..2; translation is performed at the network boundary only.
   /api/v1/zones:
     method: GET
-    description: "Get full zone state"
+    description: "Get full zone state (zone rows include 1-indexed zoneId)"
     consumers: [tab5, ios]
 
   /api/v1/zones/layout:
     method: POST
-    description: "Set zone layout (segment definitions)"
+    description: "Set zone layout (each segment carries 1-indexed zoneId in 1..3)"
+    request_body:
+      zones: "array of {zoneId (1..3), s1LeftStart, s1LeftEnd, s1RightStart, s1RightEnd}"
 
   /api/v1/zones/enabled:
     method: POST
     description: "Enable/disable zone system"
+
+  # Per-zone state setters (zoneId path param is 1-indexed: 1, 2, or 3)
+  /api/v1/zones/{zoneId}:
+    method: GET
+    description: "Get state for one zone (zoneId 1..3)"
+    path_params:
+      zoneId: { type: uint8, min: 1, max: 3 }
+
+  /api/v1/zones/{zoneId}/effect:
+    method: POST
+    description: "Set effect for one zone (zoneId 1..3)"
+    path_params:
+      zoneId: { type: uint8, min: 1, max: 3 }
+    request_body:
+      effectId: uint16
+
+  /api/v1/zones/{zoneId}/brightness:
+    method: POST
+    description: "Set brightness for one zone (zoneId 1..3)"
+    path_params:
+      zoneId: { type: uint8, min: 1, max: 3 }
+    request_body:
+      brightness: uint8
+
+  /api/v1/zones/{zoneId}/speed:
+    method: POST
+    description: "Set speed for one zone (zoneId 1..3, speed 1..100)"
+    path_params:
+      zoneId: { type: uint8, min: 1, max: 3 }
+    request_body:
+      speed: uint8
+
+  /api/v1/zones/{zoneId}/palette:
+    method: POST
+    description: "Set palette for one zone (zoneId 1..3)"
+    path_params:
+      zoneId: { type: uint8, min: 1, max: 3 }
+    request_body:
+      paletteId: uint8
+
+  /api/v1/zones/{zoneId}/blend:
+    method: POST
+    description: "Set blend mode for one zone (zoneId 1..3, blendMode 0..7)"
+    path_params:
+      zoneId: { type: uint8, min: 1, max: 3 }
+    request_body:
+      blendMode: uint8
+
+  /api/v1/zones/{zoneId}/enabled:
+    method: POST
+    description: "Enable/disable one zone (zoneId 1..3)"
+    path_params:
+      zoneId: { type: uint8, min: 1, max: 3 }
+    request_body:
+      enabled: bool
 
   /api/v1/zones/config:
     method: GET
@@ -593,7 +997,7 @@ endpoints:
 
   /api/v1/network/sta/enable:
     method: POST
-    description: "Enable STA mode (KNOWN BROKEN on K1 — do NOT use)"
+    description: "Enable STA mode. Current shipping K1 is AP-only via WIFI_AP_ONLY build flag; this endpoint is gated. Pure-STA path under re-validation via _sta_validation env (commit 11e040d6). Do NOT use to enable concurrent AP+STA — that is the genuine ESP-IDF 802.11 bug surface. See _FORENSIC_WIFI_REPORT.md."
 
   /api/v1/network/ap/enable:
     method: POST
@@ -609,7 +1013,7 @@ endpoints:
 
   /api/v1/network/connect:
     method: POST
-    description: "Connect to a network (KNOWN BROKEN on K1)"
+    description: "Connect K1 to a network in STA mode. Current shipping K1 is AP-only; this endpoint is gated until pure-STA path is re-validated via the _sta_validation build env (commit 11e040d6). See _FORENSIC_WIFI_REPORT.md."
 
   /api/v1/network/disconnect:
     method: POST
@@ -671,6 +1075,19 @@ endpoints:
   /api/v1/colorCorrection/config:
     method: GET
     description: "Get colour correction config"
+    response:
+      gammaEnabled: bool
+      gammaValue: float
+      lutGenerationId: uint32
+      gammaLut:
+        type: object
+        fields:
+          "0": uint8
+          "32": uint8
+          "64": uint8
+          "128": uint8
+          "192": uint8
+          "255": uint8
 
   /api/v1/colorCorrection/mode:
     method: POST
@@ -679,6 +1096,23 @@ endpoints:
   /api/v1/colorCorrection/config:
     method: POST
     description: "Set colour correction config"
+    params:
+      gammaEnabled: { type: bool, optional: true }
+      gammaValue: { type: float, optional: true, range: "1.0-3.0" }
+    response:
+      updated: bool
+      gammaEnabled: bool
+      gammaValue: float
+      lutGenerationId: uint32
+      gammaLut:
+        type: object
+        fields:
+          "0": uint8
+          "32": uint8
+          "64": uint8
+          "128": uint8
+          "192": uint8
+          "255": uint8
 
   /api/v1/colorCorrection/save:
     method: POST

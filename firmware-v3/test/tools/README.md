@@ -126,8 +126,8 @@ Run benchmarks locally before pushing:
 
 ```bash
 # Build and run tests
-cd v2
-pio test -e native_test -f test_pipeline_benchmark --verbose > benchmark_output.log
+cd firmware-v3
+pio test -e native_audio_benchmark --verbose > benchmark_output.log
 
 # Parse results
 python test/tools/parse_benchmark_serial.py \

@@ -1,0 +1,3687 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>K1 Zone Composer Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    /* ---- Theme ---- */
+    :root {
+      --bg-base: #0b0d12;
+      --bg-surface: #14171f;
+      --bg-surface-2: #1c1f29;
+      --bg-elev: #232734;
+      --border: #2c3142;
+      --border-strong: #3a4054;
+      --text-primary: #e6e9f0;
+      --text-secondary: #98a0b3;
+      --text-muted: #5a6276;
+
+      --accent: #00d4ff;
+      --accent-dim: #0a8aab;
+
+      /* Tab5-aligned zone colours (inner / middle / outer) — canonical from
+         tab5-encoder/src/ui/DesignTokens.h (ZONE_1_COLOUR / ZONE_2_COLOUR / ZONE_3_COLOUR). */
+      --zone-1: #00FFFF;       /* cyan — INNER  */
+      --zone-1-dim: rgba(0, 255, 255, 0.32);
+      --zone-2: #00FF99;       /* green — MIDDLE */
+      --zone-2-dim: rgba(0, 255, 153, 0.32);
+      --zone-3: #9900FF;       /* purple — OUTER */
+      --zone-3-dim: rgba(153, 0, 255, 0.32);
+
+      --status-ok: #4ade80;
+      --status-warn: #fbbf24;
+      --status-err: #f87171;
+      --status-idle: #5a6276;
+
+      --font-sans: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg-base);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(circle at 20% 0%, rgba(0, 212, 255, 0.06), transparent 50%),
+        radial-gradient(circle at 80% 100%, rgba(255, 107, 138, 0.04), transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .app {
+      position: relative;
+      z-index: 1;
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    /* ---- Header ---- */
+    .app-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 24px;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .app-title h1 {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .app-title p {
+      margin: 4px 0 0 0;
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+    .app-title .mockup-tag {
+      display: inline-block;
+      margin-left: 10px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: rgba(251, 191, 36, 0.15);
+      color: var(--status-warn);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      vertical-align: 2px;
+    }
+
+    /* ---- Connection Panel ---- */
+    .conn-panel {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .conn-host {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .conn-host label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .conn-host input {
+      width: 200px;
+      padding: 4px 8px;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+    .conn-host input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .transport-badges {
+      display: flex;
+      gap: 6px;
+    }
+    .transport-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      background: var(--bg-surface-2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.03em;
+    }
+    .transport-badge .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--status-idle);
+    }
+    .transport-badge.active .dot { background: var(--status-ok); box-shadow: 0 0 6px var(--status-ok); }
+    .transport-badge.connecting .dot { background: var(--status-warn); animation: pulse 1.2s ease-in-out infinite; }
+    .transport-badge.error .dot { background: var(--status-err); }
+    .transport-badge.idle .dot { background: var(--status-idle); }
+    .transport-badge.primary { border-color: var(--accent); color: var(--accent); }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* ---- Toolbar ---- */
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    button {
+      padding: 8px 14px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.12s ease;
+    }
+    button:hover {
+      background: var(--bg-elev);
+      border-color: var(--accent-dim);
+    }
+    button.primary {
+      background: linear-gradient(180deg, var(--accent) 0%, var(--accent-dim) 100%);
+      color: #001218;
+      font-weight: 600;
+      border-color: var(--accent-dim);
+    }
+    button.primary:hover {
+      filter: brightness(1.1);
+    }
+    button.danger {
+      border-color: rgba(248, 113, 113, 0.4);
+      color: var(--status-err);
+    }
+    button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .toolbar .spacer { flex: 1; }
+
+    /* ---- Layout ---- */
+    .grid {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 1100px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+
+    .panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 20px;
+      overflow: hidden;
+    }
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      background: var(--bg-surface-2);
+      border-bottom: 1px solid var(--border);
+    }
+    .panel-header h2 {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-secondary);
+    }
+    .panel-header .meta {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .panel-body {
+      padding: 16px;
+    }
+
+    /* ---- Composer State ---- */
+    .composer-state {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 16px;
+      align-items: center;
+    }
+    .toggle {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+    }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle .slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      transition: 0.18s;
+    }
+    .toggle .slider::before {
+      position: absolute;
+      content: '';
+      height: 16px;
+      width: 16px;
+      left: 3px;
+      top: 3px;
+      background: var(--text-secondary);
+      border-radius: 50%;
+      transition: 0.18s;
+    }
+    .toggle input:checked + .slider {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+    }
+    .toggle input:checked + .slider::before {
+      background: var(--accent);
+      transform: translateX(20px);
+    }
+    .composer-meta {
+      display: flex;
+      gap: 24px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+    .composer-meta .item label {
+      display: block;
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 2px;
+    }
+    .composer-meta .item .value {
+      color: var(--text-primary);
+    }
+
+    /* ---- Layout Editor ---- */
+    .layout-editor {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .strip-wrap {
+      position: relative;
+      padding: 24px 16px;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: visible;
+    }
+    .strip-axis {
+      display: flex;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      padding: 0 2px;
+    }
+    .strip-axis .centre-tick { color: var(--accent); }
+
+    .strip-track {
+      position: relative;
+      height: 56px;
+      background: linear-gradient(180deg, #050608 0%, #0a0c12 100%);
+      border-radius: 4px;
+      border: 1px solid var(--border-strong);
+      overflow: hidden;
+    }
+    .strip-leds {
+      display: flex;
+      gap: 0;
+      height: 100%;
+      width: 100%;
+    }
+    .led-cell {
+      flex: 1 1 0;
+      min-width: 0;
+      border-right: 1px solid rgba(255,255,255,0.02);
+      transition: background 0.08s ease;
+    }
+    .led-cell.zone-1 { background: var(--zone-1); }
+    .led-cell.zone-2 { background: var(--zone-2); }
+    .led-cell.zone-3 { background: var(--zone-3); }
+    .led-cell.zone-1.disabled { background: var(--zone-1-dim); }
+    .led-cell.zone-2.disabled { background: var(--zone-2-dim); }
+    .led-cell.zone-3.disabled { background: var(--zone-3-dim); }
+    .led-cell.unassigned { background: rgba(255,255,255,0.04); }
+
+    .centre-marker {
+      position: absolute;
+      top: -6px;
+      bottom: -6px;
+      width: 2px;
+      background: #ffffff;
+      box-shadow: 0 0 6px rgba(255, 255, 255, 0.7);
+      pointer-events: none;
+      z-index: 3;
+    }
+    .centre-marker::after {
+      content: '79·80';
+      position: absolute;
+      top: -16px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: var(--font-mono);
+      font-size: 9px;
+      color: #ffffff;
+      white-space: nowrap;
+    }
+
+    .boundary-handle {
+      position: absolute;
+      top: -8px;
+      bottom: -8px;
+      width: 14px;
+      transform: translateX(-50%);
+      cursor: ew-resize;
+      z-index: 4;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .boundary-handle::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 2px;
+      background: var(--text-primary);
+      box-shadow: 0 0 4px rgba(0,0,0,0.6);
+    }
+    .boundary-handle .grip {
+      position: relative;
+      width: 14px;
+      height: 24px;
+      background: var(--bg-elev);
+      border: 1px solid var(--border-strong);
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+    }
+    .boundary-handle .grip span {
+      width: 1px;
+      height: 10px;
+      background: var(--text-secondary);
+    }
+    .boundary-handle:hover .grip,
+    .boundary-handle.dragging .grip {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+    .boundary-handle:hover .grip span,
+    .boundary-handle.dragging .grip span {
+      background: #001218;
+    }
+    .boundary-handle .label {
+      position: absolute;
+      bottom: -22px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+    .boundary-handle .label .dist {
+      color: var(--accent);
+    }
+    .boundary-handle.mirror-pair {
+      opacity: 0.6;
+      cursor: default;
+    }
+    .boundary-handle.mirror-pair::before {
+      background: var(--text-muted);
+      width: 1px;
+    }
+    .boundary-handle.mirror-pair .grip {
+      width: 6px;
+      height: 14px;
+      background: transparent;
+      border: 1px dashed var(--border-strong);
+    }
+    .boundary-handle.mirror-pair .grip span { display: none; }
+
+    /* zone counts */
+    .zone-counts {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 6px;
+    }
+    .zone-count-card {
+      padding: 10px 12px;
+      background: var(--bg-surface-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      border-left-width: 3px;
+    }
+    .zone-count-card.zone-1 { border-left-color: var(--zone-1); }
+    .zone-count-card.zone-2 { border-left-color: var(--zone-2); }
+    .zone-count-card.zone-3 { border-left-color: var(--zone-3); }
+    .zone-count-card.disabled { opacity: 0.55; }
+    .zone-count-card .name {
+      font-size: 11px;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .zone-count-card .count {
+      font-family: var(--font-mono);
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+    .zone-count-card .count .unit {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-left: 4px;
+    }
+    .zone-count-card .range {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* validation banner */
+    .validation {
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      margin-top: 4px;
+    }
+    .validation.ok {
+      background: rgba(74, 222, 128, 0.1);
+      color: var(--status-ok);
+      border: 1px solid rgba(74, 222, 128, 0.25);
+    }
+    .validation.warn {
+      background: rgba(251, 191, 36, 0.1);
+      color: var(--status-warn);
+      border: 1px solid rgba(251, 191, 36, 0.25);
+    }
+
+    /* advanced numeric inputs */
+    .advanced-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-size: 12px;
+      user-select: none;
+      padding: 4px 0;
+    }
+    .advanced-toggle::before {
+      content: '▸';
+      transition: transform 0.18s;
+      color: var(--text-muted);
+    }
+    .advanced-toggle.open::before { transform: rotate(90deg); }
+    .advanced-panel {
+      display: none;
+      padding: 12px;
+      background: var(--bg-surface-2);
+      border-radius: 6px;
+      margin-top: 8px;
+    }
+    .advanced-panel.open { display: block; }
+
+    .seg-grid {
+      display: grid;
+      grid-template-columns: 60px repeat(4, 1fr);
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .seg-grid.header {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 4px;
+    }
+    .seg-grid input[type=number] {
+      width: 100%;
+      padding: 4px 6px;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+    .seg-zone-label {
+      font-weight: 600;
+      font-size: 12px;
+    }
+    .seg-zone-label.z1 { color: var(--zone-1); }
+    .seg-zone-label.z2 { color: var(--zone-2); }
+    .seg-zone-label.z3 { color: var(--zone-3); }
+    .mirror-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: 6px;
+    }
+
+    /* ---- Per-Zone Cards ---- */
+    .zone-card {
+      padding: 14px;
+      background: var(--bg-surface-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      border-left-width: 3px;
+      margin-bottom: 12px;
+    }
+    .zone-card.z1 { border-left-color: var(--zone-1); }
+    .zone-card.z2 { border-left-color: var(--zone-2); }
+    .zone-card.z3 { border-left-color: var(--zone-3); }
+    .zone-card.disabled { opacity: 0.55; }
+
+    .zone-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .zone-card-title {
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .zone-card-title.z1 { color: var(--zone-1); }
+    .zone-card-title.z2 { color: var(--zone-2); }
+    .zone-card-title.z3 { color: var(--zone-3); }
+
+    .field {
+      display: grid;
+      grid-template-columns: 90px 1fr auto;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 6px;
+      font-size: 12px;
+    }
+    .field label {
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-size: 10px;
+    }
+    .field select, .field input[type=number] {
+      width: 100%;
+      padding: 5px 7px;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+    .field input[type=range] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+    .field .value {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-secondary);
+      min-width: 36px;
+      text-align: right;
+    }
+
+    /* ---- Presets ---- */
+    .preset-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .preset-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      background: var(--bg-surface-2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+    .preset-row.active {
+      border-color: var(--accent);
+      background: rgba(0, 212, 255, 0.06);
+    }
+    .preset-row .name { font-family: var(--font-sans); }
+    .preset-row .meta { color: var(--text-muted); font-size: 10px; }
+
+    /* ---- Live State ---- */
+    .live-state pre {
+      background: var(--bg-base);
+      padding: 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-secondary);
+      max-height: 320px;
+      overflow: auto;
+      margin: 0;
+    }
+    .device-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .stat {
+      padding: 8px 10px;
+      background: var(--bg-surface-2);
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+    .stat label {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .stat .v {
+      font-family: var(--font-mono);
+      font-size: 16px;
+      color: var(--text-primary);
+    }
+    .stat .v .u { font-size: 11px; color: var(--text-muted); margin-left: 2px; }
+
+    /* ---- Raw Command ---- */
+    .raw-command textarea {
+      width: 100%;
+      padding: 10px;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      min-height: 90px;
+      resize: vertical;
+    }
+    .raw-command-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-top: 8px;
+    }
+    .raw-command-row select {
+      padding: 6px 8px;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    /* gated panel notice */
+    .gated-notice {
+      padding: 10px 14px;
+      background: rgba(251, 191, 36, 0.08);
+      border: 1px solid rgba(251, 191, 36, 0.25);
+      border-radius: 6px;
+      font-size: 12px;
+      color: var(--status-warn);
+      margin-bottom: 12px;
+    }
+
+    /* ---- Section nav strip (sticky) ---- */
+    .section-nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      gap: 4px;
+      padding: 8px 0;
+      margin: 0 0 16px 0;
+      background: var(--bg-base);
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+      scrollbar-width: thin;
+    }
+    .section-nav a {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .section-nav a:hover { background: var(--bg-surface-2); color: var(--text-primary); border-color: var(--accent-dim); }
+    .section-nav a .phtag {
+      padding: 1px 5px;
+      border-radius: 2px;
+      font-size: 9px;
+      font-weight: 600;
+    }
+    .section-nav a .phtag.now  { background: rgba(74, 222, 128, 0.15); color: var(--status-ok); }
+    .section-nav a .phtag.p1   { background: rgba(0, 212, 255, 0.15); color: var(--accent); }
+    .section-nav a .phtag.p3   { background: rgba(0, 255, 153, 0.12); color: var(--zone-2); }
+    .section-nav a .phtag.p4   { background: rgba(153, 0, 255, 0.15); color: var(--zone-3); }
+    .section-nav a .phtag.p6   { background: rgba(251, 191, 36, 0.12); color: var(--status-warn); }
+    .section-nav a .phtag.p8   { background: rgba(248, 113, 113, 0.12); color: var(--status-err); }
+
+    /* ---- Connection Diagnostics (expandable) ---- */
+    .conn-diag {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 20px;
+      overflow: hidden;
+    }
+    .conn-diag-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px;
+      cursor: pointer;
+      background: var(--bg-surface-2);
+    }
+    .conn-diag-head:hover { background: var(--bg-elev); }
+    .conn-diag-head h3 {
+      margin: 0;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-secondary);
+    }
+    .conn-diag-head h3::before {
+      content: '▸';
+      color: var(--text-muted);
+      margin-right: 8px;
+      transition: transform 0.18s;
+      display: inline-block;
+    }
+    .conn-diag.open .conn-diag-head h3::before { transform: rotate(90deg); }
+    .conn-diag-body {
+      display: none;
+      padding: 16px;
+      border-top: 1px solid var(--border);
+    }
+    .conn-diag.open .conn-diag-body { display: block; }
+    .conn-diag-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    @media (max-width: 900px) { .conn-diag-grid { grid-template-columns: 1fr; } }
+    .diag-card {
+      padding: 12px;
+      background: var(--bg-surface-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      border-left: 3px solid var(--border-strong);
+    }
+    .diag-card.ws { border-left-color: var(--accent); }
+    .diag-card.rest { border-left-color: var(--status-warn); }
+    .diag-card.serial { border-left-color: var(--zone-1); }
+    .diag-card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .diag-card-head .nm {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-secondary);
+    }
+    .diag-state {
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      background: var(--bg-base);
+      color: var(--status-idle);
+    }
+    .diag-state.active { color: var(--status-ok); background: rgba(74, 222, 128, 0.1); }
+    .diag-state.error { color: var(--status-err); background: rgba(248, 113, 113, 0.1); }
+    .diag-state.connecting { color: var(--status-warn); background: rgba(251, 191, 36, 0.1); }
+    .stat-line {
+      display: flex;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 3px 0;
+      border-top: 1px solid var(--border);
+    }
+    .stat-line:first-of-type { border-top: 0; padding-top: 0; }
+    .stat-line .k { color: var(--text-muted); }
+    .stat-line .v { color: var(--text-primary); }
+    .stat-line .v.ok { color: var(--status-ok); }
+    .stat-line .v.warn { color: var(--status-warn); }
+    .stat-line .v.err { color: var(--status-err); }
+    .app-state-grid {
+      padding: 12px;
+      background: var(--bg-surface-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 4px 16px;
+    }
+    @media (max-width: 700px) { .app-state-grid { grid-template-columns: 1fr; } }
+    .app-state-grid .row {
+      display: grid;
+      grid-template-columns: 130px 1fr;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 3px 0;
+    }
+    .app-state-grid .row .k { color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; font-size: 10px; }
+    .app-state-grid .row .v { color: var(--text-primary); }
+
+    /* ---- Accordion (future-feature panels) ---- */
+    .accordion {
+      margin-bottom: 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg-surface);
+      overflow: hidden;
+    }
+    .accordion-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 18px;
+      cursor: pointer;
+      background: var(--bg-surface-2);
+      transition: background 0.12s;
+    }
+    .accordion-head:hover { background: var(--bg-elev); }
+    .accordion-head .left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .accordion-head .left::before {
+      content: '▸';
+      color: var(--text-muted);
+      transition: transform 0.18s;
+      display: inline-block;
+    }
+    .accordion.open .accordion-head .left::before { transform: rotate(90deg); }
+    .accordion-head h2 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .accordion-head .meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .phase-badge {
+      padding: 2px 7px;
+      border-radius: 3px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .phase-badge.p1 { background: rgba(0, 212, 255, 0.15); color: var(--accent); border: 1px solid rgba(0, 212, 255, 0.3); }
+    .phase-badge.p3 { background: rgba(0, 255, 153, 0.12); color: var(--zone-2); border: 1px solid rgba(0, 255, 153, 0.3); }
+    .phase-badge.p4 { background: rgba(153, 0, 255, 0.15); color: var(--zone-3); border: 1px solid rgba(153, 0, 255, 0.3); }
+    .phase-badge.p6 { background: rgba(251, 191, 36, 0.12); color: var(--status-warn); border: 1px solid rgba(251, 191, 36, 0.3); }
+    .phase-badge.p8 { background: rgba(248, 113, 113, 0.12); color: var(--status-err); border: 1px solid rgba(248, 113, 113, 0.3); }
+    /* gate-badge: per-accordion capability indicator. Default = stub/gated styling
+       (muted). When capability discovery confirms the endpoint is live, the
+       `.live` modifier flips it to a green-tinted "available" pill. */
+    .gate-badge {
+      padding: 2px 7px;
+      border-radius: 3px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      background: rgba(148, 163, 184, 0.08);
+      color: var(--text-muted);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+    }
+    .gate-badge.live {
+      background: rgba(74, 222, 128, 0.15);
+      color: var(--status-ok);
+      border: 1px solid rgba(74, 222, 128, 0.3);
+    }
+    .accordion-body {
+      display: none;
+      padding: 16px 18px;
+      border-top: 1px solid var(--border);
+    }
+    .accordion.open .accordion-body { display: block; }
+    .accordion-body p.intro {
+      margin: 0 0 12px 0;
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+
+    .placeholder-grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+    @media (max-width: 1100px) { .placeholder-grid-3 { grid-template-columns: 1fr; } }
+
+    .param-card {
+      padding: 12px;
+      background: var(--bg-surface-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      border-left-width: 3px;
+    }
+    .param-card.z1 { border-left-color: var(--zone-1); }
+    .param-card.z2 { border-left-color: var(--zone-2); }
+    .param-card.z3 { border-left-color: var(--zone-3); opacity: 0.55; }
+    .param-card .ph-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .param-card .ph-title { font-size: 13px; font-weight: 600; }
+    .param-card .ph-title.z1 { color: var(--zone-1); }
+    .param-card .ph-title.z2 { color: var(--zone-2); }
+    .param-card .ph-title.z3 { color: var(--zone-3); }
+    .param-card .effect-tag {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    .contract-ref {
+      margin-top: 12px;
+      padding: 8px 10px;
+      background: var(--bg-base);
+      border: 1px dashed var(--border-strong);
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+    .contract-ref .label {
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-size: 9px;
+      margin-right: 6px;
+    }
+    .contract-ref code { color: var(--accent); }
+
+    /* Audio routing band visualisation */
+    .audio-bands {
+      display: flex;
+      gap: 3px;
+      margin-top: 8px;
+    }
+    .audio-band {
+      flex: 1;
+      height: 28px;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-mono);
+      font-size: 9px;
+      color: var(--text-muted);
+    }
+    .audio-band.routed { background: rgba(0, 212, 255, 0.08); color: var(--text-primary); border-color: var(--accent-dim); }
+
+    /* Snapshot row */
+    .snapshot-row {
+      display: grid;
+      grid-template-columns: 1fr auto auto auto;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 12px;
+      background: var(--bg-surface-2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      margin-bottom: 6px;
+    }
+    .snapshot-row .nm { font-size: 12px; }
+    .snapshot-row .ts { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+
+    /* Crossfader */
+    .crossfader {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 16px;
+      align-items: center;
+      padding: 16px;
+      background: var(--bg-surface-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+    .crossfader .bank { text-align: center; }
+    .crossfader .bank .lbl {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+    .crossfader .bank .nm {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      color: var(--text-primary);
+    }
+    .crossfader .slider input {
+      width: 200px;
+      accent-color: var(--accent);
+    }
+
+    /* Z-order layer row */
+    .layer-row {
+      display: grid;
+      grid-template-columns: 30px 1fr auto auto;
+      gap: 8px;
+      align-items: center;
+      padding: 10px 12px;
+      background: var(--bg-surface-2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      margin-bottom: 6px;
+      cursor: ns-resize;
+    }
+    .layer-row .grip {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      color: var(--text-muted);
+    }
+    .layer-row .grip span {
+      width: 12px;
+      height: 1px;
+      background: currentColor;
+    }
+    .layer-row .nm { font-size: 12px; font-weight: 600; }
+    .layer-row .nm.z1 { color: var(--zone-1); }
+    .layer-row .nm.z2 { color: var(--zone-2); }
+    .layer-row .nm.z3 { color: var(--zone-3); }
+    .layer-row .ord {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* Diagnostics timing strip */
+    .timing-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+    .timing-card {
+      padding: 12px;
+      background: var(--bg-surface-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      border-left-width: 3px;
+    }
+    .timing-card.z1 { border-left-color: var(--zone-1); }
+    .timing-card.z2 { border-left-color: var(--zone-2); }
+    .timing-card.z3 { border-left-color: var(--zone-3); }
+    .timing-card .nm {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+    .timing-bar {
+      height: 4px;
+      background: var(--bg-base);
+      border-radius: 2px;
+      overflow: hidden;
+      margin: 4px 0 8px 0;
+    }
+    .timing-bar-fill { height: 100%; background: var(--accent); }
+    .timing-bar-fill.warn { background: var(--status-warn); }
+    .timing-bar-fill.err { background: var(--status-err); }
+
+    /* footer */
+    .app-footer {
+      margin-top: 32px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- ============ HEADER ============ -->
+    <header class="app-header">
+      <div class="app-title">
+        <h1>K1 Zone Composer Portal <span class="mockup-tag">v0 mockup</span></h1>
+        <p>Full diagnostic surface — multi-transport (WS · REST · WebSerial), fault-tolerant, post-B2 wire format (zoneId 1·2·3).</p>
+      </div>
+      <div class="conn-panel">
+        <div class="conn-host">
+          <label>Device host</label>
+          <input id="hostInput" type="text" value="192.168.4.1" placeholder="192.168.4.1 or lightwaveos.local" />
+        </div>
+        <div class="transport-badges">
+          <div class="transport-badge idle" title="WebSocket — primary, real-time bidi">
+            <span class="dot"></span><span>WS</span>
+          </div>
+          <div class="transport-badge idle" title="REST — fallback for state mutations">
+            <span class="dot"></span><span>REST</span>
+          </div>
+          <div class="transport-badge idle" title="WebSerial — direct USB CDC, no WiFi required">
+            <span class="dot"></span><span>USB</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- ============ TOOLBAR ============ -->
+    <div class="toolbar">
+      <button class="primary" id="connectBtn">Connect</button>
+      <button id="acquireBtn">Take Control</button>
+      <button id="releaseBtn">Release Lease</button>
+      <span class="spacer"></span>
+      <button id="reloadBtn">Reload State</button>
+      <button id="applyBtn" class="primary">Apply Layout</button>
+      <button id="revertBtn" class="danger">Revert Pending</button>
+    </div>
+
+    <!-- ============ SECTION NAV (sticky) ============ -->
+    <nav class="section-nav" id="sectionNav">
+      <a href="#sec-composer"><span class="phtag now">NOW</span> Composer</a>
+      <a href="#sec-layout"><span class="phtag now">NOW</span> Layout</a>
+      <a href="#sec-zones"><span class="phtag now">NOW</span> Per-Zone</a>
+      <a href="#sec-presets"><span class="phtag now">NOW</span> Presets</a>
+      <a href="#sec-live"><span class="phtag now">NOW</span> Live State</a>
+      <a href="#sec-raw"><span class="phtag now">NOW</span> Raw Cmd</a>
+      <a href="#sec-d3"><span class="phtag p1">P1</span> Per-Zone Params (D-3)</a>
+      <a href="#sec-d4"><span class="phtag p1">P1</span> Audio Routing (D-4)</a>
+      <a href="#sec-snapshots"><span class="phtag p3">P3</span> Snapshots</a>
+      <a href="#sec-perf"><span class="phtag p4">P4</span> Performance</a>
+      <a href="#sec-zorder"><span class="phtag p6">P6</span> Layering / Z-Order</a>
+      <a href="#sec-render-diag"><span class="phtag p8">P8</span> Render Diagnostics</a>
+    </nav>
+
+    <!-- ============ CONNECTION DIAGNOSTICS (expandable, always visible) ============ -->
+    <div class="conn-diag" id="connDiag">
+      <div class="conn-diag-head" id="connDiagHead">
+        <h3>Connection Diagnostics — full transport + lease + queue state</h3>
+        <span style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">click to expand</span>
+      </div>
+      <div class="conn-diag-body">
+        <div class="conn-diag-grid">
+          <!-- WebSocket -->
+          <div class="diag-card ws">
+            <div class="diag-card-head">
+              <span class="nm">WebSocket — primary</span>
+              <span class="diag-state idle" id="wsState">idle</span>
+            </div>
+            <div class="stat-line"><span class="k">endpoint</span><span class="v" id="wsEndpoint">ws://192.168.4.1/ws</span></div>
+            <div class="stat-line"><span class="k">RTT p50 / p95</span><span class="v" id="wsRtt">— / — ms</span></div>
+            <div class="stat-line"><span class="k">last frame</span><span class="v" id="wsLastFrame">—</span></div>
+            <div class="stat-line"><span class="k">reconnect attempts</span><span class="v" id="wsRetries">0</span></div>
+            <div class="stat-line"><span class="k">heartbeat</span><span class="v" id="wsHeartbeat">— / 5 s</span></div>
+            <div class="stat-line"><span class="k">last error</span><span class="v" id="wsErr">none</span></div>
+          </div>
+          <!-- REST -->
+          <div class="diag-card rest">
+            <div class="diag-card-head">
+              <span class="nm">REST — fallback</span>
+              <span class="diag-state idle" id="restState">idle</span>
+            </div>
+            <div class="stat-line"><span class="k">base URL</span><span class="v" id="restBase">http://192.168.4.1/api/v1</span></div>
+            <div class="stat-line"><span class="k">RTT p50 / p95</span><span class="v" id="restRtt">— / — ms</span></div>
+            <div class="stat-line"><span class="k">last 200</span><span class="v" id="restLast200">—</span></div>
+            <div class="stat-line"><span class="k">retries (5xx)</span><span class="v" id="restRetries">0</span></div>
+            <div class="stat-line"><span class="k">capability poll</span><span class="v" id="restCaps">/openapi.json — pending</span></div>
+            <div class="stat-line"><span class="k">last error</span><span class="v" id="restErr">none</span></div>
+          </div>
+          <!-- WebSerial -->
+          <div class="diag-card serial">
+            <div class="diag-card-head">
+              <span class="nm">WebSerial — USB CDC</span>
+              <span class="diag-state idle" id="serialState">idle</span>
+            </div>
+            <div class="stat-line"><span class="k">port</span><span class="v" id="serialPort">— (click Connect)</span></div>
+            <div class="stat-line"><span class="k">baud</span><span class="v" id="serialBaud">115200</span></div>
+            <div class="stat-line"><span class="k">RTT p50 / p95</span><span class="v" id="serialRtt">— / — ms</span></div>
+            <div class="stat-line"><span class="k">last response</span><span class="v" id="serialLast">—</span></div>
+            <div class="stat-line"><span class="k">parity gaps</span><span class="v warn" id="serialGaps">2 known (setLayout, enableZone)</span></div>
+            <div class="stat-line"><span class="k">last error</span><span class="v" id="serialErr">none</span></div>
+          </div>
+        </div>
+        <div class="app-state-grid">
+          <div class="row"><span class="k">Lease state</span><span class="v" id="leaseState">Observe (read-only)</span></div>
+          <div class="row"><span class="k">Lease holder</span><span class="v" id="leaseHolder">— (no owner)</span></div>
+          <div class="row"><span class="k">Lease heartbeat</span><span class="v" id="leaseHb">— / 30 s</span></div>
+          <div class="row"><span class="k">Pending command queue</span><span class="v" id="queueDepth">0 commands</span></div>
+          <div class="row"><span class="k">Last broadcast</span><span class="v" id="lastBroadcastFull">—</span></div>
+          <div class="row"><span class="k">Wire-format</span><span class="v ok">post-B2 · zoneId 1·2·3 · zoneId=0 reserved</span></div>
+          <div class="row"><span class="k">Active transport</span><span class="v" id="activeTransport">— (no connection)</span></div>
+          <div class="row"><span class="k">Failover policy</span><span class="v">WS → REST → WebSerial · auto-reconnect, exp backoff 1s→32s · idempotent retry on requestId</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ MAIN GRID ============ -->
+    <div class="grid">
+      <!-- ============ LEFT COLUMN ============ -->
+      <div class="col-left">
+
+        <!-- Composer State -->
+        <section class="panel" id="sec-composer">
+          <div class="panel-header">
+            <h2>Composer State</h2>
+            <span class="meta" id="composerMeta">Active preset: Dual Split</span>
+          </div>
+          <div class="panel-body">
+            <div class="composer-state">
+              <label class="toggle">
+                <input type="checkbox" id="enableToggle" checked />
+                <span class="slider"></span>
+              </label>
+              <div class="composer-meta">
+                <div class="item">
+                  <label>Zones enabled</label>
+                  <span class="value" id="enabledCount">2 / 3</span>
+                </div>
+                <div class="item">
+                  <label>Total LEDs assigned</label>
+                  <span class="value" id="totalAssigned">160 / 160</span>
+                </div>
+                <div class="item">
+                  <label>Active preset</label>
+                  <span class="value">Dual Split (preset 1)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Layout Editor — INTERACTIVE -->
+        <section class="panel" id="sec-layout">
+          <div class="panel-header">
+            <h2>Layout Editor</h2>
+            <span class="meta">Centre-symmetric · 160 LEDs · pre-validation matches firmware <code style="font-family:var(--font-mono)">validateLayout()</code></span>
+          </div>
+          <div class="panel-body layout-editor">
+            <div class="strip-wrap">
+              <div class="strip-axis">
+                <span>0</span>
+                <span>40</span>
+                <span class="centre-tick">79 · 80 (centre)</span>
+                <span>119</span>
+                <span>159</span>
+              </div>
+              <div class="strip-track" id="stripTrack">
+                <div class="strip-leds" id="stripLeds">
+                  <!-- 160 LED cells injected by JS -->
+                </div>
+                <div class="centre-marker" style="left: calc(50% - 1px);"></div>
+                <div class="boundary-handle mirror-pair" id="b1Mirror" data-handle="b1m" style="left: 0%;"><div class="grip"><span></span><span></span></div></div>
+                <div class="boundary-handle mirror-pair" id="b2Mirror" data-handle="b2m" style="left: 0%;"><div class="grip"><span></span><span></span></div></div>
+                <div class="boundary-handle" id="b1Handle" data-handle="b1" style="left: 0%;">
+                  <div class="grip"><span></span><span></span></div>
+                  <div class="label">B<sub>1</sub> · <span class="dist">+30</span></div>
+                </div>
+                <div class="boundary-handle" id="b2Handle" data-handle="b2" style="left: 0%;">
+                  <div class="grip"><span></span><span></span></div>
+                  <div class="label">B<sub>2</sub> · <span class="dist">+80</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="zone-counts" id="zoneCounts"></div>
+            <div class="validation ok" id="validationBanner">✓ Layout valid · 160 / 160 LEDs assigned · centre-symmetric · no overlaps</div>
+
+            <div class="advanced-toggle" id="advToggle">Advanced — segment quadruples (override boundary auto-mirror)</div>
+            <div class="advanced-panel" id="advPanel">
+              <div class="seg-grid header">
+                <div></div>
+                <div>s1LeftStart</div>
+                <div>s1LeftEnd</div>
+                <div>s1RightStart</div>
+                <div>s1RightEnd</div>
+              </div>
+              <div class="seg-grid"><span class="seg-zone-label z1">Zone 1</span>
+                <input type="number" min="0" max="159" value="50" data-z="0" data-f="s1LeftStart">
+                <input type="number" min="0" max="159" value="79" data-z="0" data-f="s1LeftEnd">
+                <input type="number" min="0" max="159" value="80" data-z="0" data-f="s1RightStart">
+                <input type="number" min="0" max="159" value="109" data-z="0" data-f="s1RightEnd">
+              </div>
+              <div class="seg-grid"><span class="seg-zone-label z2">Zone 2</span>
+                <input type="number" min="0" max="159" value="0" data-z="1" data-f="s1LeftStart">
+                <input type="number" min="0" max="159" value="49" data-z="1" data-f="s1LeftEnd">
+                <input type="number" min="0" max="159" value="110" data-z="1" data-f="s1RightStart">
+                <input type="number" min="0" max="159" value="159" data-z="1" data-f="s1RightEnd">
+              </div>
+              <div class="seg-grid"><span class="seg-zone-label z3">Zone 3</span>
+                <input type="number" min="0" max="159" value="0" data-z="2" data-f="s1LeftStart">
+                <input type="number" min="0" max="159" value="0" data-z="2" data-f="s1LeftEnd">
+                <input type="number" min="0" max="159" value="0" data-z="2" data-f="s1RightStart">
+                <input type="number" min="0" max="159" value="0" data-z="2" data-f="s1RightEnd">
+              </div>
+              <div class="mirror-toggle">
+                <input type="checkbox" id="mirrorToggle" checked />
+                <label for="mirrorToggle">Auto-mirror around centre 79·80 (firmware-required for centre-origin)</label>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Live State -->
+        <section class="panel" id="sec-live">
+          <div class="panel-header">
+            <h2>Live State</h2>
+            <span class="meta" id="lastBroadcast">last broadcast: <span style="color: var(--status-idle)">—</span></span>
+          </div>
+          <div class="panel-body live-state">
+            <pre id="liveStateJson">{
+  "type": "zones.list",
+  "data": {
+    "enabled": true,
+    "activePreset": 1,
+    "zones": [
+      {
+        "id": 1,
+        "effectId": 4865,
+        "effectName": "K1 Bloom",
+        "paletteId": 12,
+        "blendMode": 4,
+        "speed": 50,
+        "brightness": 200,
+        "enabled": true
+      },
+      {
+        "id": 2,
+        "effectId": 4866,
+        "effectName": "K1 Waveform",
+        "paletteId": 5,
+        "blendMode": 0,
+        "speed": 60,
+        "brightness": 180,
+        "enabled": true
+      }
+    ],
+    "segments": [
+      { "zoneId": 1, "s1LeftStart": 50, "s1LeftEnd": 79, "s1RightStart": 80, "s1RightEnd": 109 },
+      { "zoneId": 2, "s1LeftStart": 0,  "s1LeftEnd": 49, "s1RightStart": 110, "s1RightEnd": 159 }
+    ]
+  }
+}</pre>
+            <div class="device-stats">
+              <div class="stat"><label>FPS</label><div class="v" id="statFps">119<span class="u">/120</span></div></div>
+              <div class="stat"><label>Free heap</label><div class="v" id="statHeap">16,080<span class="u">B</span></div></div>
+              <div class="stat"><label>Render budget</label><div class="v" id="statRender">1.42<span class="u">ms</span></div></div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- ============ RIGHT COLUMN ============ -->
+      <div class="col-right">
+
+        <!-- Per-Zone Controls -->
+        <section class="panel" id="sec-zones">
+          <div class="panel-header">
+            <h2>Per-Zone Controls</h2>
+            <span class="meta">Sections 1, 3 from command matrix</span>
+          </div>
+          <div class="panel-body">
+
+            <div class="zone-card z1">
+              <div class="zone-card-header">
+                <div class="zone-card-title z1">Zone 1</div>
+                <label class="toggle"><input type="checkbox" checked /><span class="slider"></span></label>
+              </div>
+              <div class="field">
+                <label>Effect</label>
+                <select>
+                  <option>K1 Bloom (0x1301)</option>
+                  <option>K1 Waveform (0x1302)</option>
+                  <option>LGP Wave Collision Enhanced (0x0E08)</option>
+                  <option>LGP Interference Scanner Enhanced (0x0E03)</option>
+                  <option>LGP Star Burst Enhanced (0x0E07)</option>
+                </select>
+                <span></span>
+              </div>
+              <div class="field">
+                <label>Brightness</label>
+                <input type="range" min="0" max="255" value="200" />
+                <span class="value">200</span>
+              </div>
+              <div class="field">
+                <label>Speed</label>
+                <input type="range" min="1" max="100" value="50" />
+                <span class="value">50</span>
+              </div>
+              <div class="field">
+                <label>Palette</label>
+                <select>
+                  <option>Sunset (12)</option>
+                  <option>Ocean (5)</option>
+                  <option>Forest (18)</option>
+                </select>
+                <span></span>
+              </div>
+              <div class="field">
+                <label>Blend</label>
+                <select>
+                  <option>Overwrite (0)</option>
+                  <option>Add (1)</option>
+                  <option>Multiply (2)</option>
+                  <option>Lighten (3)</option>
+                  <option selected>Screen (4)</option>
+                  <option>Difference (5)</option>
+                  <option>Subtract (6)</option>
+                  <option>Darken (7)</option>
+                </select>
+                <span></span>
+              </div>
+            </div>
+
+            <div class="zone-card z2">
+              <div class="zone-card-header">
+                <div class="zone-card-title z2">Zone 2</div>
+                <label class="toggle"><input type="checkbox" checked /><span class="slider"></span></label>
+              </div>
+              <div class="field">
+                <label>Effect</label>
+                <select>
+                  <option selected>K1 Waveform (0x1302)</option>
+                  <option>K1 Bloom (0x1301)</option>
+                </select>
+                <span></span>
+              </div>
+              <div class="field">
+                <label>Brightness</label>
+                <input type="range" min="0" max="255" value="180" />
+                <span class="value">180</span>
+              </div>
+              <div class="field">
+                <label>Speed</label>
+                <input type="range" min="1" max="100" value="60" />
+                <span class="value">60</span>
+              </div>
+              <div class="field">
+                <label>Palette</label>
+                <select>
+                  <option selected>Ocean (5)</option>
+                  <option>Sunset (12)</option>
+                </select>
+                <span></span>
+              </div>
+              <div class="field">
+                <label>Blend</label>
+                <select>
+                  <option selected>Overwrite (0)</option>
+                  <option>Screen (4)</option>
+                </select>
+                <span></span>
+              </div>
+            </div>
+
+            <div class="zone-card z3 disabled">
+              <div class="zone-card-header">
+                <div class="zone-card-title z3">Zone 3</div>
+                <label class="toggle"><input type="checkbox" /><span class="slider"></span></label>
+              </div>
+              <div class="field">
+                <label>Effect</label>
+                <select disabled>
+                  <option>—</option>
+                </select>
+                <span></span>
+              </div>
+              <div class="field">
+                <label>Brightness</label>
+                <input type="range" min="0" max="255" value="0" disabled />
+                <span class="value">—</span>
+              </div>
+              <div class="field">
+                <label>Speed</label>
+                <input type="range" min="1" max="100" value="0" disabled />
+                <span class="value">—</span>
+              </div>
+              <div class="field">
+                <label>Palette</label>
+                <select disabled><option>—</option></select>
+                <span></span>
+              </div>
+              <div class="field">
+                <label>Blend</label>
+                <select disabled><option>—</option></select>
+                <span></span>
+              </div>
+            </div>
+
+            <div class="gated-notice" style="margin-top: 12px;">
+              ⚠ <strong>D-3 per-zone effect parameters:</strong> blocked on D-1 keystone hardware validation. Zone-specific parameter sliders will appear here once the instance pool is activated.
+            </div>
+          </div>
+        </section>
+
+        <!-- Presets -->
+        <section class="panel" id="sec-presets">
+          <div class="panel-header">
+            <h2>Presets</h2>
+            <span class="meta">Section 6 · 7</span>
+          </div>
+          <div class="panel-body">
+            <div class="preset-list" id="presetList">
+              <!-- Fallback static rows: shown when Store.presets is empty (offline / pre-connect).
+                   renderPresets() replaces these with dynamic content from Store.presets[]. -->
+              <div class="preset-row" data-preset-id="0" data-builtin="true">
+                <span class="name">Unified <span class="meta">— preset 0 · 1 zone, 160 LEDs</span></span>
+                <button class="apply-preset">Apply</button>
+                <button class="delete-preset danger" disabled title="factory preset — protected">Delete</button>
+              </div>
+              <div class="preset-row active" data-preset-id="1" data-builtin="true">
+                <span class="name">Dual Split <span class="meta">— preset 1 · 2 zones, 60 + 100 LEDs</span></span>
+                <button class="apply-preset" disabled>Active</button>
+                <button class="delete-preset danger" disabled title="factory preset — protected">Delete</button>
+              </div>
+              <div class="preset-row" data-preset-id="2" data-builtin="true">
+                <span class="name">Triple Rings <span class="meta">— preset 2 · 3 zones, distinct effects</span></span>
+                <button class="apply-preset">Apply</button>
+                <button class="delete-preset danger" disabled title="factory preset — protected">Delete</button>
+              </div>
+              <div class="preset-row" data-preset-id="3" data-builtin="true">
+                <span class="name">Heartbeat Focus <span class="meta">— preset 3 · 1 + 2 breathing zones</span></span>
+                <button class="apply-preset">Apply</button>
+                <button class="delete-preset danger" disabled title="factory preset — protected">Delete</button>
+              </div>
+            </div>
+            <div style="display:flex; gap: 8px; margin-top: 12px;">
+              <button id="savePresetBtn">Save Current as Preset…</button>
+              <button class="danger" id="deleteCustomBtn" style="display:none;">Delete Custom</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Raw Command -->
+        <section class="panel" id="sec-raw">
+          <div class="panel-header">
+            <h2>Raw Command</h2>
+            <span class="meta">Diagnostic escape hatch · sends via primary transport</span>
+          </div>
+          <div class="panel-body raw-command">
+            <textarea id="rawCommand">{
+  "type": "zone.setEffect",
+  "requestId": "raw-1",
+  "zoneId": 1,
+  "effectId": 4865
+}</textarea>
+            <div class="raw-command-row">
+              <select id="rawTransport">
+                <option value="auto">Auto (primary)</option>
+                <option value="ws">WebSocket</option>
+                <option value="rest">REST</option>
+                <option value="serial">USB Serial</option>
+              </select>
+              <button class="primary">Send</button>
+              <span class="meta" style="color: var(--text-muted); font-family: var(--font-mono); font-size: 11px;">last response: <span style="color: var(--status-idle)">—</span></span>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </div>
+
+    <!-- ============ FUTURE-PHASE ACCORDIONS ============ -->
+    <h2 style="margin: 32px 0 12px 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary);">Forward-Compatible UI · Future Phases</h2>
+
+    <!-- §D-3 Per-Zone Effect Parameters (Phase 1) -->
+    <div class="accordion" id="sec-d3">
+      <div class="accordion-head" data-accordion="d3">
+        <div class="left">
+          <h2>Per-Zone Effect Parameters</h2>
+          <span class="phase-badge p1">Phase 1 · D-3</span>
+        </div>
+        <div class="meta">
+          <span class="gate-badge">gated on D-1 keystone hardware validation</span>
+          <span>command-matrix §4</span>
+        </div>
+      </div>
+      <div class="accordion-body">
+        <p class="intro">Per-zone effect parameters allow each zone to mutate its own effect's parameters without affecting other zones running the same <code style="font-family:var(--font-mono); color:var(--accent)">effectId</code>. Requires D-1 instance pool; without it, parameter writes silently corrupt cross-zone state. Spike 1 prototype landed (commit <code style="font-family:var(--font-mono);">2fe2f289</code>); production switch behind <code style="font-family:var(--font-mono);">K1_ZONE_INSTANCE_POOL_ENABLED</code> compile gate (default off).</p>
+        <div class="placeholder-grid-3">
+          <div class="param-card z1">
+            <div class="ph-head">
+              <span class="ph-title z1">Zone 1</span>
+              <span class="effect-tag">K1 Bloom · 0x1301</span>
+            </div>
+            <div class="field"><label>forward_sec</label><input type="range" min="0" max="100" value="35" disabled /><span class="value">0.35</span></div>
+            <div class="field"><label>decay_sec</label><input type="range" min="0" max="100" value="60" disabled /><span class="value">0.60</span></div>
+            <div class="field"><label>chroma_threshold</label><input type="range" min="0" max="100" value="40" disabled /><span class="value">0.40</span></div>
+            <div class="field"><label>prism_count</label><input type="range" min="0" max="100" value="100" disabled /><span class="value">1.00</span></div>
+            <div class="field"><label>bulb_opacity</label><input type="range" min="0" max="100" value="0" disabled /><span class="value">0.00</span></div>
+          </div>
+          <div class="param-card z2">
+            <div class="ph-head">
+              <span class="ph-title z2">Zone 2</span>
+              <span class="effect-tag">K1 Waveform · 0x1302</span>
+            </div>
+            <div class="field"><label>trail_decay</label><input type="range" min="0" max="100" value="55" disabled /><span class="value">0.55</span></div>
+            <div class="field"><label>peak_threshold</label><input type="range" min="0" max="100" value="30" disabled /><span class="value">0.30</span></div>
+            <div class="field"><label>colour_shift</label><input type="range" min="0" max="100" value="0" disabled /><span class="value">0.00</span></div>
+            <div class="field"><label>scroll_bias</label><input type="range" min="0" max="100" value="50" disabled /><span class="value">0.50</span></div>
+          </div>
+          <div class="param-card z3">
+            <div class="ph-head">
+              <span class="ph-title z3">Zone 3</span>
+              <span class="effect-tag">— no effect assigned</span>
+            </div>
+            <div class="field"><label>—</label><input type="range" disabled /><span class="value">—</span></div>
+            <div class="field"><label>—</label><input type="range" disabled /><span class="value">—</span></div>
+            <div class="field"><label>—</label><input type="range" disabled /><span class="value">—</span></div>
+          </div>
+        </div>
+        <div class="contract-ref">
+          <span class="label">contract</span>
+          <code>POST /api/v1/zones/{zoneId}/effects/parameters</code> · WS <code>zone.effects.parameters.set</code> · SerialJSON <code>zone.effects.parameters.set</code> · readback per-zone <code>getParameter()</code> via instance pool · regression gate <code>Spike 2 + E5</code>
+        </div>
+      </div>
+    </div>
+
+    <!-- §D-4 Audio Routing per Zone (Phase 1) -->
+    <div class="accordion" id="sec-d4">
+      <div class="accordion-head" data-accordion="d4">
+        <div class="left">
+          <h2>Audio Routing per Zone</h2>
+          <span class="phase-badge p1">Phase 1 · D-4</span>
+        </div>
+        <div class="meta">
+          <span class="gate-badge">currently 🚫 501 stub · independent of D-1</span>
+          <span>command-matrix §5</span>
+        </div>
+      </div>
+      <div class="accordion-body">
+        <p class="intro">Each zone selects which audio frequency band(s) it reacts to. <code style="font-family:var(--font-mono);color:var(--accent)">m_zoneAudioConfigs[]</code> storage exists in ZoneComposer but is dead-coded — Phase 1 A3 wires it into <code style="font-family:var(--font-mono);color:var(--accent)">renderZone()</code> via the D-4 hint+envelope contract.</p>
+        <div class="placeholder-grid-3">
+          <div class="param-card z1">
+            <div class="ph-head">
+              <span class="ph-title z1">Zone 1 · K1 Bloom</span>
+            </div>
+            <div class="field"><label>routing mode</label><select disabled><option>FULL_MIX</option><option selected>BASS</option><option>MID</option><option>HIGH</option><option>CUSTOM</option></select><span></span></div>
+            <div class="field"><label>envelope</label><input type="range" min="0" max="255" value="200" disabled /><span class="value">200</span></div>
+            <div class="audio-bands">
+              <div class="audio-band routed">B0 25Hz</div>
+              <div class="audio-band routed">B1 50Hz</div>
+              <div class="audio-band routed">B2 100Hz</div>
+              <div class="audio-band">B3 200Hz</div>
+              <div class="audio-band">B4 400Hz</div>
+              <div class="audio-band">B5 800Hz</div>
+              <div class="audio-band">B6 1.6k</div>
+              <div class="audio-band">B7 3.2k</div>
+            </div>
+          </div>
+          <div class="param-card z2">
+            <div class="ph-head">
+              <span class="ph-title z2">Zone 2 · K1 Waveform</span>
+            </div>
+            <div class="field"><label>routing mode</label><select disabled><option selected>FULL_MIX</option></select><span></span></div>
+            <div class="field"><label>envelope</label><input type="range" min="0" max="255" value="180" disabled /><span class="value">180</span></div>
+            <div class="audio-bands">
+              <div class="audio-band routed">B0</div>
+              <div class="audio-band routed">B1</div>
+              <div class="audio-band routed">B2</div>
+              <div class="audio-band routed">B3</div>
+              <div class="audio-band routed">B4</div>
+              <div class="audio-band routed">B5</div>
+              <div class="audio-band routed">B6</div>
+              <div class="audio-band routed">B7</div>
+            </div>
+          </div>
+          <div class="param-card z3">
+            <div class="ph-head">
+              <span class="ph-title z3">Zone 3 · disabled</span>
+            </div>
+            <div class="field"><label>routing mode</label><select disabled><option>—</option></select><span></span></div>
+            <div class="field"><label>envelope</label><input type="range" disabled /><span class="value">—</span></div>
+            <div class="audio-bands">
+              <div class="audio-band">—</div><div class="audio-band">—</div><div class="audio-band">—</div><div class="audio-band">—</div>
+              <div class="audio-band">—</div><div class="audio-band">—</div><div class="audio-band">—</div><div class="audio-band">—</div>
+            </div>
+          </div>
+        </div>
+        <div class="contract-ref">
+          <span class="label">contract</span>
+          <code>GET/POST /api/v1/zones/{zoneId}/audio</code> · routing modes <code>FULL_MIX</code>, <code>BASS</code>, <code>MID</code>, <code>HIGH</code>, <code>CUSTOM (deferred)</code> · regression gate <code>Spike 3 + E5</code>
+        </div>
+      </div>
+    </div>
+
+    <!-- §Phase 3 Snapshots / Scene Memory -->
+    <div class="accordion" id="sec-snapshots">
+      <div class="accordion-head" data-accordion="snapshots">
+        <div class="left">
+          <h2>Snapshots / Scene Memory</h2>
+          <span class="phase-badge p3">Phase 3 · A6</span>
+        </div>
+        <div class="meta">
+          <span class="gate-badge">currently 🚫 501 stub · NVS-versioned schema</span>
+          <span>command-matrix §8</span>
+        </div>
+      </div>
+      <div class="accordion-body">
+        <p class="intro">Save and recall full Zone Composer state (layout + per-zone effect/palette/blend/brightness/speed + audio routing) as named snapshots. Persists to NVS with a versioned schema so older snapshots auto-upgrade.</p>
+        <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+          <button class="primary" disabled>Save Current as Snapshot…</button>
+          <button disabled>Import Snapshot (.json)</button>
+          <button disabled>Export All</button>
+        </div>
+        <div class="snapshot-row">
+          <span class="nm">Late-Night Hangs</span>
+          <span class="ts">slot 0 · saved 2026-04-28 22:41 · v3 schema</span>
+          <button disabled>Load</button>
+          <button disabled class="danger">Delete</button>
+        </div>
+        <div class="snapshot-row">
+          <span class="nm">Bass Showcase</span>
+          <span class="ts">slot 1 · saved 2026-04-30 19:12 · v3 schema</span>
+          <button disabled>Load</button>
+          <button disabled class="danger">Delete</button>
+        </div>
+        <div class="snapshot-row">
+          <span class="nm">Demo Reel · Triple Rings refined</span>
+          <span class="ts">slot 2 · saved 2026-05-01 14:08 · v3 schema</span>
+          <button disabled>Load</button>
+          <button disabled class="danger">Delete</button>
+        </div>
+        <div class="snapshot-row" style="opacity: 0.4;">
+          <span class="nm">— empty slot —</span>
+          <span class="ts">slot 3</span>
+          <button disabled>—</button>
+          <button disabled>—</button>
+        </div>
+        <div class="contract-ref">
+          <span class="label">contract</span>
+          <code>POST /api/v1/zones/config/save</code> · <code>POST /api/v1/zones/config/load</code> · <code>GET /api/v1/zones/config</code> · regression gate <code>E6</code> · NVS schema versioned (auto-migrate older)
+        </div>
+      </div>
+    </div>
+
+    <!-- §Phase 4 Live Performance -->
+    <div class="accordion" id="sec-perf">
+      <div class="accordion-head" data-accordion="perf">
+        <div class="left">
+          <h2>Live Performance</h2>
+          <span class="phase-badge p4">Phase 4</span>
+        </div>
+        <div class="meta">
+          <span class="gate-badge">solo · A/B banks · beat triggers · planned</span>
+          <span>command-matrix §9</span>
+        </div>
+      </div>
+      <div class="accordion-body">
+        <p class="intro">DJ-mixer-style live controls. Solo zones for instant focus, A/B preview banks with crossfader for scene transitions, and tempo-locked beat triggers for synchronised effect bursts.</p>
+
+        <div style="margin-bottom: 16px;">
+          <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); margin-bottom: 8px;">Solo (mute others)</div>
+          <div style="display: flex; gap: 8px;">
+            <button disabled style="border-left: 3px solid var(--zone-1);">Solo Zone 1</button>
+            <button disabled style="border-left: 3px solid var(--zone-2);">Solo Zone 2</button>
+            <button disabled style="border-left: 3px solid var(--zone-3);">Solo Zone 3</button>
+            <button disabled>Clear Solo</button>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 16px;">
+          <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); margin-bottom: 8px;">A / B Preview Banks</div>
+          <div class="crossfader">
+            <div class="bank">
+              <div class="lbl">Bank A · LIVE</div>
+              <div class="nm">Dual Split · K1 Bloom + K1 Waveform</div>
+            </div>
+            <div class="slider">
+              <input type="range" min="0" max="100" value="0" disabled />
+            </div>
+            <div class="bank">
+              <div class="lbl">Bank B · cued</div>
+              <div class="nm">Triple Rings · WAVE_COL + INTERFERENCE + STAR_BURST</div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px; margin-top: 8px;">
+            <button disabled>Cue Bank B</button>
+            <button disabled>Crossfade 4 bars</button>
+            <button disabled>Snap to A</button>
+            <button disabled>Snap to B</button>
+          </div>
+        </div>
+
+        <div>
+          <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); margin-bottom: 8px;">Beat-Triggered Patterns</div>
+          <div class="placeholder-grid-3">
+            <div class="param-card z1">
+              <div class="ph-head"><span class="ph-title z1">Zone 1</span></div>
+              <div class="field"><label>tempo source</label><select disabled><option>ESV11 beat</option><option>manual tap</option><option>MIDI clock</option></select><span></span></div>
+              <div class="field"><label>interval</label><select disabled><option>every beat</option><option>every 2 beats</option><option>every bar</option></select><span></span></div>
+              <div class="field"><label>pattern</label><select disabled><option>burst</option><option>fade</option><option>strobe</option><option>chase</option></select><span></span></div>
+            </div>
+            <div class="param-card z2">
+              <div class="ph-head"><span class="ph-title z2">Zone 2</span></div>
+              <div class="field"><label>tempo source</label><select disabled><option>ESV11 beat</option></select><span></span></div>
+              <div class="field"><label>interval</label><select disabled><option>off</option></select><span></span></div>
+              <div class="field"><label>pattern</label><select disabled><option>—</option></select><span></span></div>
+            </div>
+            <div class="param-card z3">
+              <div class="ph-head"><span class="ph-title z3">Zone 3</span></div>
+              <div class="field"><label>tempo source</label><select disabled><option>—</option></select><span></span></div>
+              <div class="field"><label>interval</label><select disabled><option>—</option></select><span></span></div>
+              <div class="field"><label>pattern</label><select disabled><option>—</option></select><span></span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="contract-ref">
+          <span class="label">contract</span>
+          <code>POST /api/v1/zones/{zoneId}/beat-trigger</code> · solo / A-B bank endpoints planned · MIDI clock + tap-tempo + ESV11 beat as tempo sources · HW Mixer Phase 2 surfaces these on physical crossfader (project_zone_mixer_controller)
+        </div>
+      </div>
+    </div>
+
+    <!-- §Phase 6 Layering / Z-Order -->
+    <div class="accordion" id="sec-zorder">
+      <div class="accordion-head" data-accordion="zorder">
+        <div class="left">
+          <h2>Layering / Z-Order</h2>
+          <span class="phase-badge p6">Phase 6 · A9</span>
+        </div>
+        <div class="meta">
+          <span class="gate-badge">currently 🚫 501 stub</span>
+          <span>command-matrix §11</span>
+        </div>
+      </div>
+      <div class="accordion-body">
+        <p class="intro">Define render order when zones overlap (e.g. for translucent overlay effects). Higher layer renders on top via the configured blend mode. Drag to reorder.</p>
+        <div class="layer-row">
+          <div class="grip"><span></span><span></span><span></span></div>
+          <span class="nm z2">Zone 2 · K1 Waveform</span>
+          <span class="ord">layer 0 (bottom)</span>
+          <label class="toggle"><input type="checkbox" checked disabled /><span class="slider"></span></label>
+        </div>
+        <div class="layer-row">
+          <div class="grip"><span></span><span></span><span></span></div>
+          <span class="nm z1">Zone 1 · K1 Bloom</span>
+          <span class="ord">layer 1 (top)</span>
+          <label class="toggle"><input type="checkbox" checked disabled /><span class="slider"></span></label>
+        </div>
+        <div class="layer-row" style="opacity: 0.4;">
+          <div class="grip"><span></span><span></span><span></span></div>
+          <span class="nm z3">Zone 3 · disabled</span>
+          <span class="ord">—</span>
+          <label class="toggle"><input type="checkbox" disabled /><span class="slider"></span></label>
+        </div>
+        <div class="contract-ref">
+          <span class="label">contract</span>
+          <code>POST /api/v1/zones/reorder</code> · order array completeness check · readback via order field on <code>zones.list</code>
+        </div>
+      </div>
+    </div>
+
+    <!-- §Phase 8 Render Diagnostics -->
+    <div class="accordion" id="sec-render-diag">
+      <div class="accordion-head" data-accordion="render-diag">
+        <div class="left">
+          <h2>Render Diagnostics / Per-Zone Timing</h2>
+          <span class="phase-badge p8">Phase 8</span>
+        </div>
+        <div class="meta">
+          <span class="gate-badge">currently 🚫 501 stub</span>
+          <span>command-matrix §10</span>
+        </div>
+      </div>
+      <div class="accordion-body">
+        <p class="intro">Per-zone render timing measured by <code style="font-family:var(--font-mono);color:var(--accent)">esp_timer_get_time()</code> at zone-render entry/exit. Hard ceiling per CLAUDE.md: <strong>2.0 ms total per frame</strong> at 120 FPS. Headroom indicator turns warning → error if any zone exceeds 1.0 ms / 1.6 ms respectively.</p>
+        <div class="timing-grid">
+          <div class="timing-card z1">
+            <div class="nm">Zone 1 · K1 Bloom</div>
+            <div style="font-family: var(--font-mono); font-size: 16px;">0.42 <span style="font-size: 10px; color: var(--text-muted);">ms · last 1s avg</span></div>
+            <div class="timing-bar"><div class="timing-bar-fill" style="width: 21%;"></div></div>
+            <div style="font-family: var(--font-mono); font-size: 10px; color: var(--text-muted);">p95 0.58 ms · 21 % of 2.0 ms budget</div>
+          </div>
+          <div class="timing-card z2">
+            <div class="nm">Zone 2 · K1 Waveform</div>
+            <div style="font-family: var(--font-mono); font-size: 16px;">0.78 <span style="font-size: 10px; color: var(--text-muted);">ms · last 1s avg</span></div>
+            <div class="timing-bar"><div class="timing-bar-fill warn" style="width: 39%;"></div></div>
+            <div style="font-family: var(--font-mono); font-size: 10px; color: var(--text-muted);">p95 0.94 ms · 39 % of 2.0 ms budget</div>
+          </div>
+          <div class="timing-card z3">
+            <div class="nm">Zone 3 · disabled</div>
+            <div style="font-family: var(--font-mono); font-size: 16px; color: var(--text-muted);">— <span style="font-size: 10px;">ms</span></div>
+            <div class="timing-bar"><div class="timing-bar-fill" style="width: 0%;"></div></div>
+            <div style="font-family: var(--font-mono); font-size: 10px; color: var(--text-muted);">p95 — · 0 % of budget</div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px; margin-top: 12px; align-items: center;">
+          <button disabled>Reset Stats</button>
+          <span style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">total render budget: <strong style="color: var(--text-primary);">1.20 ms / 2.00 ms</strong> · headroom <strong style="color: var(--status-ok);">0.80 ms (40 %)</strong></span>
+        </div>
+        <div class="contract-ref">
+          <span class="label">contract</span>
+          <code>GET /api/v1/zones/timing</code> · <code>POST /api/v1/zones/timing/reset</code> · MabuTrace integration (<code>esp32dev_audio_esv11_k1v2_32khz_trace</code> env) for full per-frame timeline → <code>ui.perfetto.dev</code>
+        </div>
+      </div>
+    </div>
+
+    <footer class="app-footer">
+      <span>K1 Zone Composer Portal · v0 mockup · 2026-05-02</span>
+      <span>connection: WS+REST+WebSerial · post-B2 wire format · zoneId 1·2·3</span>
+    </footer>
+  </div>
+
+  <script>
+    // ====================================================================
+    // K1 Zone Composer Portal — v0.1 connection layer
+    // Multi-transport (WS · REST · WebSerial), auto-reconnect, heartbeat,
+    // requestId-tracked command queue with idempotent retry on failover,
+    // live state subscription (zones.changed → refetch).
+    // Layout editor preserved from v0 mockup (boundary-handle drag intact).
+    // ====================================================================
+
+    // ---- Constants -------------------------------------------------------
+    const STRIP_LED_COUNT = 160;
+    const CENTRE_LEFT = 79;
+    const CENTRE_RIGHT = 80;
+    const HEARTBEAT_MS = 5000;
+    const HEARTBEAT_TIMEOUT_MS = 3000;
+    const RECONNECT_BASE_MS = 1000;
+    const RECONNECT_MAX_MS = 32000;
+    const COMMAND_TIMEOUT_MS = 5000;
+    const SLIDER_DEBOUNCE_MS = 150;
+    const RTT_WINDOW = 50;
+    const REST_POLL_MS = 30000;
+    const DEVICE_STATS_POLL_MS = 2000;
+
+    // ====================================================================
+    // UTILS
+    // ====================================================================
+    function uuid() {
+      if (crypto && crypto.randomUUID) return crypto.randomUUID();
+      return 'r-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 9);
+    }
+    function debounce(fn, ms) {
+      let t = null;
+      return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+    }
+    function p50p95(samples) {
+      if (!samples.length) return { p50: null, p95: null };
+      const s = [...samples].sort((a, b) => a - b);
+      return { p50: s[Math.floor(s.length * 0.5)], p95: s[Math.floor(s.length * 0.95)] };
+    }
+    function fmtMs(v) { return v == null ? '—' : Math.round(v) + ''; }
+    function fmtTime() {
+      const d = new Date();
+      return d.toTimeString().slice(0, 8);
+    }
+    function clampInt(v, lo, hi) { v = parseInt(v); if (isNaN(v)) v = lo; return Math.max(lo, Math.min(hi, v)); }
+
+    // ====================================================================
+    // STORE — server-of-truth state
+    // ====================================================================
+    const Store = {
+      // server state (reflects what K1 actually has — sync'd from zones.list)
+      composerEnabled: true,
+      activePreset: null,
+      zones: [
+        { id: 1, s1LeftStart: 50, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 109,
+          enabled: true, effectId: 0x1301, effectName: 'K1 Bloom',
+          paletteId: 12, paletteName: 'Sunset', blendMode: 4, brightness: 200, speed: 50 },
+        { id: 2, s1LeftStart: 0, s1LeftEnd: 49, s1RightStart: 110, s1RightEnd: 159,
+          enabled: true, effectId: 0x1302, effectName: 'K1 Waveform',
+          paletteId: 5, paletteName: 'Ocean', blendMode: 0, brightness: 180, speed: 60 },
+        { id: 3, s1LeftStart: 0, s1LeftEnd: 0, s1RightStart: 0, s1RightEnd: 0,
+          enabled: false, effectId: 0, effectName: '—',
+          paletteId: 0, paletteName: '—', blendMode: 0, brightness: 0, speed: 0 },
+      ],
+      device: { fps: 0, freeHeap: 0, totalHeap: 327680, renderMs: 0, totalRenderMs: 0 },
+      effects: [],   // populated from /api/v1/effects
+      palettes: [],  // populated from /api/v1/palettes
+      presets: [],   // populated from /api/v1/zone-presets
+      lastBroadcast: null,
+      capabilities: null,
+
+      // pub/sub
+      _listeners: new Set(),
+      on(fn) { this._listeners.add(fn); return () => this._listeners.delete(fn); },
+      emit(reason) { this._listeners.forEach(fn => { try { fn(reason); } catch (e) { console.error('listener err', e); } }); },
+      apply(patch, reason) { Object.assign(this, patch); this.emit(reason || 'apply'); },
+      mergeZone(id, patch) {
+        const idx = this.zones.findIndex(z => z.id === id);
+        if (idx >= 0) { Object.assign(this.zones[idx], patch); this.emit('zone:' + id); }
+      },
+      replaceZones(arr) { this.zones = arr; this.emit('zones'); },
+    };
+
+    // ====================================================================
+    // TRANSPORT BASE
+    // ====================================================================
+    class Transport {
+      constructor(name) {
+        this.name = name;
+        this.state = 'idle';   // idle · connecting · open · error
+        this.lastError = null;
+        this.lastSuccessAt = null;
+        this.lastErrorAt = null;
+        this.rttSamples = [];
+        this.reconnectAttempts = 0;
+        this.listeners = { state: [], message: [], error: [] };
+      }
+      on(ev, fn) { this.listeners[ev].push(fn); }
+      emit(ev, data) { this.listeners[ev].forEach(fn => fn(data)); }
+      setState(s, err) {
+        const changed = this.state !== s;
+        this.state = s;
+        if (err) { this.lastError = String(err.message || err); this.lastErrorAt = Date.now(); }
+        if (changed) this.emit('state', { state: s });
+      }
+      recordRtt(ms) {
+        this.rttSamples.push(ms);
+        if (this.rttSamples.length > RTT_WINDOW) this.rttSamples.shift();
+        this.lastSuccessAt = Date.now();
+      }
+      rtt() { return p50p95(this.rttSamples); }
+      // implementations override these
+      async connect(host) { throw new Error('not implemented'); }
+      async disconnect() { throw new Error('not implemented'); }
+      async send(payload) { throw new Error('not implemented'); }
+      supports(commandType) { return true; }   // override for SerialJSON gaps
+      isOpen() { return this.state === 'open'; }
+    }
+
+    // ---- WebSocket Transport --------------------------------------------
+    class WSTransport extends Transport {
+      constructor() { super('ws'); this.ws = null; this.host = null; this.heartbeatTimer = null; this.heartbeatPending = null; }
+      async connect(host) {
+        this.host = host;
+        this.setState('connecting');
+        return new Promise((resolve, reject) => {
+          let url;
+          try { url = `ws://${host}/ws`; } catch (e) { this.setState('error', e); reject(e); return; }
+          let settled = false;
+          try {
+            this.ws = new WebSocket(url);
+          } catch (e) { this.setState('error', e); reject(e); return; }
+          this.ws.onopen = () => {
+            this.setState('open');
+            this.reconnectAttempts = 0;
+            this.startHeartbeat();
+            settled = true; resolve();
+          };
+          this.ws.onmessage = ev => {
+            try {
+              const msg = JSON.parse(ev.data);
+              if (msg.type === 'pong') { this.handlePong(); return; }
+              this.emit('message', msg);
+            } catch (e) {/* ignore non-JSON */}
+          };
+          this.ws.onerror = err => {
+            if (!settled) { this.setState('error', 'connect failed'); settled = true; reject(err); }
+            else this.setState('error', 'ws error');
+          };
+          this.ws.onclose = () => {
+            this.stopHeartbeat();
+            const wasOpen = this.state === 'open';
+            this.setState(wasOpen ? 'idle' : (this.state === 'connecting' ? 'error' : this.state));
+            if (!settled) { settled = true; reject(new Error('ws closed before open')); }
+          };
+        });
+      }
+      async disconnect() {
+        this.stopHeartbeat();
+        if (this.ws) { try { this.ws.close(); } catch (e) {} this.ws = null; }
+        this.setState('idle');
+      }
+      async send(payload) {
+        if (!this.isOpen()) throw new Error('ws not open');
+        const t0 = performance.now();
+        const json = JSON.stringify(payload);
+        this.ws.send(json);
+        return { sentAt: t0 };
+      }
+      startHeartbeat() {
+        this.stopHeartbeat();
+        this.heartbeatTimer = setInterval(() => {
+          if (!this.isOpen()) return;
+          const t0 = performance.now();
+          const requestId = 'hb-' + uuid().slice(0, 10);
+          // Use device.getStatus as heartbeat — it's always supported by the
+          // firmware (vs `ping` which may or may not have a handler) and gives
+          // us device stats as a side-effect on success.
+          this.heartbeatPending = setTimeout(() => {
+            this.setState('error', 'heartbeat timeout');
+            try { this.ws.close(); } catch (e) {}
+          }, HEARTBEAT_TIMEOUT_MS);
+          this.heartbeatRequestId = requestId;
+          this.heartbeatT0 = t0;
+          try {
+            this.ws.send(JSON.stringify({ type: 'device.getStatus', requestId }));
+          } catch (e) { /* onerror will handle */ }
+        }, HEARTBEAT_MS);
+      }
+      handlePong() {
+        if (this.heartbeatPending) { clearTimeout(this.heartbeatPending); this.heartbeatPending = null; }
+      }
+      handleHeartbeatResponse(msg) {
+        if (msg && msg.requestId === this.heartbeatRequestId) {
+          this.handlePong();
+          if (this.heartbeatT0 != null) this.recordRtt(performance.now() - this.heartbeatT0);
+          if (msg.data) Store.apply({ device: { ...Store.device, ...msg.data } }, 'device');
+          return true;
+        }
+        return false;
+      }
+      stopHeartbeat() {
+        if (this.heartbeatTimer) { clearInterval(this.heartbeatTimer); this.heartbeatTimer = null; }
+        if (this.heartbeatPending) { clearTimeout(this.heartbeatPending); this.heartbeatPending = null; }
+      }
+    }
+
+    // ---- REST Transport (no persistent connection — capability + fallback)
+    class RESTTransport extends Transport {
+      constructor() { super('rest'); this.host = null; this.pollTimer = null; }
+      async connect(host) {
+        this.host = host;
+        this.setState('connecting');
+        // Liveness check: GET /firmware/version
+        try {
+          const t0 = performance.now();
+          const r = await fetch(`http://${host}/api/v1/firmware/version`, { method: 'GET', mode: 'cors', signal: AbortSignal.timeout?.(4000) });
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          this.recordRtt(performance.now() - t0);
+          this.setState('open');
+          this.reconnectAttempts = 0;
+          this.startPolling();
+        } catch (e) {
+          this.setState('error', e); throw e;
+        }
+      }
+      async disconnect() {
+        this.stopPolling();
+        this.setState('idle');
+      }
+      async send({ method, path, body }) {
+        if (!this.host) throw new Error('rest no host');
+        const t0 = performance.now();
+        const init = { method: method || 'GET', mode: 'cors', headers: { 'Content-Type': 'application/json' } };
+        if (body) init.body = JSON.stringify(body);
+        const url = `http://${this.host}/api/v1${path}`;
+        const r = await fetch(url, init);
+        const dt = performance.now() - t0;
+        this.recordRtt(dt);
+        let payload = null;
+        try { payload = await r.json(); } catch (e) {}
+        if (!r.ok) {
+          this.setState('open', null);  // still reachable but command failed
+          throw new Error(`HTTP ${r.status} ${r.statusText}` + (payload && payload.error ? ': ' + (payload.error.message || JSON.stringify(payload.error)) : ''));
+        }
+        return { payload, dtMs: dt };
+      }
+      startPolling() {
+        this.stopPolling();
+        this.pollTimer = setInterval(async () => {
+          try { await this.send({ method: 'GET', path: '/firmware/version' }); }
+          catch (e) { this.setState('error', e); }
+        }, REST_POLL_MS);
+      }
+      stopPolling() { if (this.pollTimer) { clearInterval(this.pollTimer); this.pollTimer = null; } }
+    }
+
+    // ---- WebSerial Transport (USB CDC SerialJSON) -----------------------
+    class WebSerialTransport extends Transport {
+      constructor() { super('serial'); this.port = null; this.reader = null; this.writer = null; this.buf = ''; this.readLoop = null; }
+      isAvailable() { return !!navigator.serial; }
+      async connect() {
+        if (!this.isAvailable()) { this.setState('error', 'WebSerial unsupported (Chrome/Edge required)'); throw new Error('no WebSerial'); }
+        this.setState('connecting');
+        try {
+          if (!this.port) this.port = await navigator.serial.requestPort();
+          await this.port.open({ baudRate: 115200 });
+          this.writer = this.port.writable.getWriter();
+          this.reader = this.port.readable.getReader();
+          this.setState('open');
+          this.reconnectAttempts = 0;
+          this.startReadLoop();
+        } catch (e) { this.setState('error', e); throw e; }
+      }
+      async disconnect() {
+        try { this.reader?.cancel(); } catch (e) {}
+        try { this.writer?.releaseLock(); } catch (e) {}
+        try { await this.port?.close(); } catch (e) {}
+        this.port = null; this.reader = null; this.writer = null;
+        this.setState('idle');
+      }
+      async send(payload) {
+        if (!this.isOpen()) throw new Error('serial not open');
+        const t0 = performance.now();
+        const data = new TextEncoder().encode(JSON.stringify(payload) + '\n');
+        await this.writer.write(data);
+        return { sentAt: t0 };
+      }
+      async startReadLoop() {
+        const decoder = new TextDecoder();
+        try {
+          while (this.isOpen()) {
+            const { value, done } = await this.reader.read();
+            if (done) break;
+            this.buf += decoder.decode(value, { stream: true });
+            let nl;
+            while ((nl = this.buf.indexOf('\n')) >= 0) {
+              const line = this.buf.slice(0, nl).trim();
+              this.buf = this.buf.slice(nl + 1);
+              if (!line.startsWith('{')) continue;
+              try {
+                const msg = JSON.parse(line);
+                this.emit('message', msg);
+              } catch (e) {}
+            }
+          }
+        } catch (e) { this.setState('error', e); }
+      }
+      supports(commandType) {
+        // B5 SerialJSON parity gaps documented in zones-serial-json-parity.md
+        const gaps = ['zones.setLayout', 'zone.enableZone'];
+        return !gaps.includes(commandType);
+      }
+    }
+
+    // ====================================================================
+    // COMMAND QUEUE — requestId-tracked, idempotent retry on transport switch
+    // ====================================================================
+    class CommandQueue {
+      constructor() {
+        this.pending = new Map();   // requestId → { resolve, reject, sentAt, timer, attempts }
+      }
+      depth() { return this.pending.size; }
+      handleResponse(msg) {
+        if (!msg || !msg.requestId) return false;
+        const p = this.pending.get(msg.requestId);
+        if (!p) return false;
+        clearTimeout(p.timer);
+        this.pending.delete(msg.requestId);
+        const dt = performance.now() - p.sentAt;
+        if (p.transport) p.transport.recordRtt(dt);
+        if (msg.success === false || msg.error) {
+          p.reject(new Error(msg.error?.message || 'command rejected'));
+        } else {
+          p.resolve(msg);
+        }
+        return true;
+      }
+      async dispatch(transport, payload, timeoutMs) {
+        if (!payload.requestId) payload.requestId = 'p-' + uuid().slice(0, 10);
+        return new Promise(async (resolve, reject) => {
+          const p = { resolve, reject, sentAt: performance.now(), timer: null, transport, attempts: (this.pending.get(payload.requestId)?.attempts || 0) + 1 };
+          this.pending.set(payload.requestId, p);
+          p.timer = setTimeout(() => {
+            if (this.pending.has(payload.requestId)) {
+              this.pending.delete(payload.requestId);
+              reject(new Error('timeout after ' + (timeoutMs || COMMAND_TIMEOUT_MS) + 'ms'));
+            }
+          }, timeoutMs || COMMAND_TIMEOUT_MS);
+          try {
+            await transport.send(payload);
+            // For REST, response comes back on the same request — handle below.
+            if (transport.name === 'rest') {
+              // RESTTransport.send returns { payload }, treat it as the response immediately
+              clearTimeout(p.timer);
+              this.pending.delete(payload.requestId);
+              transport.recordRtt(performance.now() - p.sentAt);
+              resolve(payload._restResponse || { ok: true });
+            }
+          } catch (e) {
+            clearTimeout(p.timer);
+            this.pending.delete(payload.requestId);
+            reject(e);
+          }
+        });
+      }
+      flushAll(reason) {
+        this.pending.forEach((p, id) => {
+          clearTimeout(p.timer);
+          p.reject(new Error('queue flushed: ' + reason));
+        });
+        this.pending.clear();
+      }
+    }
+
+    // ====================================================================
+    // CONNECTION MANAGER — orchestrates transports + failover + reconnect
+    // ====================================================================
+    class ConnectionManager {
+      constructor() {
+        this.ws = new WSTransport();
+        this.rest = new RESTTransport();
+        this.serial = new WebSerialTransport();
+        this.transports = [this.ws, this.rest, this.serial];
+        this.queue = new CommandQueue();
+        this.host = null;
+        this.primary = null;       // 'ws' | 'rest' | 'serial' | null
+        this.connectInFlight = false;
+        this.reconnectTimer = null;
+        this.uiCallbacks = [];
+        this.bindTransports();
+      }
+      bindTransports() {
+        // WS messages flow: heartbeat-response → command-queue → broadcast handler
+        this.ws.on('message', msg => {
+          if (this.ws.handleHeartbeatResponse(msg)) return;
+          if (this.queue.handleResponse(msg)) return;
+          this.handleBroadcast(msg);
+        });
+        this.serial.on('message', msg => {
+          if (this.queue.handleResponse(msg)) return;
+          this.handleBroadcast(msg);
+        });
+        this.transports.forEach(t => {
+          t.on('state', () => { this.notify(); this.maybePromotePrimary(); });
+        });
+      }
+      onUI(fn) { this.uiCallbacks.push(fn); }
+      notify() { this.uiCallbacks.forEach(fn => { try { fn(); } catch (e) { console.error(e); } }); }
+      async connect(host) {
+        if (this.connectInFlight) return;
+        this.connectInFlight = true;
+        this.host = host;
+        // Try WS first, then REST as cooperative parallel attempt.
+        let wsOk = false, restOk = false;
+        try { await this.ws.connect(host); wsOk = true; } catch (e) { console.warn('WS connect failed:', e.message); }
+        try { await this.rest.connect(host); restOk = true; } catch (e) { console.warn('REST connect failed:', e.message); }
+        this.connectInFlight = false;
+        this.maybePromotePrimary();
+        if (wsOk || restOk) {
+          // hydrate state
+          await this.hydrate();
+          if (!wsOk) this.scheduleReconnectWS();
+        } else {
+          this.scheduleReconnectAny();
+        }
+        this.notify();
+      }
+      async connectSerial() {
+        try { await this.serial.connect(); }
+        catch (e) { console.warn('Serial connect failed:', e.message); }
+        this.maybePromotePrimary();
+        this.notify();
+      }
+      async disconnect() {
+        if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
+        this.queue.flushAll('disconnect');
+        await Promise.allSettled(this.transports.map(t => t.disconnect()));
+        this.primary = null;
+        this.notify();
+      }
+      maybePromotePrimary() {
+        // Priority: ws → rest → serial
+        if (this.ws.isOpen()) this.primary = 'ws';
+        else if (this.rest.isOpen()) this.primary = 'rest';
+        else if (this.serial.isOpen()) this.primary = 'serial';
+        else this.primary = null;
+      }
+      activeTransport() {
+        if (this.primary === 'ws') return this.ws;
+        if (this.primary === 'rest') return this.rest;
+        if (this.primary === 'serial') return this.serial;
+        return null;
+      }
+      isConnected() { return this.primary != null; }
+      scheduleReconnectWS() {
+        if (this.reconnectTimer) return;
+        const attempts = this.ws.reconnectAttempts;
+        const delay = Math.min(RECONNECT_BASE_MS * Math.pow(2, attempts), RECONNECT_MAX_MS);
+        this.reconnectTimer = setTimeout(async () => {
+          this.reconnectTimer = null;
+          this.ws.reconnectAttempts = attempts + 1;
+          try { await this.ws.connect(this.host); this.maybePromotePrimary(); this.notify(); }
+          catch (e) { this.scheduleReconnectWS(); }
+        }, delay);
+      }
+      scheduleReconnectAny() {
+        if (this.reconnectTimer) return;
+        this.reconnectTimer = setTimeout(() => {
+          this.reconnectTimer = null;
+          this.connect(this.host);
+        }, RECONNECT_BASE_MS * 2);
+      }
+      // -- send command via best transport, with idempotent failover retry --
+      async sendCommand({ wsType, restMethod, restPath, body, requireRest, requireWs }) {
+        if (!this.isConnected()) throw new Error('not connected');
+        const requestId = 'p-' + uuid().slice(0, 10);
+        let lastErr = null;
+        const order = [];
+        if (requireRest) {
+          if (this.rest.isOpen()) order.push(this.rest);
+        } else if (requireWs) {
+          if (this.ws.isOpen()) order.push(this.ws);
+        } else {
+          // Default order: primary → others
+          if (this.primary === 'ws' && this.ws.isOpen()) order.push(this.ws);
+          if (this.primary === 'rest' && this.rest.isOpen()) order.push(this.rest);
+          if (this.primary === 'serial' && this.serial.isOpen()) order.push(this.serial);
+          // Fallbacks
+          for (const t of [this.ws, this.rest, this.serial]) {
+            if (!order.includes(t) && t.isOpen() && (!wsType || t.supports(wsType))) order.push(t);
+          }
+        }
+        if (!order.length) throw new Error('no transport supports this command');
+        for (const t of order) {
+          try {
+            if (t.name === 'rest') {
+              const resp = await t.send({ method: restMethod || 'POST', path: restPath, body: body || {} });
+              return resp.payload;
+            } else {
+              const payload = { type: wsType, requestId, ...body };
+              return await this.queue.dispatch(t, payload);
+            }
+          } catch (e) { lastErr = e; }
+        }
+        throw lastErr || new Error('all transports failed');
+      }
+      // -- broadcasts (zones.changed, etc) ---------------------------------
+      handleBroadcast(msg) {
+        Store.lastBroadcast = { type: msg.type, ts: Date.now() };
+        Store.emit('broadcast');
+        if (!msg.type) return;
+        if (['zones.changed', 'zones.stateChanged', 'zone.zoneEnabledChanged'].includes(msg.type)) {
+          this.refreshZones();
+        }
+        if (msg.type === 'device.statusChanged' && msg.data) {
+          Store.apply({ device: { ...Store.device, ...msg.data } }, 'device');
+        }
+      }
+      async hydrate() {
+        // Pull authoritative state once on connect
+        try { await this.refreshZones(); } catch (e) { console.warn('refreshZones failed', e); }
+        try { await this.refreshCatalogues(); } catch (e) { console.warn('refreshCatalogues failed', e); }
+        try { await this.refreshCapabilities(); } catch (e) { console.warn('refreshCapabilities failed', e); }
+        try { await this.refreshPresets(); } catch (e) { console.warn('refreshPresets failed', e); }
+        try { await this.refreshDeviceStats(); } catch (e) { console.warn('refreshDeviceStats failed', e); }
+      }
+      async refreshZones() {
+        // Prefer REST for zones.list (deterministic response shape)
+        if (this.rest.isOpen()) {
+          try {
+            const r = await this.rest.send({ method: 'GET', path: '/zones' });
+            if (r.payload && (r.payload.zones || r.payload.data)) {
+              const data = r.payload.zones ? r.payload : r.payload.data;
+              if (data.zones) Store.replaceZones(zipZones(data.zones, data.segments || []));
+              if (data.enabled !== undefined) Store.composerEnabled = data.enabled;
+              if (data.activePreset !== undefined) Store.activePreset = data.activePreset;
+              Store.emit('zones-refresh');
+            }
+            return;
+          } catch (e) { /* fall through to WS */ }
+        }
+        if (this.ws.isOpen()) {
+          try {
+            const resp = await this.queue.dispatch(this.ws, { type: 'zones.get', requestId: 'p-' + uuid().slice(0, 10) });
+            if (resp.data) {
+              if (resp.data.zones) Store.replaceZones(zipZones(resp.data.zones, resp.data.segments || []));
+              if (resp.data.enabled !== undefined) Store.composerEnabled = resp.data.enabled;
+              Store.emit('zones-refresh');
+            }
+          } catch (e) { /* swallow */ }
+        }
+      }
+      async refreshCatalogues() {
+        if (!this.rest.isOpen()) return;
+        try {
+          const e = await this.rest.send({ method: 'GET', path: '/effects' });
+          if (e.payload && Array.isArray(e.payload.effects)) Store.effects = e.payload.effects;
+          else if (Array.isArray(e.payload)) Store.effects = e.payload;
+        } catch (err) {}
+        try {
+          const p = await this.rest.send({ method: 'GET', path: '/palettes' });
+          if (p.payload && Array.isArray(p.payload.palettes)) Store.palettes = p.payload.palettes;
+          else if (Array.isArray(p.payload)) Store.palettes = p.payload;
+        } catch (err) {}
+        Store.emit('catalogue');
+      }
+      async refreshPresets() {
+        if (!this.rest.isOpen()) return;
+        try {
+          const r = await this.rest.send({ method: 'GET', path: '/zone-presets' });
+          if (r.payload && Array.isArray(r.payload.presets)) Store.presets = r.payload.presets;
+          else if (Array.isArray(r.payload)) Store.presets = r.payload;
+          Store.emit('presets');
+        } catch (e) {}
+      }
+      async refreshDeviceStats() {
+        if (!this.rest.isOpen()) return;
+        try {
+          const r = await this.rest.send({ method: 'GET', path: '/device/status' });
+          if (r.payload && r.payload.data) Store.apply({ device: { ...Store.device, ...r.payload.data } }, 'device');
+          else if (r.payload) Store.apply({ device: { ...Store.device, ...r.payload } }, 'device');
+        } catch (e) {}
+      }
+      // -- Capability discovery -------------------------------------------
+      // Fetches K1's OpenAPI 3.x spec on connect and derives feature availability
+      // for the six future-phase accordions (D-3, D-4, snapshots, performance,
+      // Z-order, render diagnostics). Defensive parsing — any spec shape variation
+      // (missing fields, alternate response keys, no spec at all) leaves
+      // `Store.capabilities` as `null` and logs a warning rather than crashing.
+      async refreshCapabilities() {
+        if (!this.rest.isOpen()) return;
+        let spec = null;
+        try {
+          const r = await this.rest.send({ method: 'GET', path: '/openapi.json' });
+          spec = r && r.payload ? r.payload : null;
+        } catch (e) {
+          console.warn('refreshCapabilities: /openapi.json fetch failed —', e.message);
+          Store.capabilities = null;
+          Store.emit('capabilities');
+          return;
+        }
+        if (!spec || typeof spec !== 'object') {
+          console.warn('refreshCapabilities: empty or non-object OpenAPI payload');
+          Store.capabilities = null;
+          Store.emit('capabilities');
+          return;
+        }
+
+        // Endpoint → capability key mapping. Path keys are matched as suffixes
+        // against `spec.paths` so both `/zones/...` and `/api/v1/zones/...`
+        // shapes are accepted (K1's OpenAPI has historically used either).
+        const capabilityMap = [
+          { key: 'd3',          method: 'POST', match: '/zones/{zoneId}/effects/parameters' },
+          { key: 'd4',          method: 'GET',  match: '/zones/{zoneId}/audio' },
+          { key: 'snapshots',   method: 'POST', match: '/zones/config/save' },
+          { key: 'performance', method: 'POST', match: '/zones/{zoneId}/beat-trigger' },
+          { key: 'zorder',      method: 'POST', match: '/zones/reorder' },
+          { key: 'renderDiag',  method: 'GET',  match: '/zones/timing' },
+        ];
+
+        const paths = (spec.paths && typeof spec.paths === 'object') ? spec.paths : {};
+        // Build a normalised lookup: stripped-prefix path → method → operation
+        const findOperation = (matchSuffix, method) => {
+          const m = String(method || '').toLowerCase();
+          for (const p of Object.keys(paths)) {
+            if (!p) continue;
+            // Accept either `/zones/...` or `/api/v1/zones/...` — match by suffix
+            if (p === matchSuffix || p.endsWith(matchSuffix)) {
+              const ops = paths[p];
+              if (ops && typeof ops === 'object' && ops[m] && typeof ops[m] === 'object') {
+                return ops[m];
+              }
+            }
+          }
+          return null;
+        };
+
+        // A path is "available" if it exists AND does NOT only declare a 501 response.
+        // Treat a missing `responses` block as available (firmware sometimes omits
+        // schema details on live endpoints).
+        const isAvailable = (op) => {
+          if (!op) return false;
+          const responses = (op && typeof op.responses === 'object') ? op.responses : null;
+          if (!responses) return true;
+          const codes = Object.keys(responses);
+          if (codes.length === 0) return true;
+          // Only flagged as unavailable when 501 is the SOLE declared response.
+          if (codes.length === 1 && (codes[0] === '501' || codes[0] === 501)) return false;
+          return true;
+        };
+
+        const caps = {
+          d3: false, d4: false, snapshots: false,
+          performance: false, zorder: false, renderDiag: false,
+          wireFormat: '1-indexed',
+          rawSpec: spec,
+        };
+        for (const entry of capabilityMap) {
+          const op = findOperation(entry.match, entry.method);
+          caps[entry.key] = isAvailable(op);
+        }
+
+        // Optional contract version field — some firmware builds expose it as
+        // `info.x-wire-format`, others nest it under `info.contact.x-wire-format`.
+        try {
+          const info = spec.info || {};
+          const wf = info['x-wire-format']
+                  || (info.contact && info.contact['x-wire-format'])
+                  || (spec['x-wire-format']);
+          if (typeof wf === 'string' && wf.length) caps.wireFormat = wf;
+        } catch (e) { /* keep default */ }
+
+        Store.capabilities = caps;
+        Store.emit('capabilities');
+      }
+    }
+
+    // Helper: given zones[] and segments[] from API, merge into unified rows
+    function zipZones(zones, segments) {
+      const out = [];
+      for (let i = 0; i < 3; i++) {
+        const wireId = i + 1;
+        const z = (zones || []).find(zz => zz.id === wireId || zz.zoneId === wireId);
+        const s = (segments || []).find(ss => ss.zoneId === wireId);
+        out.push({
+          id: wireId,
+          enabled: z ? !!(z.enabled ?? true) : false,
+          effectId: z?.effectId ?? 0,
+          effectName: z?.effectName ?? '—',
+          paletteId: z?.paletteId ?? z?.palette ?? 0,
+          paletteName: z?.paletteName ?? '—',
+          blendMode: z?.blendMode ?? 0,
+          brightness: z?.brightness ?? 0,
+          speed: z?.speed ?? 0,
+          s1LeftStart: s?.s1LeftStart ?? 0,
+          s1LeftEnd: s?.s1LeftEnd ?? 0,
+          s1RightStart: s?.s1RightStart ?? 0,
+          s1RightEnd: s?.s1RightEnd ?? 0,
+        });
+      }
+      return out;
+    }
+
+    // ====================================================================
+    // EDITOR — local layout-editor UI state (b1, b2 during drag)
+    // ====================================================================
+    const editor = {
+      b1: 30,
+      b2: 80,
+      mirror: true,
+      pendingChanges: false,
+    };
+
+    // Derive editor.b1/b2 from current Store.zones (called after server sync)
+    function syncEditorFromStore() {
+      const z1 = Store.zones.find(z => z.id === 1);
+      const z2 = Store.zones.find(z => z.id === 2);
+      if (z1 && z1.enabled) editor.b1 = z1.s1RightEnd - CENTRE_RIGHT + 1;
+      if (z2 && z2.enabled) editor.b2 = z2.s1RightEnd - CENTRE_RIGHT + 1;
+      else editor.b2 = 80;
+      editor.b1 = clampInt(editor.b1, 1, 79);
+      editor.b2 = clampInt(editor.b2, editor.b1 + 1, 80);
+      editor.pendingChanges = false;
+    }
+
+    // ====================================================================
+    // STRIP RENDERING (preserved from v0)
+    // ====================================================================
+    const stripLeds = document.getElementById('stripLeds');
+    function buildStrip() {
+      stripLeds.innerHTML = '';
+      for (let i = 0; i < STRIP_LED_COUNT; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'led-cell';
+        cell.dataset.idx = i;
+        stripLeds.appendChild(cell);
+      }
+    }
+    buildStrip();
+
+    function ledZone(idx) {
+      // distance from centre boundary (between 79 and 80) measured outward
+      const dist = idx <= CENTRE_LEFT
+        ? (CENTRE_LEFT - idx)        // left side: 0 at LED 79, 79 at LED 0
+        : (idx - CENTRE_RIGHT);      // right side: 0 at LED 80, 79 at LED 159
+      if (dist < editor.b1) return 1;
+      if (dist < editor.b2) return 2;
+      // Zone 3 emerges automatically when b2 < 80 (LEDs from b2 to edge)
+      return 3;
+    }
+
+    function renderStrip() {
+      for (let i = 0; i < STRIP_LED_COUNT; i++) {
+        const cell = stripLeds.children[i];
+        const z = ledZone(i);
+        cell.className = 'led-cell';
+        if (z === 1) cell.classList.add('zone-1');
+        else if (z === 2) cell.classList.add('zone-2');
+        else if (z === 3) cell.classList.add('zone-3');
+        else cell.classList.add('unassigned');
+      }
+    }
+
+    // ---- Boundary-handle positioning -------------------------------------
+    // Each side has 80 LEDs. The strip width is proportional, centre at 50%.
+    // distance d (0..80) → percentage from centre:
+    //    rightSidePercent = 50 + (d / 160) * 100
+    //    leftSidePercent  = 50 - (d / 160) * 100
+    function distToPercent(dist, side) {
+      const half = (dist / STRIP_LED_COUNT) * 100;
+      return side === 'right' ? 50 + half : 50 - half;
+    }
+
+    function renderHandles() {
+      const b1Right = distToPercent(editor.b1, 'right');
+      const b1Left  = distToPercent(editor.b1, 'left');
+      const b2Right = distToPercent(editor.b2, 'right');
+      const b2Left  = distToPercent(editor.b2, 'left');
+
+      // Primary draggable handles on the right side of centre
+      document.getElementById('b1Handle').style.left = b1Right + '%';
+      document.getElementById('b2Handle').style.left = b2Right + '%';
+      // Mirror (read-only visualisation) on the left side
+      document.getElementById('b1Mirror').style.left = b1Left + '%';
+      document.getElementById('b2Mirror').style.left = b2Left + '%';
+
+      // distance labels
+      document.querySelector('#b1Handle .dist').textContent = '+' + editor.b1;
+      document.querySelector('#b2Handle .dist').textContent = '+' + editor.b2;
+    }
+
+    // ---- Zone counts + validation ----------------------------------------
+    function renderZoneCounts() {
+      const z1Leds = editor.b1 * 2;
+      const z2Leds = (editor.b2 - editor.b1) * 2;
+      const z3Leds = Math.max(0, (80 - editor.b2) * 2);
+      const z3Disabled = z3Leds === 0;
+      const total = z1Leds + z2Leds + z3Leds;
+
+      const zc = document.getElementById('zoneCounts');
+      zc.innerHTML = '';
+      const zoneSpec = [
+        { idx: 1, leds: z1Leds, range: `LEDs ${CENTRE_LEFT - editor.b1 + 1}-${CENTRE_LEFT} + ${CENTRE_RIGHT}-${CENTRE_RIGHT + editor.b1 - 1}`, disabled: z1Leds === 0 },
+        { idx: 2, leds: z2Leds, range: `LEDs ${CENTRE_LEFT - editor.b2 + 1}-${CENTRE_LEFT - editor.b1} + ${CENTRE_RIGHT + editor.b1}-${CENTRE_RIGHT + editor.b2 - 1}`, disabled: z2Leds === 0 },
+        { idx: 3, leds: z3Leds, range: z3Disabled ? '— disabled —' : `LEDs 0-${CENTRE_LEFT - editor.b2} + ${CENTRE_RIGHT + editor.b2}-159`, disabled: z3Disabled },
+      ];
+      for (const z of zoneSpec) {
+        const card = document.createElement('div');
+        card.className = `zone-count-card zone-${z.idx}` + (z.disabled ? ' disabled' : '');
+        card.innerHTML = `
+          <div class="name">Zone ${z.idx}</div>
+          <div class="count">${z.leds}<span class="unit">LEDs</span></div>
+          <div class="range">${z.range}</div>`;
+        zc.appendChild(card);
+      }
+
+      document.getElementById('totalAssigned').textContent = `${total} / 160`;
+      const enabledCount = (z1Leds > 0 ? 1 : 0) + (z2Leds > 0 ? 1 : 0) + (z3Leds > 0 ? 1 : 0);
+      document.getElementById('enabledCount').textContent = `${enabledCount} / 3`;
+
+      const banner = document.getElementById('validationBanner');
+      const valid = editor.b1 > 0 && editor.b1 < editor.b2 && editor.b2 <= 80;
+      if (valid && total === 160) {
+        banner.className = 'validation ok';
+        banner.textContent = `✓ Layout valid · ${total} / 160 LEDs assigned · centre-symmetric · no overlaps · firmware validateLayout() will accept`;
+      } else if (valid && total < 160) {
+        banner.className = 'validation warn';
+        banner.textContent = `⚠ Gap detected — ${160 - total} unassigned LEDs (firmware accepts but unrendered LEDs stay dark)`;
+      } else {
+        banner.className = 'validation warn';
+        banner.textContent = `✗ Invalid: boundaries must satisfy 0 < B₁ < B₂ ≤ 80 (centre-origin invariant)`;
+      }
+    }
+
+    // ---- Sync segment quadruple inputs from boundaries -------------------
+    function syncSegmentInputs() {
+      // Zone 1: centre [79, 79+b1-1] / [80-b1, 79] mirrored
+      const z1 = { s1LeftStart: CENTRE_LEFT - editor.b1 + 1, s1LeftEnd: CENTRE_LEFT,
+                   s1RightStart: CENTRE_RIGHT, s1RightEnd: CENTRE_RIGHT + editor.b1 - 1 };
+      const z2 = { s1LeftStart: CENTRE_LEFT - editor.b2 + 1, s1LeftEnd: CENTRE_LEFT - editor.b1,
+                   s1RightStart: CENTRE_RIGHT + editor.b1, s1RightEnd: CENTRE_RIGHT + editor.b2 - 1 };
+      const z3 = editor.b2 < 80
+        ? { s1LeftStart: 0, s1LeftEnd: CENTRE_LEFT - editor.b2,
+            s1RightStart: CENTRE_RIGHT + editor.b2, s1RightEnd: STRIP_LED_COUNT - 1 }
+        : { s1LeftStart: 0, s1LeftEnd: 0, s1RightStart: 0, s1RightEnd: 0 };
+      const zones = [z1, z2, z3];
+      document.querySelectorAll('.advanced-panel input[type=number]').forEach(input => {
+        const zIdx = parseInt(input.dataset.z);
+        const field = input.dataset.f;
+        input.value = zones[zIdx][field];
+      });
+    }
+
+    // ---- Drag handler ----------------------------------------------------
+    let dragState = null;
+    function startDrag(handleId, ev) {
+      ev.preventDefault();
+      const handle = document.getElementById(handleId === 'b1' ? 'b1Handle' : 'b2Handle');
+      handle.classList.add('dragging');
+      const trackRect = document.getElementById('stripTrack').getBoundingClientRect();
+      dragState = { handleId, trackRect, handle };
+      document.addEventListener('mousemove', onDrag);
+      document.addEventListener('mouseup', endDrag);
+    }
+    function onDrag(ev) {
+      if (!dragState) return;
+      const { trackRect, handleId } = dragState;
+      const x = ev.clientX - trackRect.left;
+      const trackWidth = trackRect.width;
+      // x = 0 → leftmost LED 0, x = trackWidth → rightmost LED 159, centre at trackWidth/2
+      const centrePx = trackWidth / 2;
+      const distPx = x - centrePx;        // negative if dragged to left of centre, positive if right
+      let dist = Math.round((Math.abs(distPx) / trackWidth) * STRIP_LED_COUNT);
+      dist = Math.max(0, Math.min(80, dist));
+
+      if (handleId === 'b1') {
+        editor.b1 = Math.max(1, Math.min(editor.b2 - 1, dist));
+      } else {
+        editor.b2 = Math.max(editor.b1 + 1, Math.min(80, dist));
+      }
+      renderAll();
+    }
+    function endDrag() {
+      if (!dragState) return;
+      dragState.handle.classList.remove('dragging');
+      dragState = null;
+      document.removeEventListener('mousemove', onDrag);
+      document.removeEventListener('mouseup', endDrag);
+    }
+    document.getElementById('b1Handle').addEventListener('mousedown', e => startDrag('b1', e));
+    document.getElementById('b2Handle').addEventListener('mousedown', e => startDrag('b2', e));
+
+    // ---- Advanced toggle -------------------------------------------------
+    document.getElementById('advToggle').addEventListener('click', () => {
+      const panel = document.getElementById('advPanel');
+      const toggle = document.getElementById('advToggle');
+      panel.classList.toggle('open');
+      toggle.classList.toggle('open');
+    });
+
+    // ---- Per-zone slider value display ----------------------------------
+    document.querySelectorAll('.zone-card input[type=range]').forEach(input => {
+      input.addEventListener('input', e => {
+        const valueEl = e.target.parentElement.querySelector('.value');
+        if (valueEl) valueEl.textContent = e.target.value;
+      });
+    });
+
+    // ====================================================================
+    // CONNECTION MANAGER instance + UI bindings
+    // ====================================================================
+    const conn = new ConnectionManager();
+
+    // ---- Connect button: WS + REST in parallel ---------------------------
+    const connectBtn = document.getElementById('connectBtn');
+    const hostInput = document.getElementById('hostInput');
+    connectBtn.addEventListener('click', async () => {
+      if (conn.isConnected() || conn.connectInFlight) {
+        connectBtn.textContent = 'Disconnecting…';
+        await conn.disconnect();
+      } else {
+        const host = (hostInput.value || '').trim() || '192.168.4.1';
+        connectBtn.textContent = 'Connecting…';
+        try { await conn.connect(host); }
+        catch (e) { console.error('connect error:', e); }
+      }
+      renderConnectButton();
+    });
+    function renderConnectButton() {
+      if (conn.connectInFlight) connectBtn.textContent = 'Connecting…';
+      else if (conn.isConnected()) connectBtn.textContent = 'Disconnect';
+      else connectBtn.textContent = 'Connect';
+    }
+
+    // ---- USB Serial connect — separate trigger via raw transport select ---
+    // Provided as the "Auto / WebSocket / REST / USB Serial" select on the raw
+    // command panel; clicking 'USB Serial' there triggers a permission prompt.
+    document.getElementById('rawTransport').addEventListener('change', async ev => {
+      if (ev.target.value === 'serial' && !conn.serial.isOpen()) {
+        try { await conn.connectSerial(); }
+        catch (e) { console.error('USB connect error:', e); }
+        renderConnDiag();
+      }
+    });
+
+    // ---- Composer enable toggle (zone.enable / POST /zones/enabled) -------
+    document.getElementById('enableToggle').addEventListener('change', async ev => {
+      const enable = ev.target.checked;
+      try {
+        await conn.sendCommand({
+          wsType: 'zone.enable',
+          restMethod: 'POST', restPath: '/zones/enabled',
+          body: { enable }
+        });
+        Store.composerEnabled = enable;
+        Store.emit('composer-enabled');
+      } catch (e) { console.error('enable failed:', e); ev.target.checked = !enable; }
+    });
+
+    // ---- Apply Layout button (zones.setLayout) ---------------------------
+    document.getElementById('applyBtn').addEventListener('click', async () => {
+      if (!conn.isConnected()) { console.warn('not connected'); return; }
+      const z1 = { zoneId: 1, s1LeftStart: CENTRE_LEFT - editor.b1 + 1, s1LeftEnd: CENTRE_LEFT,
+                   s1RightStart: CENTRE_RIGHT, s1RightEnd: CENTRE_RIGHT + editor.b1 - 1 };
+      const z2 = { zoneId: 2, s1LeftStart: CENTRE_LEFT - editor.b2 + 1, s1LeftEnd: CENTRE_LEFT - editor.b1,
+                   s1RightStart: CENTRE_RIGHT + editor.b1, s1RightEnd: CENTRE_RIGHT + editor.b2 - 1 };
+      const segments = [z1, z2];
+      if (editor.b2 < 80) {
+        segments.push({ zoneId: 3,
+          s1LeftStart: 0, s1LeftEnd: CENTRE_LEFT - editor.b2,
+          s1RightStart: CENTRE_RIGHT + editor.b2, s1RightEnd: STRIP_LED_COUNT - 1 });
+      }
+      try {
+        await conn.sendCommand({
+          wsType: 'zones.setLayout',
+          restMethod: 'POST', restPath: '/zones/layout',
+          body: { zones: segments }
+        });
+        editor.pendingChanges = false;
+        await conn.refreshZones();
+      } catch (e) { console.error('setLayout failed:', e); alert('Apply Layout failed: ' + e.message); }
+    });
+
+    // ---- Revert Pending button -------------------------------------------
+    document.getElementById('revertBtn').addEventListener('click', async () => {
+      await conn.refreshZones();
+      syncEditorFromStore();
+      renderAll();
+    });
+
+    // ---- Reload State button --------------------------------------------
+    document.getElementById('reloadBtn').addEventListener('click', async () => {
+      if (!conn.isConnected()) return;
+      await conn.hydrate();
+      syncEditorFromStore();
+      renderAll();
+    });
+
+    // ---- Per-zone controls bindings -------------------------------------
+    // Wire each .zone-card to its zoneId via DOM order (1, 2, 3 top-to-bottom).
+    document.querySelectorAll('.zone-card').forEach((card, idx) => {
+      const wireZoneId = idx + 1;
+
+      // Effect dropdown
+      const effectSel = card.querySelector('select');
+      if (effectSel) effectSel.addEventListener('change', async ev => {
+        const opt = ev.target.options[ev.target.selectedIndex];
+        // Dynamic populate sets `value` to the integer effectId. Fall back to
+        // the legacy "(0xNNNN)" regex parse on the option text in case the
+        // value attribute is missing (hardcoded mockup options).
+        const valNum = parseInt(ev.target.value, 10);
+        let effectId = Number.isFinite(valNum) && valNum > 0 ? valNum : NaN;
+        if (!Number.isFinite(effectId)) {
+          const m = opt && opt.text ? opt.text.match(/0x([0-9a-fA-F]+)/) : null;
+          if (m) effectId = parseInt(m[1], 16);
+        }
+        if (!Number.isFinite(effectId) || effectId <= 0) return;
+        try {
+          await conn.sendCommand({
+            wsType: 'zone.setEffect',
+            restMethod: 'POST', restPath: `/zones/${wireZoneId}/effect`,
+            body: { zoneId: wireZoneId, effectId }
+          });
+          Store.mergeZone(wireZoneId, { effectId });
+        } catch (e) { console.error('setEffect failed:', e); }
+      });
+
+      // All sliders (brightness, speed) — debounced
+      const sliders = card.querySelectorAll('input[type=range]');
+      const sliderHandlers = {
+        0: { wsType: 'zone.setBrightness', path: 'brightness', field: 'brightness', storeField: 'brightness' },
+        1: { wsType: 'zone.setSpeed', path: 'speed', field: 'speed', storeField: 'speed' },
+      };
+      sliders.forEach((sl, sidx) => {
+        const cfg = sliderHandlers[sidx];
+        if (!cfg) return;
+        const send = debounce(async (value) => {
+          try {
+            await conn.sendCommand({
+              wsType: cfg.wsType,
+              restMethod: 'POST', restPath: `/zones/${wireZoneId}/${cfg.path}`,
+              body: { zoneId: wireZoneId, [cfg.field]: parseInt(value) }
+            });
+            Store.mergeZone(wireZoneId, { [cfg.storeField]: parseInt(value) });
+          } catch (e) { console.error(`${cfg.wsType} failed:`, e); }
+        }, SLIDER_DEBOUNCE_MS);
+        sl.addEventListener('input', ev => {
+          const v = parseInt(ev.target.value);
+          const valueEl = ev.target.parentElement.querySelector('.value');
+          if (valueEl) valueEl.textContent = v;
+          if (conn.isConnected()) send(v);
+        });
+      });
+
+      // Other dropdowns: palette (3rd select), blend (5th select)
+      // The fields layout: [Effect, Brightness, Speed, Palette, Blend]
+      // The third select in the card (index 1 of selects after effect) is palette
+      const allSelects = card.querySelectorAll('select');
+      // index 0 = effect, 1 = palette, 2 = blend (in current HTML order)
+      if (allSelects[1]) allSelects[1].addEventListener('change', async ev => {
+        const opt = ev.target.options[ev.target.selectedIndex];
+        const valNum = parseInt(ev.target.value, 10);
+        let paletteId = Number.isFinite(valNum) && valNum >= 0 ? valNum : NaN;
+        if (!Number.isFinite(paletteId)) {
+          const m = opt && opt.text ? opt.text.match(/\((\d+)\)/) : null;
+          paletteId = m ? parseInt(m[1], 10) : 0;
+        }
+        try {
+          await conn.sendCommand({
+            wsType: 'zone.setPalette',
+            restMethod: 'POST', restPath: `/zones/${wireZoneId}/palette`,
+            body: { zoneId: wireZoneId, paletteId }
+          });
+          Store.mergeZone(wireZoneId, { paletteId });
+        } catch (e) { console.error('setPalette failed:', e); }
+      });
+      if (allSelects[2]) allSelects[2].addEventListener('change', async ev => {
+        const opt = ev.target.options[ev.target.selectedIndex];
+        const m = opt.text.match(/\((\d+)\)/);
+        const blendMode = m ? parseInt(m[1]) : 0;
+        try {
+          await conn.sendCommand({
+            wsType: 'zone.setBlend',
+            restMethod: 'POST', restPath: `/zones/${wireZoneId}/blend`,
+            body: { zoneId: wireZoneId, blendMode }
+          });
+          Store.mergeZone(wireZoneId, { blendMode });
+        } catch (e) { console.error('setBlend failed:', e); }
+      });
+
+      // Per-zone enable toggle
+      const enableTog = card.querySelector('.toggle input[type=checkbox]');
+      if (enableTog) enableTog.addEventListener('change', async ev => {
+        const enabled = ev.target.checked;
+        try {
+          await conn.sendCommand({
+            wsType: 'zone.enableZone',
+            restMethod: 'POST', restPath: `/zones/${wireZoneId}/enabled`,
+            body: { zoneId: wireZoneId, enabled }
+          });
+          Store.mergeZone(wireZoneId, { enabled });
+        } catch (e) { console.error('enableZone failed:', e); ev.target.checked = !enabled; }
+      });
+    });
+
+    // ---- Preset apply / save / delete (dynamic rendering) ---------------
+    // Defensive shape normaliser — accepts {id|presetId}, {name|presetName},
+    // {builtin|isBuiltin}, plus optional {meta|description|zoneCount}.
+    // Factory range (ids 0-3) defaults to builtin=true when the field is absent.
+    function normalisePreset(raw, fallbackIdx) {
+      const id = (raw.id ?? raw.presetId ?? fallbackIdx ?? 0) | 0;
+      const name = String(raw.name ?? raw.presetName ?? `Preset ${id}`);
+      let isBuiltin;
+      if (typeof raw.builtin === 'boolean') isBuiltin = raw.builtin;
+      else if (typeof raw.isBuiltin === 'boolean') isBuiltin = raw.isBuiltin;
+      else isBuiltin = (id >= 0 && id <= 3);   // factory range default
+      const meta = raw.meta ?? raw.description ??
+        (typeof raw.zoneCount === 'number' ? `${raw.zoneCount} zone${raw.zoneCount === 1 ? '' : 's'}` : '');
+      return { id, name, isBuiltin, meta };
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      })[c]);
+    }
+
+    // Apply preset by id (used by both static-fallback and dynamic rows).
+    async function applyPresetById(presetId) {
+      try {
+        await conn.sendCommand({
+          wsType: 'zone.loadPreset',
+          restMethod: 'POST', restPath: `/zone-presets/apply?id=${presetId}`,
+          body: { presetId }
+        });
+        await conn.refreshZones();
+        syncEditorFromStore();
+        renderAll();
+      } catch (e) {
+        console.error('loadPreset failed:', e);
+        alert('Preset apply failed: ' + e.message);
+      }
+    }
+
+    // Delete custom preset by id (factory presets are blocked at the UI level).
+    async function deletePresetById(presetId, name) {
+      if (!confirm(`Delete preset "${name}"?`)) return;
+      try {
+        await conn.sendCommand({
+          restMethod: 'DELETE',
+          restPath: `/zone-presets/delete?id=${presetId}`,
+          requireRest: true,
+        });
+        await conn.refreshPresets();
+        renderPresets();
+      } catch (e) {
+        console.error('deletePreset failed:', e);
+        alert('Delete failed: ' + e.message);
+      }
+    }
+
+    // Render preset rows from Store.presets[]. Falls back to static rows when
+    // Store.presets is empty (pre-connect / empty response).
+    function renderPresets() {
+      const list = document.getElementById('presetList');
+      if (!list) return;
+      const connected = conn.isConnected();
+
+      // Defensive shape handling: accept array or {presets: [...]}
+      let raw = Store.presets;
+      if (raw && !Array.isArray(raw) && Array.isArray(raw.presets)) raw = raw.presets;
+      if (!Array.isArray(raw)) raw = [];
+
+      // Empty → keep fallback static rows but re-attach handlers + gate enabled state
+      if (raw.length === 0) {
+        list.querySelectorAll('.preset-row').forEach(row => {
+          const presetId = parseInt(row.dataset.presetId, 10) || 0;
+          const isBuiltin = row.dataset.builtin === 'true';
+          const applyBtn = row.querySelector('.apply-preset');
+          const delBtn = row.querySelector('.delete-preset');
+          if (applyBtn && !applyBtn.dataset.bound) {
+            applyBtn.dataset.bound = '1';
+            applyBtn.addEventListener('click', () => {
+              if (applyBtn.disabled) return;
+              applyPresetById(presetId);
+            });
+          }
+          if (delBtn && !delBtn.dataset.bound) {
+            delBtn.dataset.bound = '1';
+            delBtn.addEventListener('click', () => {
+              if (delBtn.disabled) return;
+              const nameEl = row.querySelector('.name');
+              const nameText = nameEl ? nameEl.firstChild.textContent.trim() : `preset ${presetId}`;
+              deletePresetById(presetId, nameText);
+            });
+          }
+          // Gate enabled state — only the active row's apply stays disabled
+          if (applyBtn && !row.classList.contains('active')) applyBtn.disabled = !connected;
+          if (delBtn) delBtn.disabled = !connected || isBuiltin;
+        });
+        return;
+      }
+
+      // Populated → render fresh rows
+      const activeId = Store.activePreset;
+      const html = raw.map((rawPreset, idx) => {
+        const p = normalisePreset(rawPreset, idx);
+        const isActive = (activeId != null && activeId === p.id);
+        const metaSuffix = p.meta ? ` · ${escapeHtml(p.meta)}` : '';
+        const applyDisabled = isActive || !connected;
+        const applyLabel = isActive ? 'Active' : 'Apply';
+        const delDisabled = !connected || p.isBuiltin;
+        const delTitle = p.isBuiltin ? ' title="factory preset — protected"' : '';
+        return `<div class="preset-row${isActive ? ' active' : ''}" data-preset-id="${p.id}" data-builtin="${p.isBuiltin}">
+          <span class="name">${escapeHtml(p.name)} <span class="meta">— preset ${p.id}${metaSuffix}</span></span>
+          <button class="apply-preset"${applyDisabled ? ' disabled' : ''}>${applyLabel}</button>
+          <button class="delete-preset danger"${delDisabled ? ' disabled' : ''}${delTitle}>Delete</button>
+        </div>`;
+      }).join('');
+      list.innerHTML = html;
+
+      // Wire handlers on the freshly-rendered rows
+      list.querySelectorAll('.preset-row').forEach(row => {
+        const presetId = parseInt(row.dataset.presetId, 10);
+        const isBuiltin = row.dataset.builtin === 'true';
+        const applyBtn = row.querySelector('.apply-preset');
+        const delBtn = row.querySelector('.delete-preset');
+        if (applyBtn) {
+          applyBtn.addEventListener('click', () => {
+            if (applyBtn.disabled) return;
+            applyPresetById(presetId);
+          });
+        }
+        if (delBtn) {
+          delBtn.addEventListener('click', () => {
+            if (delBtn.disabled || isBuiltin) return;
+            const nameEl = row.querySelector('.name');
+            const nameText = nameEl ? nameEl.firstChild.textContent.trim() : `preset ${presetId}`;
+            deletePresetById(presetId, nameText);
+          });
+        }
+      });
+    }
+
+    // Save current state as a named custom preset (prompt-based for v0.2).
+    const savePresetBtn = document.getElementById('savePresetBtn');
+    if (savePresetBtn) {
+      savePresetBtn.addEventListener('click', async () => {
+        if (!conn.isConnected()) { alert('Not connected — connect to a K1 first.'); return; }
+        const name = (window.prompt('Name this preset:') || '').trim();
+        if (!name) return;
+        savePresetBtn.disabled = true;
+        const prevLabel = savePresetBtn.textContent;
+        savePresetBtn.textContent = 'Saving…';
+        try {
+          await conn.sendCommand({
+            wsType: null,
+            restMethod: 'POST',
+            restPath: '/zone-presets',
+            body: { name },
+            requireRest: true,
+          });
+          await conn.refreshPresets();
+          renderPresets();
+        } catch (e) {
+          console.error('savePreset failed:', e);
+          alert('Save failed: ' + e.message);
+        } finally {
+          savePresetBtn.textContent = prevLabel;
+          savePresetBtn.disabled = !conn.isConnected();
+        }
+      });
+    }
+
+    // ---- Raw command sender ----------------------------------------------
+    document.querySelector('.raw-command button').addEventListener('click', async () => {
+      const text = document.getElementById('rawCommand').value;
+      const transport = document.getElementById('rawTransport').value;
+      let payload;
+      try { payload = JSON.parse(text); }
+      catch (e) { alert('Invalid JSON: ' + e.message); return; }
+      const lastSpan = document.querySelector('.raw-command-row .meta span:last-child');
+      lastSpan.textContent = '⏳ sending…';
+      lastSpan.style.color = 'var(--status-warn)';
+      try {
+        let resp;
+        if (transport === 'ws' || (transport === 'auto' && conn.ws.isOpen())) {
+          if (!payload.requestId) payload.requestId = 'p-' + uuid().slice(0, 10);
+          resp = await conn.queue.dispatch(conn.ws, payload);
+        } else if (transport === 'rest' || transport === 'auto') {
+          // For REST raw, treat payload.path/method as the route
+          if (!payload.path) throw new Error('REST raw needs "path" field (e.g. /zones)');
+          resp = (await conn.rest.send({ method: payload.method || 'POST', path: payload.path, body: payload.body }));
+        } else if (transport === 'serial') {
+          if (!conn.serial.isOpen()) await conn.connectSerial();
+          if (!payload.requestId) payload.requestId = 'p-' + uuid().slice(0, 10);
+          resp = await conn.queue.dispatch(conn.serial, payload);
+        }
+        lastSpan.textContent = '✓ ' + JSON.stringify(resp).slice(0, 60);
+        lastSpan.style.color = 'var(--status-ok)';
+      } catch (e) {
+        lastSpan.textContent = '✗ ' + e.message;
+        lastSpan.style.color = 'var(--status-err)';
+      }
+    });
+
+    // ---- Reset all + run (preserved) ------------------------------------
+    function renderAll() {
+      renderStrip();
+      renderHandles();
+      renderZoneCounts();
+      syncSegmentInputs();
+    }
+    renderAll();
+
+    // ====================================================================
+    // RE-RENDERS — Store + connection state → DOM
+    // ====================================================================
+
+    // Live-state JSON
+    function renderLiveState() {
+      const json = {
+        type: 'zones.list',
+        data: {
+          enabled: Store.composerEnabled,
+          activePreset: Store.activePreset,
+          zones: Store.zones.filter(z => z.enabled).map(z => ({
+            id: z.id, effectId: z.effectId, effectName: z.effectName,
+            paletteId: z.paletteId, blendMode: z.blendMode,
+            speed: z.speed, brightness: z.brightness, enabled: z.enabled,
+          })),
+          segments: Store.zones.filter(z => z.enabled).map(z => ({
+            zoneId: z.id, s1LeftStart: z.s1LeftStart, s1LeftEnd: z.s1LeftEnd,
+            s1RightStart: z.s1RightStart, s1RightEnd: z.s1RightEnd,
+          })),
+        },
+      };
+      const el = document.getElementById('liveStateJson');
+      if (el) el.textContent = JSON.stringify(json, null, 2);
+
+      // Device stats
+      const fpsEl = document.getElementById('statFps');
+      const heapEl = document.getElementById('statHeap');
+      const renderEl = document.getElementById('statRender');
+      if (fpsEl) fpsEl.innerHTML = (Store.device.fps || '—') + '<span class="u">/120</span>';
+      if (heapEl) heapEl.innerHTML = ((Store.device.freeHeap || 0).toLocaleString()) + '<span class="u">B</span>';
+      if (renderEl) renderEl.innerHTML = (Store.device.renderMs || Store.device.totalRenderMs || '—') + '<span class="u">ms</span>';
+
+      // last broadcast inline
+      const lb = document.getElementById('lastBroadcast');
+      if (lb) {
+        if (Store.lastBroadcast) {
+          const age = Math.round((Date.now() - Store.lastBroadcast.ts) / 1000);
+          lb.innerHTML = `last broadcast: <span style="color: var(--text-primary)">${Store.lastBroadcast.type}</span> · <span style="color:var(--text-muted)">${age}s ago</span>`;
+        } else {
+          lb.innerHTML = `last broadcast: <span style="color: var(--status-idle)">—</span>`;
+        }
+      }
+    }
+
+    // Composer state row
+    function renderComposerState() {
+      document.getElementById('enableToggle').checked = Store.composerEnabled;
+      const enabledCount = Store.zones.filter(z => z.enabled).length;
+      document.getElementById('enabledCount').textContent = `${enabledCount} / 3`;
+      const total = Store.zones.filter(z => z.enabled)
+        .reduce((sum, z) => sum + (z.s1LeftEnd - z.s1LeftStart + 1) + (z.s1RightEnd - z.s1RightStart + 1), 0);
+      document.getElementById('totalAssigned').textContent = `${total} / 160`;
+      const presetLabel = Store.activePreset != null ? `preset ${Store.activePreset}` : '— custom —';
+      const meta = document.getElementById('composerMeta');
+      if (meta) meta.textContent = `Active preset: ${presetLabel}`;
+    }
+
+    // Per-zone cards: reflect Store.zones[]
+    function renderZoneCards() {
+      document.querySelectorAll('.zone-card').forEach((card, idx) => {
+        const z = Store.zones[idx];
+        if (!z) return;
+        const enableTog = card.querySelector('.toggle input[type=checkbox]');
+        if (enableTog) enableTog.checked = z.enabled;
+        card.classList.toggle('disabled', !z.enabled);
+        const sliders = card.querySelectorAll('input[type=range]');
+        if (sliders[0]) {
+          sliders[0].value = z.brightness;
+          const v = sliders[0].parentElement.querySelector('.value');
+          if (v) v.textContent = z.enabled ? z.brightness : '—';
+        }
+        if (sliders[1]) {
+          sliders[1].value = z.speed;
+          const v = sliders[1].parentElement.querySelector('.value');
+          if (v) v.textContent = z.enabled ? z.speed : '—';
+        }
+      });
+    }
+
+    // ====================================================================
+    // ACCORDION GATE-BADGES — capability-driven feature gating
+    // ====================================================================
+    // Mapping from accordion section id → capability key on Store.capabilities.
+    // The default placeholder text for each gate-badge is captured once on
+    // first render so we can restore it whenever capabilities revert to null
+    // (e.g. on disconnect).
+    const ACCORDION_CAPABILITY_MAP = [
+      { selector: '#sec-d3',          capKey: 'd3' },
+      { selector: '#sec-d4',          capKey: 'd4' },
+      { selector: '#sec-snapshots',   capKey: 'snapshots' },
+      { selector: '#sec-perf',        capKey: 'performance' },
+      { selector: '#sec-zorder',      capKey: 'zorder' },
+      { selector: '#sec-render-diag', capKey: 'renderDiag' },
+    ];
+    const _gateBadgeDefaults = new Map();
+    function _captureGateBadgeDefaults() {
+      ACCORDION_CAPABILITY_MAP.forEach(entry => {
+        if (_gateBadgeDefaults.has(entry.selector)) return;
+        const sec = document.querySelector(entry.selector);
+        if (!sec) return;
+        const badge = sec.querySelector('.accordion-head .gate-badge');
+        if (!badge) return;
+        _gateBadgeDefaults.set(entry.selector, badge.textContent);
+      });
+    }
+    function renderAccordionGates() {
+      _captureGateBadgeDefaults();
+      const caps = Store.capabilities;
+      ACCORDION_CAPABILITY_MAP.forEach(entry => {
+        const sec = document.querySelector(entry.selector);
+        if (!sec) return;
+        const badge = sec.querySelector('.accordion-head .gate-badge');
+        if (!badge) return;
+        const defaultText = _gateBadgeDefaults.get(entry.selector) || '';
+        if (caps == null) {
+          // Pre-connect / discovery failed: leave default placeholder + styling.
+          badge.classList.remove('live');
+          badge.textContent = defaultText;
+          return;
+        }
+        const isLive = !!caps[entry.capKey];
+        if (isLive) {
+          badge.classList.add('live');
+          // Use plain text — keep parity with existing gate-badge content style.
+          badge.textContent = '✓ available';
+        } else {
+          badge.classList.remove('live');
+          badge.textContent = defaultText;
+        }
+      });
+    }
+
+    // ---- Catalogue normalisation -----------------------------------------
+    function normaliseEffectEntries(raw) {
+      let arr = raw;
+      if (arr && !Array.isArray(arr) && Array.isArray(arr.effects)) arr = arr.effects;
+      if (!Array.isArray(arr)) return [];
+      return arr
+        .map(e => ({
+          id: (e && (e.id ?? e.effectId)) | 0,
+          name: (e && (e.name ?? e.effectName)) || '—',
+          isExperimental: !!(e && e.isExperimental),
+        }))
+        .filter(e => e.id > 0 && !e.isExperimental);
+    }
+    function normalisePaletteEntries(raw) {
+      let arr = raw;
+      if (arr && !Array.isArray(arr) && Array.isArray(arr.palettes)) arr = arr.palettes;
+      if (!Array.isArray(arr)) return [];
+      return arr.map(p => ({
+        id: (p && (p.id ?? p.paletteId)) | 0,
+        name: (p && (p.name ?? p.paletteName)) || '—',
+      }));
+    }
+    function renderCatalogues() {
+      const effects = normaliseEffectEntries(Store.effects);
+      const palettes = normalisePaletteEntries(Store.palettes);
+      document.querySelectorAll('.zone-card').forEach((card, idx) => {
+        const z = Store.zones[idx];
+        const selects = card.querySelectorAll('select');
+        const effectSel = selects[0];
+        const paletteSel = selects[1];
+        if (effectSel && effects.length > 0) {
+          const currentId = z?.effectId ?? 0;
+          const hex = id => '0x' + (id | 0).toString(16).toUpperCase().padStart(4, '0');
+          let html = '';
+          let matched = false;
+          for (const e of effects) {
+            const sel = (e.id === currentId) ? ' selected' : '';
+            if (sel) matched = true;
+            html += `<option value="${e.id}"${sel}>${e.name} (${hex(e.id)})</option>`;
+          }
+          effectSel.innerHTML = html;
+          if (!matched && effectSel.options.length > 0) effectSel.selectedIndex = 0;
+        }
+        if (paletteSel && palettes.length > 0) {
+          const currentId = z?.paletteId ?? 0;
+          let html = '';
+          let matched = false;
+          for (const p of palettes) {
+            const sel = (p.id === currentId) ? ' selected' : '';
+            if (sel) matched = true;
+            html += `<option value="${p.id}"${sel}>${p.name} (${p.id})</option>`;
+          }
+          paletteSel.innerHTML = html;
+          if (!matched && paletteSel.options.length > 0) paletteSel.selectedIndex = 0;
+        }
+      });
+    }
+
+    // Connection diagnostics: per-transport + app state
+    function renderConnDiag() {
+      // Header transport badges
+      const badges = document.querySelectorAll('.transport-badges .transport-badge');
+      const tStates = [conn.ws, conn.rest, conn.serial];
+      tStates.forEach((t, i) => {
+        const cls = ['transport-badge'];
+        if (t.state === 'open') cls.push('active');
+        else if (t.state === 'connecting') cls.push('connecting');
+        else if (t.state === 'error') cls.push('error');
+        else cls.push('idle');
+        if (conn.primary === t.name) cls.push('primary');
+        badges[i].className = cls.join(' ');
+      });
+
+      // Per-transport diag cards
+      const setStatBadge = (id, state) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.className = 'diag-state ' + state;
+        el.textContent = state;
+      };
+      setStatBadge('wsState', conn.ws.state);
+      setStatBadge('restState', conn.rest.state);
+      setStatBadge('serialState', conn.serial.state);
+
+      const setText = (id, txt) => { const e = document.getElementById(id); if (e) e.textContent = txt; };
+
+      setText('wsEndpoint', conn.ws.host ? `ws://${conn.ws.host}/ws` : '—');
+      const wsRtt = conn.ws.rtt();
+      setText('wsRtt', wsRtt.p50 != null ? `${fmtMs(wsRtt.p50)} / ${fmtMs(wsRtt.p95)} ms` : '— / — ms');
+      setText('wsLastFrame', conn.ws.lastSuccessAt ? fmtTime() : '—');
+      setText('wsRetries', String(conn.ws.reconnectAttempts));
+      setText('wsHeartbeat', conn.ws.isOpen() ? `active · ${HEARTBEAT_MS / 1000}s interval` : '—');
+      setText('wsErr', conn.ws.lastError || 'none');
+
+      setText('restBase', conn.rest.host ? `http://${conn.rest.host}/api/v1` : '—');
+      const restRtt = conn.rest.rtt();
+      setText('restRtt', restRtt.p50 != null ? `${fmtMs(restRtt.p50)} / ${fmtMs(restRtt.p95)} ms` : '— / — ms');
+      setText('restLast200', conn.rest.lastSuccessAt ? fmtTime() : '—');
+      setText('restRetries', String(conn.rest.reconnectAttempts));
+      setText('restCaps', Store.capabilities ? 'capability discovery active' : (conn.rest.isOpen() ? `polling /firmware/version every ${REST_POLL_MS / 1000}s` : 'pending'));
+      setText('restErr', conn.rest.lastError || 'none');
+
+      setText('serialPort', conn.serial.port ? 'connected (USB CDC)' : '— (Raw command panel → USB Serial → click Send)');
+      const sRtt = conn.serial.rtt();
+      setText('serialRtt', sRtt.p50 != null ? `${fmtMs(sRtt.p50)} / ${fmtMs(sRtt.p95)} ms` : '— / — ms');
+      setText('serialLast', conn.serial.lastSuccessAt ? fmtTime() : '—');
+      setText('serialErr', conn.serial.lastError || 'none');
+
+      // App state
+      setText('queueDepth', conn.queue.depth() + ' commands');
+      setText('lastBroadcastFull', Store.lastBroadcast ? `${Store.lastBroadcast.type} · ${fmtTime()}` : '—');
+      setText('activeTransport', conn.primary ? conn.primary.toUpperCase() : '— (no connection)');
+    }
+
+    // ====================================================================
+    // WIRE STORE + CONN UPDATES TO RE-RENDERS
+    // ====================================================================
+    Store.on(reason => {
+      // When server-of-truth changes, sync editor (unless user is mid-drag)
+      if (!editor.pendingChanges && !dragState && (reason === 'zones' || reason === 'zones-refresh')) {
+        syncEditorFromStore();
+        renderAll();
+      }
+      renderComposerState();
+      renderZoneCards();
+      renderLiveState();
+      renderAccordionGates();
+      if (reason === 'presets') renderPresets();
+    });
+    conn.onUI(() => {
+      renderConnDiag();
+      renderConnectButton();
+      renderLiveState();
+      // Re-evaluate Save/Delete enabled state on connection-state changes.
+      const saveBtn = document.getElementById('savePresetBtn');
+      if (saveBtn && !saveBtn.textContent.startsWith('Saving')) saveBtn.disabled = !conn.isConnected();
+      renderPresets();
+    });
+
+    // Mark editor as having pending changes when user drags
+    const _onDragOrig = onDrag;
+    onDrag = function (ev) {
+      _onDragOrig(ev);
+      editor.pendingChanges = true;
+    };
+
+    // Periodic refresh of stale broadcast age + RTT cards
+    setInterval(() => { renderConnDiag(); renderLiveState(); }, 1000);
+
+    // Periodic device stats poll while connected (REST)
+    setInterval(() => {
+      if (conn.rest.isOpen()) conn.refreshDeviceStats();
+    }, DEVICE_STATS_POLL_MS);
+
+    // ====================================================================
+    // EXISTING INTERACTION HANDLERS (preserved)
+    // ====================================================================
+
+    // Connection diagnostics expansion
+    document.getElementById('connDiagHead').addEventListener('click', () => {
+      document.getElementById('connDiag').classList.toggle('open');
+    });
+
+    // Accordion toggles (6 future-feature panels)
+    document.querySelectorAll('.accordion-head').forEach(head => {
+      head.addEventListener('click', () => {
+        head.parentElement.classList.toggle('open');
+      });
+    });
+
+    // Section nav: smooth scroll
+    document.querySelectorAll('.section-nav a').forEach(a => {
+      a.addEventListener('click', e => {
+        e.preventDefault();
+        const target = document.querySelector(a.getAttribute('href'));
+        if (target) {
+          const navHeight = document.getElementById('sectionNav').offsetHeight + 12;
+          const top = target.getBoundingClientRect().top + window.scrollY - navHeight;
+          window.scrollTo({ top, behavior: 'smooth' });
+          if (target.classList.contains('accordion')) {
+            target.classList.add('open');
+          }
+        }
+      });
+    });
+
+    // Initial render
+    renderConnDiag();
+    renderConnectButton();
+    renderLiveState();
+    renderComposerState();
+    renderZoneCards();
+    renderAccordionGates();
+
+    // ---- Console banner --------------------------------------------------
+    console.log('%cK1 Zone Composer Portal v0.1', 'color: #00FFFF; font-weight: bold; font-size: 14px;');
+    console.log('Multi-transport: WS (ws://host/ws) · REST (http://host/api/v1) · WebSerial (USB CDC SerialJSON)');
+    console.log('Connect button: tries WS + REST in parallel against host. WebSerial: select "USB Serial" in raw-command transport dropdown.');
+    console.log('Layout editor: drag boundaries → Apply Layout sends zones.setLayout. Per-zone controls debounced 150ms.');
+    console.log('Live state subscribes to zones.changed / zones.stateChanged broadcasts → auto-refresh.');
+    console.log('Auto-reconnect: WS exp backoff 1s→32s. REST: 30s liveness poll on /firmware/version.');
+    console.log('Forward-compatible accordions (D-3, D-4, snapshots, performance, Z-order, render diag) remain placeholders pending firmware.');
+    console.log('Capability discovery active — accordion gates auto-update on connect.');
+    console.log('Effect/palette catalogues populate from /api/v1/effects + /palettes on connect.');
+  </script>
+</body>
+</html>

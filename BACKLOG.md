@@ -283,6 +283,16 @@ These are NOT phases; they are validated engineering intents that update both fi
 
 ## Future (no urgency)
 
+### SynqMatrix restore-point consolidation (DEFERRED — revisit by 2026-06-30)
+- **Problem:** Three independent in-RAM restore-point latches duplicate state across transports:
+  - `firmware-v3/src/serial/SerialJsonGateway.cpp` — `g_synqMatrixRestorePoint` + `g_synqMatrixRestorePointValid`
+  - `firmware-v3/src/serial/SerialCLI.cpp` — same pair
+  - `firmware-v3/src/network/webserver/ws/WsSynqMatrixCommands.cpp` — anonymous-namespace `g_restorePoint` + `g_restorePointValid`
+- **Risk:** Each surface captures its own restore point on config-set and uses it for restore commands. Three-way drift if one surface is updated without the others.
+- **Decision:** Consolidate into a single shared module under `core/synqmatrix/` (e.g. `SynqMatrixRestorePoint`). Deferred from Chunk 1.C of the SynqMatrix migration (2026-05-13/14) because consolidating mid-rename would widen blast radius from "internal renames" to "internal renames + new public API".
+- **Trigger to revisit:** by 2026-06-30, OR when the next SynqMatrix transport surface is added (e.g. iOS REST/WS bindings, Tab5 control surface) — whichever first.
+- **Anchor commits:** `0d354ca2` (1.A atomics) / `70d73e0a` (1.B struct fields) / `4cf745fa` (1.C helpers + globals).
+
 ### Surface 6 — Effect lifecycle Tier 1 instrumentation (forward roadmap)
 - Spec: `firmware-v3/docs/debugging/TRACE_INSTRUMENTATION_SPEC.md` §6 + `trace_spec_sections/06_effect_lifecycle.md`
 - Scope: `effect_init_<eid>`, `effect_cleanup_<eid>`, `effect_render_first_frame_<eid>` instants + `effect_init_us` / `effect_cleanup_us` / `effect_psram_alloc_bytes` counters

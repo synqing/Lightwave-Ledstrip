@@ -29,13 +29,13 @@ using lightwaveos::synqmatrix::SynqMatrixIntent;
 using lightwaveos::synqmatrix::kSynqMatrixMaxPolicySnapshotCount;
 using lightwaveos::synqmatrix::parseSynqMatrixMode;
 using lightwaveos::synqmatrix::parseSynqMatrixProfile;
-using lightwaveos::synqmatrix::songAwareClassificationReasonName;
-using lightwaveos::synqmatrix::songAwareLastActionName;
-using lightwaveos::synqmatrix::songAwareModeName;
-using lightwaveos::synqmatrix::songAwareProfileName;
-using lightwaveos::synqmatrix::songAwareOwnerName;
-using lightwaveos::synqmatrix::songAwareStateName;
-using lightwaveos::synqmatrix::songAwareSuppressedReasonName;
+using lightwaveos::synqmatrix::synqMatrixClassificationReasonName;
+using lightwaveos::synqmatrix::synqMatrixLastActionName;
+using lightwaveos::synqmatrix::synqMatrixModeName;
+using lightwaveos::synqmatrix::synqMatrixProfileName;
+using lightwaveos::synqmatrix::synqMatrixOwnerName;
+using lightwaveos::synqmatrix::synqMatrixStateName;
+using lightwaveos::synqmatrix::synqMatrixSuppressedReasonName;
 
 namespace {
 
@@ -67,9 +67,9 @@ void restoreReadyDirector(SynqMatrix& director,
     runtime.status.profile = cfg.profile;
     runtime.status.suppressedReason = cfg.enabled ? SynqMatrixSuppressedReason::None
                                                   : SynqMatrixSuppressedReason::Disabled;
-    runtime.status.currentSongState = stableState;
-    runtime.status.rawSongState = stableState;
-    runtime.status.candidateSongState = stableState;
+    runtime.status.currentState = stableState;
+    runtime.status.rawState = stableState;
+    runtime.status.candidateState = stableState;
     runtime.bootGraceUntilMs = 0;
     runtime.enableGraceUntilMs = 0;
     runtime.antiThrashUntilMs = 0;
@@ -237,8 +237,8 @@ void assertClassification(SynqMatrixState expectedState,
     const auto status = director.getStatus();
 
     (void)request;
-    TEST_ASSERT_EQUAL(expectedState, status.rawSongState);
-    TEST_ASSERT_EQUAL(expectedState, status.currentSongState);
+    TEST_ASSERT_EQUAL(expectedState, status.rawState);
+    TEST_ASSERT_EQUAL(expectedState, status.currentState);
     TEST_ASSERT_EQUAL(expectedReason, status.classificationReason);
 }
 
@@ -292,9 +292,9 @@ void test_synq_matrix_mode_parsing_and_names_cover_public_modes() {
     TEST_ASSERT_EQUAL(SynqMatrixMode::Off, parseSynqMatrixMode("not-a-mode", &ok));
     TEST_ASSERT_FALSE(ok);
 
-    TEST_ASSERT_EQUAL_STRING("off", songAwareModeName(SynqMatrixMode::Off));
-    TEST_ASSERT_EQUAL_STRING("assist", songAwareModeName(SynqMatrixMode::Assist));
-    TEST_ASSERT_EQUAL_STRING("director", songAwareModeName(SynqMatrixMode::Director));
+    TEST_ASSERT_EQUAL_STRING("off", synqMatrixModeName(SynqMatrixMode::Off));
+    TEST_ASSERT_EQUAL_STRING("assist", synqMatrixModeName(SynqMatrixMode::Assist));
+    TEST_ASSERT_EQUAL_STRING("director", synqMatrixModeName(SynqMatrixMode::Director));
 
     TEST_ASSERT_EQUAL(SynqMatrixProfile::Subtle, parseSynqMatrixProfile("subtle", &ok));
     TEST_ASSERT_TRUE(ok);
@@ -304,9 +304,9 @@ void test_synq_matrix_mode_parsing_and_names_cover_public_modes() {
     TEST_ASSERT_TRUE(ok);
     TEST_ASSERT_EQUAL(SynqMatrixProfile::Balanced, parseSynqMatrixProfile("not-a-profile", &ok));
     TEST_ASSERT_FALSE(ok);
-    TEST_ASSERT_EQUAL_STRING("subtle", songAwareProfileName(SynqMatrixProfile::Subtle));
-    TEST_ASSERT_EQUAL_STRING("balanced", songAwareProfileName(SynqMatrixProfile::Balanced));
-    TEST_ASSERT_EQUAL_STRING("high", songAwareProfileName(SynqMatrixProfile::High));
+    TEST_ASSERT_EQUAL_STRING("subtle", synqMatrixProfileName(SynqMatrixProfile::Subtle));
+    TEST_ASSERT_EQUAL_STRING("balanced", synqMatrixProfileName(SynqMatrixProfile::Balanced));
+    TEST_ASSERT_EQUAL_STRING("high", synqMatrixProfileName(SynqMatrixProfile::High));
 }
 
 void test_synq_matrix_classifier_reports_each_director_state() {
@@ -352,9 +352,9 @@ void test_synq_matrix_boot_and_enable_grace_suppress_switching() {
     runtime.config = SynqMatrixConfig{};
     runtime.bootGraceUntilMs = 0;
     runtime.enableGraceUntilMs = 0;
-    runtime.status.currentSongState = SynqMatrixState::Drop;
-    runtime.status.rawSongState = SynqMatrixState::Drop;
-    runtime.status.candidateSongState = SynqMatrixState::Drop;
+    runtime.status.currentState = SynqMatrixState::Drop;
+    runtime.status.rawState = SynqMatrixState::Drop;
+    runtime.status.candidateState = SynqMatrixState::Drop;
     director.restoreRuntimeState(runtime);
     director.setConfig(makeConfig());
 
@@ -448,9 +448,9 @@ void test_synq_matrix_cooldown_blocks_after_recent_switch() {
     director.notifySwitchApplied(0x2222, dropEffect, 10000, "Drop target");
 
     SynqMatrixRuntimeState runtime = director.exportRuntimeState();
-    runtime.status.currentSongState = SynqMatrixState::Build;
-    runtime.status.rawSongState = SynqMatrixState::Build;
-    runtime.status.candidateSongState = SynqMatrixState::Build;
+    runtime.status.currentState = SynqMatrixState::Build;
+    runtime.status.rawState = SynqMatrixState::Build;
+    runtime.status.candidateState = SynqMatrixState::Build;
     director.restoreRuntimeState(runtime);
 
     const SynqMatrixSwitchRequest request =
@@ -596,7 +596,7 @@ void test_synq_matrix_assist_mode_changes_controls_without_switching() {
     TEST_ASSERT_TRUE(params.variation > 0);
     TEST_ASSERT_TRUE(params.hue > 0);
     TEST_ASSERT_EQUAL_UINT16(0x1302, params.effectId);
-    TEST_ASSERT_EQUAL(SynqMatrixState::Drop, status.currentSongState);
+    TEST_ASSERT_EQUAL(SynqMatrixState::Drop, status.currentState);
     TEST_ASSERT_EQUAL(SynqMatrixLastAction::ParameterUpdate, status.lastAction);
     TEST_ASSERT_EQUAL(SynqMatrixIntent::DropImpact, status.intent);
     TEST_ASSERT_EQUAL_UINT32(1, status.parameterUpdates);
@@ -678,11 +678,11 @@ void test_synq_matrix_policy_and_string_telemetry_helpers() {
     TEST_ASSERT_TRUE(debug.antiThrashWindowMs > 0);
     TEST_ASSERT_TRUE(debug.healthCleanWindowMs > 0);
 
-    TEST_ASSERT_EQUAL_STRING("manual", songAwareOwnerName(SynqMatrixOwner::Manual));
-    TEST_ASSERT_EQUAL_STRING("cooldown", songAwareSuppressedReasonName(SynqMatrixSuppressedReason::Cooldown));
-    TEST_ASSERT_EQUAL_STRING("dense", songAwareStateName(SynqMatrixState::Dense));
-    TEST_ASSERT_EQUAL_STRING("effect_switch", songAwareLastActionName(SynqMatrixLastAction::EffectSwitch));
-    TEST_ASSERT_EQUAL_STRING("drop_onset", songAwareClassificationReasonName(SynqMatrixClassificationReason::DropOnset));
+    TEST_ASSERT_EQUAL_STRING("manual", synqMatrixOwnerName(SynqMatrixOwner::Manual));
+    TEST_ASSERT_EQUAL_STRING("cooldown", synqMatrixSuppressedReasonName(SynqMatrixSuppressedReason::Cooldown));
+    TEST_ASSERT_EQUAL_STRING("dense", synqMatrixStateName(SynqMatrixState::Dense));
+    TEST_ASSERT_EQUAL_STRING("effect_switch", synqMatrixLastActionName(SynqMatrixLastAction::EffectSwitch));
+    TEST_ASSERT_EQUAL_STRING("drop_onset", synqMatrixClassificationReasonName(SynqMatrixClassificationReason::DropOnset));
 }
 
 void test_synq_matrix_transition_telemetry_blocks_switch_until_complete() {

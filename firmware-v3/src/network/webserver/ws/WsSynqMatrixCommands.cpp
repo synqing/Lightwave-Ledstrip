@@ -34,6 +34,25 @@ void captureRestorePoint() {
     g_restorePointValid = true;
 }
 
+String buildSynqMatrixWsError(const char* envelopeType,
+                              const char* errorCode,
+                              const char* message,
+                              const char* requestId) {
+    JsonDocument response;
+    response["type"] = envelopeType;
+    if (requestId != nullptr && strlen(requestId) > 0) {
+        response["requestId"] = requestId;
+    }
+    response["success"] = false;
+    JsonObject error = response["error"].to<JsonObject>();
+    error["code"] = errorCode;
+    error["message"] = message;
+
+    String output;
+    serializeJson(response, output);
+    return output;
+}
+
 void encodeConfig(JsonObject& data, const synqmatrix::SynqMatrixConfig& config) {
     data["enabled"] = config.enabled;
     data["mode"] = synqmatrix::synqMatrixModeName(config.mode);
@@ -250,9 +269,10 @@ void handleSynqMatrixConfigSetImpl(AsyncWebSocketClient* client, JsonDocument& d
     synqmatrix::SynqMatrixConfig config = synqmatrix::SynqMatrix::instance().getConfig();
     const char* error = nullptr;
     if (!applyConfigJson(doc.as<JsonObjectConst>(), config, &error)) {
-        client->text(buildWsError(ErrorCodes::INVALID_VALUE,
-                                  error ? error : "Invalid SynqMatrix config",
-                                  requestId));
+        client->text(buildSynqMatrixWsError(envelopeType,
+                                            ErrorCodes::INVALID_VALUE,
+                                            error ? error : "Invalid SynqMatrix config",
+                                            requestId));
         return;
     }
 
@@ -286,9 +306,10 @@ void handleSynqMatrixResetImpl(AsyncWebSocketClient* client, JsonDocument& doc, 
 void handleSynqMatrixRestoreImpl(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&, const char* envelopeType) {
     const char* requestId = doc["requestId"] | "";
     if (!g_restorePointValid) {
-        client->text(buildWsError(ErrorCodes::INVALID_ACTION,
-                                  "No SynqMatrix restore point captured by WebSocket",
-                                  requestId));
+        client->text(buildSynqMatrixWsError(envelopeType,
+                                            ErrorCodes::INVALID_ACTION,
+                                            "No SynqMatrix restore point captured by WebSocket",
+                                            requestId));
         return;
     }
     synqmatrix::SynqMatrix::instance().restoreRuntimeState(g_restorePoint);
@@ -337,17 +358,19 @@ void handleSynqMatrixAllowlistImpl(AsyncWebSocketClient* client, JsonDocument& d
 void handleSynqMatrixAllowlistSetImpl(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&, const char* envelopeType) {
     const char* requestId = doc["requestId"] | "";
     if (!doc["state"].is<const char*>() || !doc["enabled"].is<bool>()) {
-        client->text(buildWsError(ErrorCodes::INVALID_VALUE,
-                                  "state and enabled are required",
-                                  requestId));
+        client->text(buildSynqMatrixWsError(envelopeType,
+                                            ErrorCodes::INVALID_VALUE,
+                                            "state and enabled are required",
+                                            requestId));
         return;
     }
     bool ok = false;
     const auto state = synqmatrix::parseSynqMatrixState(doc["state"].as<const char*>(), &ok);
     if (!ok) {
-        client->text(buildWsError(ErrorCodes::INVALID_VALUE,
-                                  "Invalid SynqMatrix state",
-                                  requestId));
+        client->text(buildSynqMatrixWsError(envelopeType,
+                                            ErrorCodes::INVALID_VALUE,
+                                            "Invalid SynqMatrix state",
+                                            requestId));
         return;
     }
     captureRestorePoint();

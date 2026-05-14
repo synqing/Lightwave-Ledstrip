@@ -8,6 +8,10 @@ Prioritised engineering backlog. Items are tagged by category and roughly ordere
 
 Work Blocks are critical tasks discovered while executing another mission. They must be scoped, logged, assigned out, and then the original mission must resume unless Captain explicitly re-scopes the session or an RBDO hard stop prevents continuation. Protocol: `instructions/work-blocking-protocol-v1.md`.
 
+## Technical Debt
+
+- **Restore-point latch consolidation (SynqMatrix)** — `SerialCLI.cpp`, `SerialJsonGateway.cpp`, and `WsSynqMatrixCommands.cpp` each carry an independent file-scope restore-point latch for SynqMatrix runtime state. Three-way drift risk if one surface is updated without the others. Consolidate into a single shared module under `core/synqmatrix/`. **Revisit by 2026-06-30** or when the next SynqMatrix surface (e.g. iOS direct) is added — whichever first. Deferred from PR #16 to keep blast radius bounded.
+
 ### WB-1 — Systemic naming, definition, and metric accountability audit (OPEN — ASSIGN OUT)
 
 - **Problem statement:** Recent visual-pipeline work exposed misleading names and descriptions around renderer metrics and timing surfaces. Examples include `frameDrops` reading as skipped output frames when it is currently deadline-miss accounting, `cpu=100%` reading as whole-device CPU utilisation when it is renderer frame-budget occupancy, and `show_leds` reading as FastLED-only timing when it included output preparation plus LED driver show.

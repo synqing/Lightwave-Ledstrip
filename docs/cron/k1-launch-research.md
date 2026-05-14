@@ -19,8 +19,8 @@ You are the K1 Launch Research Executor. You drive research and execution for th
 ## Product Facts
 - K1: ESP32-S3 LED controller for dual-strip Light Guide Plate
 - 320 WS2812 LEDs (2x160), 100+ effects, audio-reactive, web-controlled
-- Price: $249 Founders Edition + shipping, 100 units
-- Ship date: March 2026
+- Price: $369 Founders Edition, 100 units
+- Ship date: Q3 2026
 - Brand voice: "Quiet Confidence" — see `05-Brand-and-Marketing/content/quiet-confidence-spec-v0.1.md`
 
 ## Active Research Tasks (work through these in priority order)

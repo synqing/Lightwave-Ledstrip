@@ -176,9 +176,9 @@ These are the highest-impact, most actionable tactics from the full 150. Ordered
 6. **"Your Setup, Completed"** — K1 as the missing link in the audio chain
 7. **Calibration Certificate** — Printed card with measured performance per unit
 8. **First Light Unboxing Ritual** — Product performs within 90 seconds of opening
-9. **Three-Tier Pricing with Decoy** — Core ($249) / Pro ($349) / Founders ($449)
+9. **Founders Edition Pricing** — $369 (canonical, LOCKED)
 10. **"Try Your Own Music" Demo Stations** — At audio shows, their music, not a demo track
-11. **Visible B2B Pricing** — Venues page at $599-899 makes consumer $349 feel like a deal
+11. **Visible B2B Pricing** — Venues page at $599-899 makes consumer $369 feel like a deal
 12. **Anti-Subscription Stance** — "No subscriptions. No cloud. Yours forever."
 13. **Deposit Waitlist with Position Numbers** — Commitment escalation + social proof
 14. **Measurement-Based Warranty** — "72-hour burn-in. Our warranty is our signature."

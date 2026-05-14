@@ -59,7 +59,7 @@ This is where GOV spec modes (IDLE/EXPLORATION/HUNT/VALIDATION) apply. Only this
 - **Cross-domain read:** Each cycle, check `00-Governance/cross-domain-flags.md` for War Room flags relevant to active vectors. If found, incorporate into current research.
 - **War Room write-back:** If research produces a finding that meets KNW quality (GOV spec §6.3), write it to the War Room inbox (`01-Inbox/`) for the ingestion pipeline to process. Don't write directly to `03-Knowledge/` — let the War Room pipeline validate it.
 - **Escalation logic:** If research hits a GOV spec §5 trigger, send urgent Agent Mail AND write to `00-Governance/escalations.md`
-- **Fix stale product facts:** Price is $449-549 (exploring), not $249
+- **Fix stale product facts:** Price is $369 (LOCKED canonical), not $249
 
 ### Layer 3: Shared State (new)
 
@@ -151,7 +151,7 @@ If Captain ratifies this amendment:
 - [ ] Create `00-Governance/escalations.md` (empty, header only)
 - [ ] Update `warroom-pipeline-executor` SKILL.md — add K1 decision awareness, cross-domain flag, and escalation hook to existing stages
 - [ ] Rewrite `k1-launch-research` SKILL.md — replace flat task list with vector-driven execution, add mode awareness, add War Room write-back
-- [ ] Fix price from $249 to "$449-549 (exploring)" in K1 SKILL.md
+- [ ] Fix price from $249 to "$369 (LOCKED canonical)" in K1 SKILL.md
 - [ ] Update GOV spec §2 to reference "K1 Research Pipeline" specifically, not "the pipeline"
 - [ ] Update GOV spec §8 capacity table with corrected dual-pipeline numbers
 - [ ] Update GOV spec §11 file locations with new shared state files

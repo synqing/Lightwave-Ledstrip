@@ -65,6 +65,12 @@ void NetworkHandlers::handleStatus(AsyncWebServerRequest* request) {
 }
 
 void NetworkHandlers::handleScan(AsyncWebServerRequest* request) {
+#ifdef WIFI_AP_ONLY
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::OPERATION_FAILED,
+                      "WiFi scan unavailable in WIFI_AP_ONLY build");
+    return;
+#endif
     WiFiManager& wm = WIFI_MANAGER;
 
     // Trigger a fresh scan
@@ -141,9 +147,13 @@ void NetworkHandlers::handleConnect(AsyncWebServerRequest* request, uint8_t* dat
         WIFI_MANAGER.saveNetwork(ssid, password);
     }
 
-    // Initiate connection via WiFiManager
-    WIFI_MANAGER.setCredentials(ssid, password);
-    WIFI_MANAGER.reconnect();
+    // Initiate explicit pure STA via WiFiManager. Production WIFI_AP_ONLY builds refuse this.
+    if (!WIFI_MANAGER.connectToNetwork(ssid, password)) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::OPERATION_FAILED,
+                          "STA unavailable in this build");
+        return;
+    }
 
     // Return 202 Accepted - connection happens asynchronously
     sendSuccessResponse(request, [ssid](JsonObject& data) {
@@ -355,8 +365,10 @@ void NetworkHandlers::handleEnableSTA(AsyncWebServerRequest* request, uint8_t* d
     bool success = wm.requestSTAEnable(durationSeconds * 1000, revertToApOnly);
 
     if (!success) {
-        // Fallback: trigger reconnection manually
-        wm.reconnect();
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::OPERATION_FAILED,
+                          "STA unavailable in this build");
+        return;
     }
 
     sendSuccessResponse(request, [durationSeconds, revertToApOnly](JsonObject& data) {

@@ -2232,18 +2232,18 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
                 Serial.printf("Connecting to '%s' (saving to NVS)...\n", ssid.c_str());
                 bool ok = WIFI_MANAGER.connectToNetwork(ssid, password);
                 if (ok) {
-                    Serial.println("Connection initiated (AP+STA). Check 'wifi' in ~10s.");
+                    Serial.println("STA connection initiated; AP disabled during STA mode. Check 'wifi' in ~10s.");
                 } else {
-                    Serial.println("Connect request failed");
+                    Serial.println("Connect request refused or failed. Production builds are WIFI_AP_ONLY.");
                 }
             } else {
                 // SSID only — try saved credentials (NVS)
                 Serial.printf("Connecting to saved network: '%s'...\n", ssid.c_str());
                 bool ok = WIFI_MANAGER.connectToSavedNetwork(ssid);
                 if (ok) {
-                    Serial.println("Connection initiated (AP+STA). Check 'wifi' in ~10s.");
+                    Serial.println("STA connection initiated; AP disabled during STA mode. Check 'wifi' in ~10s.");
                 } else {
-                    Serial.printf("'%s' not in NVS. Use: wifi connect %s YOUR_PASSWORD\n", ssid.c_str(), ssid.c_str());
+                    Serial.printf("Connect request refused or failed for '%s'. Production builds are WIFI_AP_ONLY; otherwise check saved NVS credentials.\n", ssid.c_str());
                 }
             }
         }
@@ -2253,9 +2253,13 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
             Serial.println("AP-only mode active");
         }
         else if (argsLower == "scan") {
+#ifdef WIFI_AP_ONLY
+            Serial.println("WiFi scan refused. Production builds are WIFI_AP_ONLY.");
+#else
             Serial.println("Triggering WiFi scan...");
             WIFI_MANAGER.scanNetworks();
             Serial.println("Scan initiated. Check 'wifi' in ~5s for results.");
+#endif
         }
         else {
             Serial.println("WiFi commands:");

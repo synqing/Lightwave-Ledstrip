@@ -517,6 +517,7 @@ private:
     uint8_t m_attemptsOnCurrentNetwork = 0;
     uint8_t m_scanAttemptsWithoutKnown = 0;
     bool m_noKnownNetworksLastScan = false;
+    bool m_connectWithoutScan = false;      ///< Explicit operator/API connect path
     bool m_useStaticIP = false;
     IPAddress m_staticIP;
     IPAddress m_gateway;

@@ -124,7 +124,11 @@ namespace NetworkConfig {
     // mDNS Settings
     // ========================================================================
 
-    constexpr const char* MDNS_HOSTNAME = "lightwaveos";
+    #ifdef MDNS_HOSTNAME_CUSTOM
+        constexpr const char* MDNS_HOSTNAME = MDNS_HOSTNAME_CUSTOM;
+    #else
+        constexpr const char* MDNS_HOSTNAME = "lightwaveos";
+    #endif
 
     // ========================================================================
     // OTA Security

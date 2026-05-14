@@ -198,9 +198,8 @@ void WiFiManager::wifiTask(void* parameter) {
                 wdtAddErr);
     }
 
-    // NOTE: In Portable Mode, AP is started immediately in begin() via AP+STA.
-    // The task handles STA connection attempts in parallel.
-    // AP stays up permanently regardless of STA state.
+    // AP and STA are exclusive on K1. AP is started in begin(); validation-only
+    // STA attempts tear the AP down before joining an upstream network.
 
     // Main state machine loop
     while (true) {
@@ -280,6 +279,14 @@ void WiFiManager::handleStateInit() {
     if (!isValidStaSsid(m_ssid)) {
         LW_LOGI("Primary STA SSID is not valid, scanning for known networks");
         setState(STATE_WIFI_SCANNING);
+        return;
+    }
+
+    // Operator/API initiated connects already selected the target SSID. Do not
+    // route retries through scan; scans can abort a late association in progress.
+    if (m_connectWithoutScan) {
+        LW_LOGI("Direct STA connect path active; skipping pre-connect scan");
+        setState(STATE_WIFI_CONNECTING);
         return;
     }
 
@@ -398,6 +405,8 @@ void WiFiManager::handleStateConnecting() {
             setState(STATE_WIFI_CONNECTED);
         } else {
             // Genuine timeout
+            WiFi.setAutoReconnect(false);
+            WiFi.disconnect(true);
             m_connectStarted = false;
             m_connectionAttempts++;
             LW_LOGW("Connection timeout (attempt %d)", m_connectionAttempts);
@@ -486,6 +495,7 @@ void WiFiManager::handleStateFailed() {
         if (m_scanAttemptsWithoutKnown >= 2 && m_apEnabled) {
             LW_LOGW("No known networks after %d scans, switching to AP mode",
                     m_scanAttemptsWithoutKnown);
+            startSoftAP();
             setState(STATE_WIFI_AP_MODE);
             return;
         }
@@ -507,19 +517,20 @@ void WiFiManager::handleStateFailed() {
 
     // Check if we should switch to next network
     if (m_attemptsOnCurrentNetwork >= NetworkConfig::WIFI_ATTEMPTS_PER_NETWORK) {
-        if (hasSecondaryNetwork()) {
+        if (!m_connectWithoutScan && hasSecondaryNetwork()) {
+            m_connectWithoutScan = false;
             switchToNextNetwork();
             m_reconnectDelay = RECONNECT_DELAY_MS;  // Reset backoff for new network
             setState(STATE_WIFI_INIT);
             return;
         }
-    }
 
-    // If AP mode is enabled and we've exhausted all networks, fall back to it
-    if (m_apEnabled && m_attemptsOnCurrentNetwork >= NetworkConfig::WIFI_ATTEMPTS_PER_NETWORK && !hasSecondaryNetwork()) {
-        LW_LOGW("All networks exhausted - entering AP mode (AP already up in AP+STA)");
-        setState(STATE_WIFI_AP_MODE);
-        return;
+        if (m_apEnabled) {
+            LW_LOGW("All connection attempts exhausted - entering AP mode");
+            startSoftAP();
+            setState(STATE_WIFI_AP_MODE);
+            return;
+        }
     }
 
     // Otherwise, wait with backoff before retrying same network
@@ -530,6 +541,10 @@ void WiFiManager::handleStateFailed() {
     m_reconnectDelay = min(m_reconnectDelay * 2, MAX_RECONNECT_DELAY_MS);
 
     // Try again
+    if (m_connectWithoutScan && isValidStaSsid(m_ssid)) {
+        setState(STATE_WIFI_CONNECTING);
+        return;
+    }
     setState(STATE_WIFI_INIT);
 }
 
@@ -570,16 +585,18 @@ void WiFiManager::handleStateAPMode() {
         return;
     }
 
-    // Periodically try STA connection without killing AP (non-destructive retry).
+    // Periodically retry STA by switching modes. AP and STA are exclusive on K1.
     // Skip if no known networks were ever found — scanning disrupts the network
     // stack (tears down UDP streamer, triggers WiFi events) and can cause
     // watchdog timeouts when combined with rapid effect changes.
     if (hasAnyStaCandidates() && m_scanAttemptsWithoutKnown < 4) {
         if (millis() - lastRetryTime > 60000) {
             lastRetryTime = millis();
-            LW_LOGI("Retrying STA connection from AP mode (AP stays up)...");
-            // Disconnect STA only, preserve AP. AP+STA mode set in begin().
-            WiFi.disconnect(false);
+            LW_LOGI("Retrying STA connection from AP mode (AP disabled during STA)");
+            WiFi.setAutoReconnect(false);
+            WiFi.softAPdisconnect(true);
+            WiFi.disconnect(true);
+            WiFi.mode(WIFI_MODE_STA);
             setState(STATE_WIFI_SCANNING);
         }
     }
@@ -675,12 +692,12 @@ bool WiFiManager::connectToAP() {
     // NOTE: These may be reset during connection handshake, so we also
     // apply them in the GOT_IP event handler to ensure they persist
     WiFi.setSleep(false);           // Disable modem sleep (prevents ASSOC_LEAVE disconnects)
-    WiFi.setAutoReconnect(true);    // Auto-reconnect on disconnect
+    WiFi.setAutoReconnect(false);   // State machine owns retries until GOT_IP
     
     // Also disable at ESP-IDF level for maximum reliability
     esp_wifi_set_ps(WIFI_PS_NONE);
     
-    LW_LOGD("WiFi sleep disabled, auto-reconnect enabled");
+    LW_LOGD("WiFi sleep disabled; state machine retry control active");
 
     return true;
 }
@@ -688,8 +705,8 @@ bool WiFiManager::connectToAP() {
 void WiFiManager::startSoftAP() {
     LW_LOGI("Starting Soft-AP: '%s' (channel %d)", m_apSSID.c_str(), m_apChannel);
 
-    // Switch to AP+STA concurrent mode (Portable Mode architecture)
-    WiFi.mode(WIFI_MODE_APSTA);
+    // AP and STA must be exclusive on K1; concurrent AP+STA is the known bad path.
+    WiFi.mode(WIFI_MODE_AP);
 
     // Configure and start AP
     // Auth mode is set automatically by Arduino from passphrase (NULL → OPEN, ≥8 chars → WPA2).
@@ -938,6 +955,7 @@ void WiFiManager::setCredentials(const String& ssid, const String& password) {
     m_attemptsOnCurrentNetwork = 0;
     m_scanAttemptsWithoutKnown = 0;
     m_noKnownNetworksLastScan = false;
+    m_connectWithoutScan = false;
 
     if (hasSecondaryNetwork()) {
         LW_LOGI("Configured networks: %s (primary), %s (fallback)",
@@ -1022,8 +1040,13 @@ void WiFiManager::reconnect() {
 }
 
 void WiFiManager::scanNetworks() {
+#ifdef WIFI_AP_ONLY
+    LW_LOGW("WiFi scan refused: WIFI_AP_ONLY build");
+    return;
+#endif
     if (m_currentState != STATE_WIFI_SCANNING) {
         LW_LOGI("Manual scan requested");
+        m_connectWithoutScan = false;
         setState(STATE_WIFI_SCANNING);
     }
 }
@@ -1206,10 +1229,17 @@ void WiFiManager::onWiFiEvent(WiFiEvent_t event) {
 
 bool WiFiManager::requestSTAEnable(uint32_t timeoutMs, bool autoRevert) {
     (void)timeoutMs; (void)autoRevert;
-    LW_LOGI("STA enable requested (already active in AP+STA mode)");
+#ifdef WIFI_AP_ONLY
+    LW_LOGW("STA enable refused: WIFI_AP_ONLY build");
+    return false;
+#endif
+    LW_LOGI("STA enable requested (pure STA validation path)");
     m_forceApOnly = false;
     if (m_currentState == STATE_WIFI_AP_MODE || m_currentState == STATE_WIFI_FAILED) {
-        WiFi.disconnect(false);
+        WiFi.setAutoReconnect(false);
+        WiFi.softAPdisconnect(true);
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_MODE_STA);
         setState(STATE_WIFI_INIT);
     }
     return true;
@@ -1218,22 +1248,32 @@ bool WiFiManager::requestSTAEnable(uint32_t timeoutMs, bool autoRevert) {
 bool WiFiManager::requestAPOnly() {
     LW_LOGI("AP-only mode requested");
     m_forceApOnly = true;
+    m_connectWithoutScan = false;
     WiFi.setAutoReconnect(false);
-    WiFi.disconnect(false);
+    WiFi.disconnect(true);
+    startSoftAP();
     setState(STATE_WIFI_AP_MODE);
     return true;
 }
 
 bool WiFiManager::connectToNetwork(const String& ssid, const String& password) {
     LW_LOGI("Connect requested: '%s'", ssid.c_str());
+#ifdef WIFI_AP_ONLY
+    LW_LOGW("STA connect refused for '%s': WIFI_AP_ONLY build", ssid.c_str());
+    return false;
+#endif
     m_forceApOnly = false;  // Clear AP-only lock when explicitly connecting
     m_credentialsStorage.saveNetwork(ssid, password);
     setCredentials(ssid, password);
-    if (WiFi.getMode() == WIFI_MODE_AP) {
-        WiFi.mode(WIFI_MODE_APSTA);
-    }
-    WiFi.disconnect(false);
-    setState(STATE_WIFI_INIT);
+    m_connectWithoutScan = true;
+    WiFi.setAutoReconnect(false);
+    WiFi.softAPdisconnect(true);
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_MODE_STA);
+    // Explicit operator/API connect should not depend on pre-scan success.
+    // Connect directly; channel/BSSID hints are opportunistic, not required.
+    m_bestChannel = 0;
+    setState(STATE_WIFI_CONNECTING);
     return true;
 }
 

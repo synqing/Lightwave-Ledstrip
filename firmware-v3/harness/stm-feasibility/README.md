@@ -13,7 +13,7 @@ It measures:
 Build:
 
 ```bash
-cd harness/stm-feasibility
+cd firmware-v3/harness/stm-feasibility
 pio run -e stm_benchmark
 ```
 

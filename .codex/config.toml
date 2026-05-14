@@ -1,0 +1,9 @@
+[mcp_servers.clangd]
+args = ["/Users/spectrasynq/Workspace_Management/Software/clangd-mcp-server/dist/index.js"]
+command = "node"
+
+[mcp_servers.clangd.env]
+CLANGD_PATH = "/opt/homebrew/opt/llvm/bin/clangd"
+COMPILE_COMMANDS_DIR = "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/firmware-v3"
+LOG_LEVEL = "WARN"
+PROJECT_ROOT = "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/firmware-v3"

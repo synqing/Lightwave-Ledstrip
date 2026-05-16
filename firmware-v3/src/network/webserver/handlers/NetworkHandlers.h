@@ -3,18 +3,16 @@
  * @brief Network management HTTP handlers for LightwaveOS v2
  *
  * ╔══════════════════════════════════════════════════════════════════════╗
- * ║  ARCHITECTURAL CONSTRAINT: K1 IS AP-ONLY. NEVER ENABLE STA MODE.  ║
- * ║                                                                    ║
- * ║  The /network/connect endpoint exists for legacy/future use but    ║
- * ║  K1 STA auth FAILS at the 802.11 driver level. Do NOT build       ║
- * ║  features that depend on K1 joining external WiFi networks.        ║
- * ║  See WiFiManager.h and CLAUDE.md for full rationale.               ║
+ * ║  PRODUCTION K1 BUILDS ARE AP-ONLY VIA WIFI_AP_ONLY.                ║
+ * ║  STA validation builds use pure STA only, never concurrent AP+STA.  ║
+ * ║  See WiFiManager.h and BACKLOG.md F-5.                             ║
  * ╚══════════════════════════════════════════════════════════════════════╝
  *
  * Provides REST API endpoints for WiFi network management:
  * - GET  /api/v1/network/status     - Current WiFi state
  * - GET  /api/v1/network/scan       - Scan for networks
  * - POST /api/v1/network/connect    - Connect to network
+ * - POST /api/v1/network/provision  - Validation-build captive provisioning
  * - POST /api/v1/network/disconnect - Disconnect from WiFi
  * - GET  /api/v1/network/saved      - List saved networks (no passwords)
  * - POST /api/v1/network/saved      - Add saved network
@@ -118,6 +116,14 @@ public:
      * }
      */
     static void handleConnect(AsyncWebServerRequest* request, uint8_t* data, size_t len);
+
+    /**
+     * @brief Handle POST /api/v1/network/provision
+     *
+     * Captive-portal onboarding path for validation builds. Saves credentials,
+     * persists STA as the next boot mode, and restarts so boot enters pure STA.
+     */
+    static void handleProvision(AsyncWebServerRequest* request, uint8_t* data, size_t len);
 
     /**
      * @brief Handle POST /api/v1/network/disconnect

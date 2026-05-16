@@ -1023,6 +1023,20 @@ endpoints:
     method: POST
     description: "Connect K1 to a network in pure STA mode. Current shipping K1 is AP-only; this endpoint is gated in WIFI_AP_ONLY builds and validated through the _sta_validation build env. Successful STA connection persists `sta` as the preferred boot WiFi mode. See _FORENSIC_WIFI_REPORT.md."
 
+  /api/v1/network/provision:
+    method: POST
+    auth: false
+    status: 202
+    description: "First-boot LW_STA_VALIDATION_BUILD captive portal endpoint, accepted only while the device is in AP mode. Saves SSID/password to NVS, persists `sta` as the preferred boot WiFi mode, and schedules restart so the next boot enters pure STA. WIFI_AP_ONLY builds refuse with 503; non-validation builds refuse with 503; STA-mode requests refuse with 503; do not use for concurrent AP+STA. Public by design because first-boot AP clients do not have an API key yet; trust boundary is the temporary setup AP client association."
+    body:
+      ssid: { type: string, required: true, range: "1-32 chars" }
+      password: { type: string, optional: true, range: "0 or 8-64 chars" }
+    response:
+      message: Provisioning saved
+      ssid: string
+      bootModePreference: sta
+      restartScheduled: true
+
   /api/v1/network/disconnect:
     method: POST
     description: "Disconnect from network"

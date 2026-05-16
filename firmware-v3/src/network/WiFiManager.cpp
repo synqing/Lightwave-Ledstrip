@@ -977,6 +977,16 @@ bool WiFiManager::hasSavedNetwork(const String& ssid) {
     return m_credentialsStorage.hasNetwork(ssid);
 }
 
+bool WiFiManager::setBootModePreference(WiFiCredentialsStorage::BootModePreference mode) {
+#ifdef WIFI_AP_ONLY
+    if (mode == WiFiCredentialsStorage::BootModePreference::STA) {
+        LW_LOGW("STA boot preference refused: WIFI_AP_ONLY build");
+        return false;
+    }
+#endif
+    return m_credentialsStorage.setBootModePreference(mode);
+}
+
 // ============================================================================
 // Configuration
 // ============================================================================

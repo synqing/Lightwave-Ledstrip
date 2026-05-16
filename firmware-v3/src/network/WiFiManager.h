@@ -369,6 +369,11 @@ public:
     }
 
     /**
+     * @brief Persist preferred AP-or-STA boot mode.
+     */
+    bool setBootModePreference(WiFiCredentialsStorage::BootModePreference mode);
+
+    /**
      * @brief Get saved networks from NVS storage
      */
     uint8_t getSavedNetworks(WiFiCredentialsStorage::NetworkCredential* out, uint8_t maxNetworks) const {

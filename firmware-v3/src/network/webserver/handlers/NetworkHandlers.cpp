@@ -17,11 +17,22 @@
 #include "../../ApiResponse.h"
 #include <WiFi.h>
 #include <ArduinoJson.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 namespace lightwaveos {
 namespace network {
 namespace webserver {
 namespace handlers {
+
+namespace {
+
+void restartAfterProvisionTask(void*) {
+    vTaskDelay(pdMS_TO_TICKS(900));
+    ESP.restart();
+}
+
+} // namespace
 
 // ============================================================================
 // Route Registration
@@ -156,6 +167,73 @@ void NetworkHandlers::handleConnect(AsyncWebServerRequest* request, uint8_t* dat
     sendSuccessResponse(request, [ssid](JsonObject& data) {
         data["message"] = "Connection attempt initiated";
         data["ssid"] = ssid;
+    }, HttpStatus::ACCEPTED);
+}
+
+void NetworkHandlers::handleProvision(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
+#ifdef WIFI_AP_ONLY
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::OPERATION_FAILED,
+                      "Provisioning unavailable in WIFI_AP_ONLY build");
+    return;
+#endif
+#ifndef LW_STA_VALIDATION_BUILD
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::OPERATION_FAILED,
+                      "Provisioning unavailable outside LW_STA_VALIDATION_BUILD");
+    return;
+#endif
+
+    if (WiFi.getMode() != WIFI_MODE_AP) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::OPERATION_FAILED,
+                          "Provisioning is only available from AP mode");
+        return;
+    }
+
+    JsonDocument doc;
+    auto result = RequestValidator::parseAndValidate(data, len, doc,
+                                                      RequestSchemas::NetworkProvision);
+    if (!result.valid) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          result.errorCode, result.errorMessage, result.fieldName);
+        return;
+    }
+
+    const char* ssid = doc["ssid"].as<const char*>();
+    const char* password = doc["password"] | "";
+    size_t passLen = strlen(password);
+    if (passLen > 0 && passLen < 8) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::OUT_OF_RANGE, "Password must be at least 8 characters");
+        return;
+    }
+
+    WiFiManager& wm = WIFI_MANAGER;
+    if (!wm.saveNetwork(ssid, password)) {
+        sendErrorResponse(request, HttpStatus::INTERNAL_SERVER_ERROR,
+                          ErrorCodes::INTERNAL_ERROR, "Failed to save network");
+        return;
+    }
+    if (!wm.setBootModePreference(WiFiCredentialsStorage::BootModePreference::STA)) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::OPERATION_FAILED, "STA boot preference unavailable");
+        return;
+    }
+
+    BaseType_t restartQueued = xTaskCreatePinnedToCore(restartAfterProvisionTask, "ProvisionRestart",
+                                                       2048, nullptr, 1, nullptr, 0);
+    if (restartQueued != pdPASS) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::OPERATION_FAILED, "Restart scheduling failed");
+        return;
+    }
+
+    sendSuccessResponse(request, [ssid](JsonObject& response) {
+        response["message"] = "Provisioning saved";
+        response["ssid"] = ssid;
+        response["bootModePreference"] = "sta";
+        response["restartScheduled"] = true;
     }, HttpStatus::ACCEPTED);
 }
 

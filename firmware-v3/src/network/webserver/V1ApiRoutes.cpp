@@ -1823,6 +1823,17 @@ void V1ApiRoutes::registerRoutes(
         }
     );
 
+    // POST /api/v1/network/provision - first-boot captive portal credential capture.
+    // Public by design: first-boot AP clients do not have an API key yet.
+    registry.onPost("/api/v1/network/provision",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            handlers::NetworkHandlers::handleProvision(request, data, len);
+        }
+    );
+
     // POST /api/v1/network/disconnect - Disconnect STA and return to AP-only
     registry.onPost("/api/v1/network/disconnect", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;

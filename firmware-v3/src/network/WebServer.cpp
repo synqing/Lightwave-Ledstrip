@@ -3,9 +3,9 @@
  * @brief Web Server implementation for LightwaveOS v2
  *
  * ╔══════════════════════════════════════════════════════════════════════╗
- * ║  ARCHITECTURAL CONSTRAINT: K1 IS AP-ONLY. NEVER ENABLE STA MODE.  ║
- * ║  WebServer runs on the AP interface (192.168.4.1). Do NOT add      ║
- * ║  STA-dependent features. See WiFiManager.h and CLAUDE.md.          ║
+ * ║  PRODUCTION K1 BUILDS ARE AP-ONLY VIA WIFI_AP_ONLY.                ║
+ * ║  STA validation builds use AP OR pure STA, never concurrent AP+STA. ║
+ * ║  See WiFiManager.h and BACKLOG.md F-5.                             ║
  * ╚══════════════════════════════════════════════════════════════════════╝
  *
  * Implements REST API and WebSocket server integrated with Actor System.
@@ -122,6 +122,9 @@
 #endif
 
 #include "../config/runtime_state.h"
+#if defined(LW_STA_VALIDATION_BUILD) && !defined(WIFI_AP_ONLY)
+#include <DNSServer.h>
+#endif
 
 using namespace lightwaveos::nodes;
 using namespace lightwaveos::zones;
@@ -204,6 +207,9 @@ WebServer::WebServer(NodeOrchestrator& orchestrator, RendererNode* renderer)
     , m_lastLargestInternalHeap(0)
     , m_shedActivatedAtMs(0)
     , m_shedClearedAtMs(0)
+#if defined(LW_STA_VALIDATION_BUILD) && !defined(WIFI_AP_ONLY)
+    , m_dnsServer(nullptr)
+#endif
     , m_zoneComposer(nullptr)
     , m_lastStateCacheUpdate(0)
     , m_ledBroadcaster(nullptr)
@@ -258,6 +264,9 @@ WebServer::~WebServer() {
     delete m_logBroadcaster;
     delete m_udpStreamer;
     delete m_ledBroadcaster;
+#if defined(LW_STA_VALIDATION_BUILD) && !defined(WIFI_AP_ONLY)
+    delete m_dnsServer;
+#endif
     delete m_ws;
     delete m_server;
 }
@@ -300,6 +309,9 @@ bool WebServer::begin() {
     // Create server instances
     m_server = new AsyncWebServer(WebServerConfig::HTTP_PORT);
     m_ws = new AsyncWebSocket("/ws");
+#if defined(LW_STA_VALIDATION_BUILD) && !defined(WIFI_AP_ONLY)
+    m_dnsServer = nullptr;
+#endif
 
 #if FEATURE_WEB_STREAMING
     // Create optional WebSocket/UDP streaming surfaces. Trace builds can
@@ -446,6 +458,7 @@ bool WebServer::begin() {
 
     // Start mDNS
     startMDNS();
+    startCaptiveDNS();
 
     IPAddress listenIP = m_apMode ? WiFi.softAPIP() : WiFi.localIP();
     LW_LOGI("Starting AsyncWebServer on port %d (%s IP: %s)...",
@@ -499,6 +512,7 @@ bool WebServer::begin() {
 
 void WebServer::stop() {
     if (m_running) {
+        stopCaptiveDNS();
         m_ws->closeAll();
         m_server->end();
         m_running = false;
@@ -632,6 +646,12 @@ void WebServer::updateLowHeapShedState(uint32_t nowMs) {
 
 void WebServer::update() {
     if (!m_running) return;
+
+#if defined(LW_STA_VALIDATION_BUILD) && !defined(WIFI_AP_ONLY)
+    if (m_dnsServer) {
+        m_dnsServer->processNextRequest();
+    }
+#endif
 
     // Cleanup disconnected WebSocket clients
     m_ws->cleanupClients();
@@ -1162,6 +1182,48 @@ void WebServer::startMDNS() {
         LW_LOGE("mDNS failed to start");
         m_mdnsStarted = false;
     }
+}
+
+void WebServer::startCaptiveDNS() {
+#if defined(LW_STA_VALIDATION_BUILD) && !defined(WIFI_AP_ONLY)
+    if (!m_apMode || m_dnsServer) {
+        return;
+    }
+
+    IPAddress apIP = WiFi.softAPIP();
+    if (apIP == INADDR_NONE || apIP == IPAddress(0, 0, 0, 0)) {
+        LW_LOGW("Captive DNS not started: AP IP unavailable");
+        return;
+    }
+
+    m_dnsServer = new DNSServer();
+    if (!m_dnsServer) {
+        LW_LOGE("Captive DNS allocation failed");
+        return;
+    }
+
+    m_dnsServer->setTTL(60);
+    m_dnsServer->setErrorReplyCode(DNSReplyCode::NoError);
+    if (m_dnsServer->start(53, "*", apIP)) {
+        LW_LOGI("Captive DNS started at %s", apIP.toString().c_str());
+    } else {
+        LW_LOGE("Captive DNS failed to start");
+        delete m_dnsServer;
+        m_dnsServer = nullptr;
+    }
+#endif
+}
+
+void WebServer::stopCaptiveDNS() {
+#if defined(LW_STA_VALIDATION_BUILD) && !defined(WIFI_AP_ONLY)
+    if (!m_dnsServer) {
+        return;
+    }
+    m_dnsServer->stop();
+    delete m_dnsServer;
+    m_dnsServer = nullptr;
+    LW_LOGI("Captive DNS stopped");
+#endif
 }
 
 // ============================================================================

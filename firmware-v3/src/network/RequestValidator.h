@@ -852,6 +852,17 @@ namespace RequestSchemas {
     };
     constexpr size_t NetworkSaveSize = sizeof(NetworkSave) / sizeof(FieldSchema);
 
+    /**
+     * @brief POST /api/v1/network/provision
+     * Required: ssid (1-32 chars)
+     * Optional: password (0-64 chars, empty for open networks)
+     */
+    constexpr FieldSchema NetworkProvision[] = {
+        {"ssid",     FieldType::STRING, true,  1, 32},
+        {"password", FieldType::STRING, false, 0, 64}
+    };
+    constexpr size_t NetworkProvisionSize = sizeof(NetworkProvision) / sizeof(FieldSchema);
+
     // Legacy API schemas removed - all endpoints migrated to V1 API
 
 }  // namespace RequestSchemas

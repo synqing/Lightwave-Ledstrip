@@ -65,6 +65,9 @@
 class AsyncWebServer;
 class AsyncWebSocket;
 class AsyncWebSocketClient;
+#if defined(LW_STA_VALIDATION_BUILD) && !defined(WIFI_AP_ONLY)
+class DNSServer;
+#endif
 struct CRGB;
 
 namespace lightwaveos {
@@ -617,6 +620,8 @@ private:
     void setupRoutes();
     void setupWebSocket();
     void startMDNS();
+    void startCaptiveDNS();
+    void stopCaptiveDNS();
 
 
     // ========================================================================
@@ -660,6 +665,9 @@ private:
 
     AsyncWebServer* m_server;
     AsyncWebSocket* m_ws;
+#if defined(LW_STA_VALIDATION_BUILD) && !defined(WIFI_AP_ONLY)
+    DNSServer* m_dnsServer;
+#endif
     webserver::RateLimiter m_rateLimiter;
     webserver::WsGateway* m_wsGateway;  // WebSocket gateway (Phase 2)
 

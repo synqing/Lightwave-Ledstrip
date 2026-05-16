@@ -34,7 +34,7 @@ This artefact does not rename code, change protocol contracts, alter firmware be
 ## Immediate Corrections Recommended
 
 1. DONE 2026-05-16: Rename serial-only `Drops:` to `OverBudget:` first. It is the lowest compatibility-risk correction because the existing forensic audit found no REST/WS `frameDrops` exposure.
-2. Add a short metric-definition table to the VP stack spec and hardware-validation prompt pack before broader code renames. This should define owner, numerator, denominator, timing window, inclusion/exclusion boundary, and whether the field is evidence of visible output suppression.
+2. DONE 2026-05-16: Add a short metric-definition table to the VP stack spec and hardware-validation prompt pack before broader code renames. This defines owner, numerator, denominator, timing window, inclusion/exclusion boundary, and whether the field is evidence of visible output suppression.
 3. Treat protocol `cpuPercent` as migration-sensitive. The same field name appears on multiple REST/WS surfaces with different owners, so code changes should wait for a client-compatibility plan.
 4. Keep `showSkips` as the LED transport suppression counter. The problem is not the name; the problem is when readers confuse it with renderer frame-budget overruns.
 
@@ -67,3 +67,4 @@ grep -RInE "framesRendered|frameDrops|cpuPercent|avgFrameTimeUs|showSkips" --inc
 |---|---|---|
 | 2026-05-16 | codex:gpt-5.5 | Created first-pass WB-1 inventory from current `BACKLOG.md`, VP stack docs, renderer/serial/driver source, protocol YAML, and the existing AP-VP frame-drop forensic audit. |
 | 2026-05-16 | codex:gpt-5.5 | Implemented the serial-only `Drops:` to `OverBudget:` correction in `ActorSystem.cpp`, including an over-budget percentage; no protocol field rename, runtime behaviour change, or LED transport change. |
+| 2026-05-16 | codex:gpt-5.5 | Added metric-definition and interpretation tables to `VP_STACK_INTROSPECTION_COMMAND_SPEC.md` and `VP_VALIDATION_PROTOCOL_2026-05-06.md`; no source or protocol surface changed. |

@@ -44,6 +44,20 @@ The core model is the VP audit model: one frame lifecycle with a buffer-ownershi
 | 6 | Hardware health snapshot | Serial `s` before/after: no panics, no RMT errors, sane LED show time, show skips stable, heap/stack headroom not collapsing. |
 | 7 | Captain visual check | Only after Steps 0-6 pass. Captain checks a narrow question, not a broad preference survey. |
 
+## Metric Interpretation Guard
+
+Before a VP run report classifies a timing or transport result, record which metric owner produced the value. Do not collapse renderer budget counters, capture drops, and LED transport skips into a single "dropped frame" claim.
+
+| Metric / phrase in evidence | Owner | Definition | Can prove visible output suppression? | Required companion evidence |
+|---|---|---|---|---|
+| Serial `s` `OverBudget` / legacy `Drops:` / `RenderStats::frameDrops` | Renderer | Count of rendered frames whose raw pre-pacing work exceeded `LedConfig::FRAME_TIME_US`. | No, not by itself. These frames are still rendered; the counter is budget pressure. | Compare with `showSkips`, RMT errors, LED show timing, and frame-time average/max. |
+| Capture-suite `frame drops` / parser drops | Capture pipeline | Missing, late, or unparsable frames in the validation capture stream. | No, not by itself. This is capture quality unless correlated with device health. | Parser error count, actual capture FPS, serial health before/after, and capture worker logs. |
+| `showSkips` | LED driver | LED show attempts skipped because the RMT show mutex could not be acquired within the timeout. | Yes, this is the primary serial-visible suppression counter. | LED show failures, RMT errors, underruns, show-time avg/max, and heap/stack trend. |
+| `show_leds` timing | Renderer LED-output wrapper | Time spent in the renderer `showLeds()` wrapper. | No. It includes wrapper work and must not be read as FastLED-only timing. | `output_prep`, `led_driver_show`, expected wire time, and `showSkips`. |
+| `led_show` / `led_driver_show` timing | LED driver | Driver show timing including FastLED/RMT dispatch and the project wire-time fence. | No, unless paired with skipped/failure counters or impossible wire-time values. | Expected WS2812 wire time, `showSkips`, failures, RMT errors, and underruns. |
+
+If a report uses historic evidence that still says `Drops:`, translate it as renderer over-budget frames unless the source file explicitly names capture drops or LED-driver skips.
+
 ## Baseline Lock Sheet
 
 Every VP run report must record these fields before capture starts:

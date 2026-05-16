@@ -65,6 +65,18 @@ Existing source anchors:
 - 2026-05-07 implementation extension: `vp stack` now prints `effect_render`, colour-correction, `show_leds`, `output_prep`, LED-driver show, and `pre_pacing_work` microsecond counters where available. These are read-only observability fields and must not be used to change visual defaults without the normal validation protocol.
 - 2026-05-07 source boundary note: `show_leds` wraps `RendererActor::showLeds()`, which includes post-correction output prep plus `LedDriver_S3::show()`. The separate `led_show` line reports `LedDriverStats`, which is closer to the driver/FastLED/wire-fence surface but still includes the protective wire-time delay.
 
+Metric definitions:
+
+| Field / label | Owner | Numerator / measured work | Denominator / window | Inclusion and exclusion boundary | Evidence meaning |
+|---|---|---|---|---|---|
+| serial `s` `OverBudget` / `RenderStats::frameDrops` / `vp stack` `drops=` | `RendererActor::updateStats()` | Rendered frames whose raw pre-pacing work exceeded `LedConfig::FRAME_TIME_US`. | Total `framesRendered` for the percentage; counter is since renderer start. | Includes frames that were still rendered and handed to LED output; excludes LED-driver mutex skips, RMT errors, and capture parser drops. | Evidence of renderer frame-budget pressure, not evidence of suppressed or lost LED output by itself. |
+| `cpuPercent` / `vp stack` `cpu=` | `RendererActor::updateStats()` | Rolling average frame time multiplied by 100. | `LedConfig::FRAME_TIME_US`; updated every 120 rendered frames. | Renderer frame-budget occupancy only; excludes whole-device CPU utilisation and audio task load. | Evidence of renderer budget occupancy, not system CPU saturation. |
+| `avg_us`, `min_us`, `max_us` in the frame section | `RenderStats` | Smoothed, minimum, and maximum paced frame time. | Since renderer start, with rolling average smoothing for `avg_us`. | Includes pacing-visible frame duration; interpret beside pre-pacing work before diagnosing render cost. | Evidence of frame cadence, not a direct layer-cost attribution. |
+| `show_leds` timing | `RendererActor::showLeds()` wrapper | Renderer LED-output wrapper duration. | Last/average timing counters where implemented. | Includes output preparation plus the LED-driver show path; not FastLED-only and not RMT wire-only. | Evidence for wrapper cost. Attribute transport risk only after checking `led_show`, fence, and health counters. |
+| `output_prep` timing | Renderer output-preparation path | Buffer preparation/copy work before LED-driver show. | Last/average timing counters where implemented. | Excludes the LED-driver show call and WS2812 wire-time fence. | Evidence of project-owned output preparation cost. |
+| `led_driver_show` / `led_show` timing | `LedDriver_S3` / `LedDriverStats` | Driver show call including project guards and the protective wire-time delay. | Driver stats since start; average and max where exposed. | Includes the S3 FastLED/RMT dispatch path and project wire-time fence; excludes renderer output preparation. | Evidence for driver/fence timing. A sane value must be interpreted with expected wire time and `showSkips`. |
+| `showSkips` | `LedDriver_S3::show()` | Count of LED show attempts skipped because the RMT show mutex could not be acquired within the timeout. | Since driver start. | Excludes renderer over-budget frames and minimum-gap waits. | Evidence of actual LED output suppression pressure. Non-zero values require transport/health investigation. |
+
 ### 2. Render Topology
 
 Report one of:

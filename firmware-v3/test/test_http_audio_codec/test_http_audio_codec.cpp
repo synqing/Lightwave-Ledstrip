@@ -257,18 +257,19 @@ void test_http_audio_encode_zone_agc_get_allow_list() {
     JsonDocument doc;
     JsonObject data = doc.to<JsonObject>();
 
-    AudioZoneAgcZoneData zones[4] = {
+    AudioZoneAgcZoneData zones[3] = {
         {0, 0.5f, 0.8f},
         {1, 0.6f, 0.9f},
-        {2, 0.7f, 1.0f},
-        {3, 0.4f, 0.7f}
+        {2, 0.7f, 1.0f}
     };
 
-    HttpAudioCodec::encodeZoneAgcGet(true, false, zones, 4, data);
+    HttpAudioCodec::encodeZoneAgcGet(true, false, zones, 3, data);
 
     TEST_ASSERT_TRUE_MESSAGE(data["enabled"].as<bool>(), "enabled should be true");
     TEST_ASSERT_FALSE_MESSAGE(data["lookaheadEnabled"].as<bool>(), "lookaheadEnabled should be false");
     TEST_ASSERT_TRUE_MESSAGE(data.containsKey("zones"), "zones array should be present");
+    JsonArray zonesArray = data["zones"].as<JsonArray>();
+    TEST_ASSERT_EQUAL_INT_MESSAGE(3, zonesArray.size(), "zones array should have 3 entries");
 
     const char* topKeys[] = {"enabled", "lookaheadEnabled", "zones"};
     TEST_ASSERT_TRUE_MESSAGE(validateKeysAgainstAllowList(data, topKeys, 3), "zone-agc.get should only have required keys");

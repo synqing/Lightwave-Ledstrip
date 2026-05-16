@@ -366,18 +366,16 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
 
     // ========================================================================
     // Stage 3: Zone AGC (optional)
-    // Normalizes each frequency zone independently to prevent bass dominance
-    // Zone boundaries: 0-1 (sub-bass), 2-3 (low-mid), 4-5 (mid), 6-7 (high)
+    // Normalises each semantic frequency zone independently to prevent bass dominance.
+    // Zone boundaries: 0-1 (low), 2-4 (mid), 5-7 (high).
     // ========================================================================
-    float normalized_bands[CONTROLBUS_NUM_BANDS];
+    float normalized_bands[CONTROLBUS_NUM_BANDS] = {0.0f};
     if (m_zone_agc_enabled && m_bench_zone_agc_enabled) {
         // Update zone max magnitudes
         for (uint8_t z = 0; z < CONTROLBUS_NUM_ZONES; ++z) {
-            // Find max in this zone (2 bands per zone for 8-band system)
-            uint8_t start_band = z * 2;
-            uint8_t end_band = start_band + 2;
+            const ControlBusZoneRange range = CONTROLBUS_BAND_ZONE_RANGES[z];
             float zone_max = 0.0f;
-            for (uint8_t i = start_band; i < end_band && i < CONTROLBUS_NUM_BANDS; ++i) {
+            for (uint8_t i = range.start; i < range.endExclusive; ++i) {
                 if (m_bands_despiked[i] > zone_max) {
                     zone_max = m_bands_despiked[i];
                 }
@@ -400,9 +398,9 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
                 m_zones[z].max_mag_follower = m_zones[z].min_floor;
             }
 
-            // Normalize bands in this zone
+            // Normalise bands in this zone
             float norm_factor = 1.0f / m_zones[z].max_mag_follower;
-            for (uint8_t i = start_band; i < end_band && i < CONTROLBUS_NUM_BANDS; ++i) {
+            for (uint8_t i = range.start; i < range.endExclusive; ++i) {
                 float normalized = m_bands_despiked[i] * norm_factor;
                 normalized_bands[i] = clamp01(normalized);  // Clamp to prevent overshoot
             }
@@ -433,18 +431,16 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
 
     // ========================================================================
     // Stage 3b: Chroma Zone AGC (optional)
-    // Normalizes each chroma zone independently (3 chroma bins per zone)
-    // Zone 0: C,C#,D (0-2) | Zone 1: D#,E,F (3-5) | Zone 2: F#,G,G# (6-8) | Zone 3: A,A#,B (9-11)
+    // Normalises each chroma zone independently.
+    // Zone boundaries: 0-3, 4-7, 8-11.
     // ========================================================================
-    float normalized_chroma[CONTROLBUS_NUM_CHROMA];
+    float normalized_chroma[CONTROLBUS_NUM_CHROMA] = {0.0f};
     if (m_chroma_zone_agc_enabled && m_bench_chroma_zone_agc_enabled) {
         // Update chroma zone max magnitudes
         for (uint8_t z = 0; z < CONTROLBUS_NUM_ZONES; ++z) {
-            // Find max in this zone (3 chroma bins per zone for 12-bin system)
-            uint8_t start_bin = z * 3;
-            uint8_t end_bin = start_bin + 3;
+            const ControlBusZoneRange range = CONTROLBUS_CHROMA_ZONE_RANGES[z];
             float zone_max = 0.0f;
-            for (uint8_t i = start_bin; i < end_bin && i < CONTROLBUS_NUM_CHROMA; ++i) {
+            for (uint8_t i = range.start; i < range.endExclusive; ++i) {
                 if (m_chroma_despiked[i] > zone_max) {
                     zone_max = m_chroma_despiked[i];
                 }
@@ -467,9 +463,9 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
                 m_chroma_zones[z].max_mag_follower = m_chroma_zones[z].min_floor;
             }
 
-            // Normalize chroma bins in this zone
+            // Normalise chroma bins in this zone
             float norm_factor = 1.0f / m_chroma_zones[z].max_mag_follower;
-            for (uint8_t i = start_bin; i < end_bin && i < CONTROLBUS_NUM_CHROMA; ++i) {
+            for (uint8_t i = range.start; i < range.endExclusive; ++i) {
                 float normalized = m_chroma_despiked[i] * norm_factor;
                 normalized_chroma[i] = clamp01(normalized);  // Clamp to prevent overshoot
             }

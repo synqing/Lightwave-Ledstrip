@@ -17,9 +17,50 @@ static constexpr uint8_t CONTROLBUS_WAVEFORM_N = 128;  // Sensory Bridge NATIVE_
 static constexpr size_t LOOKAHEAD_FRAMES = 3;      // 3-frame ring buffer for spike detection
 static constexpr size_t LOOKAHEAD_MAX_BANDS = 64;  // Support future 64-bin expansion
 
-// Zone AGC configuration (Sensory Bridge insight: 4 zones across frequency spectrum)
-// Prevents bass frequencies from dominating the visualization
-static constexpr uint8_t CONTROLBUS_NUM_ZONES = 4;
+// Zone AGC configuration: 3 semantic buckets across frequency/chroma space.
+// Prevents bass frequencies from dominating the visualisation.
+static constexpr uint8_t CONTROLBUS_NUM_ZONES = 3;
+
+struct ControlBusZoneRange {
+    uint8_t start;
+    uint8_t endExclusive;
+};
+
+static constexpr ControlBusZoneRange CONTROLBUS_BAND_ZONE_RANGES[CONTROLBUS_NUM_ZONES] = {
+    {0, 2},                    // Zone 0: bands 0-1
+    {2, 5},                    // Zone 1: bands 2-4
+    {5, CONTROLBUS_NUM_BANDS}, // Zone 2: bands 5-7
+};
+
+static constexpr ControlBusZoneRange CONTROLBUS_CHROMA_ZONE_RANGES[CONTROLBUS_NUM_ZONES] = {
+    {0, 4},                     // Zone 0: bins 0-3
+    {4, 8},                     // Zone 1: bins 4-7
+    {8, CONTROLBUS_NUM_CHROMA}, // Zone 2: bins 8-11
+};
+
+constexpr bool controlBusRangesAreContiguous(const ControlBusZoneRange* ranges,
+                                             uint8_t zoneCount,
+                                             uint8_t itemCount) {
+    uint8_t expectedStart = 0;
+    for (uint8_t z = 0; z < zoneCount; ++z) {
+        if (ranges[z].start != expectedStart ||
+            ranges[z].endExclusive <= ranges[z].start ||
+            ranges[z].endExclusive > itemCount) {
+            return false;
+        }
+        expectedStart = ranges[z].endExclusive;
+    }
+    return expectedStart == itemCount;
+}
+
+static_assert(controlBusRangesAreContiguous(CONTROLBUS_BAND_ZONE_RANGES,
+                                            CONTROLBUS_NUM_ZONES,
+                                            CONTROLBUS_NUM_BANDS),
+              "ControlBus band Zone AGC ranges must cover every band exactly once");
+static_assert(controlBusRangesAreContiguous(CONTROLBUS_CHROMA_ZONE_RANGES,
+                                            CONTROLBUS_NUM_ZONES,
+                                            CONTROLBUS_NUM_CHROMA),
+              "ControlBus chroma Zone AGC ranges must cover every chroma bin exactly once");
 
 /**
  * @brief Chord type enumeration for triad classification.
@@ -487,7 +528,7 @@ public:
     void setZoneAGCRates(float attack, float release);
     void setZoneMinFloor(float floor);
 
-    // Chroma Zone AGC control (3 chroma bins per zone: C-D, D#-F, F#-G#, A-B)
+    // Chroma Zone AGC control (3 semantic zones, 4 chroma bins per zone)
     void setChromaZoneAGCEnabled(bool enabled) { m_chroma_zone_agc_enabled = enabled; }
     bool getChromaZoneAGCEnabled() const { return m_chroma_zone_agc_enabled; }
     void setChromaZoneAGCRates(float attack, float release);
@@ -598,15 +639,14 @@ private:
     float m_heavy_band_attack = 0.08f; // Extra slow rise
     float m_heavy_band_release = 0.015f; // Ultra slow fall
 
-    // Zone AGC state (Sensory Bridge pattern: 4 zones)
+    // Zone AGC state (Sensory Bridge pattern: 3 semantic zones)
     bool m_zone_agc_enabled = true;  // Enabled by default for balanced frequency response
     ZoneAGC m_zones[CONTROLBUS_NUM_ZONES];
 
-    // Chroma Zone AGC state (4 zones, 3 chroma bins per zone)
-    // Zone 0: C, C#, D (0-2)   - low notes
-    // Zone 1: D#, E, F (3-5)   - mid-low
-    // Zone 2: F#, G, G# (6-8)  - mid-high
-    // Zone 3: A, A#, B (9-11)  - high notes
+    // Chroma Zone AGC state (3 zones, 4 chroma bins per zone)
+    // Zone 0: C, C#, D, D# (0-3)
+    // Zone 1: E, F, F#, G (4-7)
+    // Zone 2: G#, A, A#, B (8-11)
     bool m_chroma_zone_agc_enabled = true;  // Enabled by default
     ZoneAGC m_chroma_zones[CONTROLBUS_NUM_ZONES];
 

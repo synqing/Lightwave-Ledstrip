@@ -43,6 +43,10 @@ endpoints:
   /api/v1/device/status:
     method: GET
     description: "Device status (uptime, heap, FPS, network, effect state)"
+    response_fields:
+      fps: { type: uint16, owner: "RendererActor", description: "Renderer FPS derived from rolling average frame time." }
+      cpuPercent: { type: uint8, owner: "RendererActor", description: "Renderer frame-budget occupancy: avgFrameTimeUs * 100 / LedConfig::FRAME_TIME_US, clamped to 100. Not whole-device CPU utilisation and not the audio benchmark load metric." }
+      framesRendered: { type: uint32, owner: "RendererActor", description: "Rendered frame counter since renderer start." }
     consumers: [ios]
 
   /api/v1/device/info:
@@ -678,7 +682,7 @@ endpoints:
 
   /api/v1/audio/benchmark:
     method: GET
-    description: "Get audio benchmark stats"
+    description: "Get audio benchmark stats. Any cpuPercent/load value on this surface is audio benchmark processing load owned by AudioHandlers/benchmark stats, not RendererActor frame-budget occupancy and not whole-device CPU utilisation."
 
   /api/v1/audio/benchmark/start:
     method: POST
@@ -686,7 +690,7 @@ endpoints:
 
   /api/v1/audio/benchmark/stop:
     method: POST
-    description: "Stop audio benchmarking"
+    description: "Stop audio benchmarking. Returned cpuLoadPercent is audio benchmark processing load, not RendererActor frame-budget occupancy and not whole-device CPU utilisation."
 
   /api/v1/audio/benchmark/history:
     method: GET

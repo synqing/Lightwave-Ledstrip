@@ -2189,7 +2189,7 @@ commands:
       data:
         avgTotalUs: float
         avgGoertzelUs: float
-        cpuLoadPercent: float
+        cpuLoadPercent: { type: float, owner: "Audio benchmark", description: "Audio benchmark processing load; not RendererActor frame-budget occupancy and not whole-device CPU utilisation." }
         hopCount: uint32
         peakTotalUs: uint32
     consumers: [ios]
@@ -2337,7 +2337,8 @@ commands:
         heapSize: uint32
         cpuFreq: uint16
         fps: float
-        cpuPercent: float
+        cpuPercent: { type: float, owner: "RendererActor", description: "Renderer frame-budget occupancy: avgFrameTimeUs * 100 / LedConfig::FRAME_TIME_US, clamped to 100. Not whole-device CPU utilisation and not audio benchmark load." }
+        framesRendered: uint32
         network: "{connected, apMode, ip?, rssi?}"
     consumers: [ios]
 
@@ -2502,7 +2503,7 @@ broadcasts:
       complexity: uint8
       variation: uint8
       fps: float
-      cpuPercent: float
+      cpuPercent: { type: float, owner: "RendererActor", description: "Renderer frame-budget occupancy: avgFrameTimeUs * 100 / LedConfig::FRAME_TIME_US, clamped to 100. Not whole-device CPU utilisation and not audio benchmark load." }
       ledDitheringEnabled: bool
       freeHeap: uint32
       uptime: uint32

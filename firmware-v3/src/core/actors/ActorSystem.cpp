@@ -841,7 +841,17 @@ void ActorSystem::printStatus()
         Serial.printf("Speed: %d\n", m_renderer->getSpeed());
         Serial.printf("FPS: %d (target: %d)\n", rs.currentFPS, LedConfig::TARGET_FPS);
         Serial.printf("CPU: %d%%\n", rs.cpuPercent);
-        Serial.printf("Frames: %lu, Drops: %lu\n", rs.framesRendered, rs.frameDrops);
+        const uint32_t overBudgetPctTenths = rs.framesRendered > 0
+            ? static_cast<uint32_t>(
+                ((static_cast<uint64_t>(rs.frameDrops) * 1000ULL)
+                 + (static_cast<uint64_t>(rs.framesRendered) / 2ULL))
+                / static_cast<uint64_t>(rs.framesRendered))
+            : 0U;
+        Serial.printf("Frames: %lu, OverBudget: %lu (%lu.%01lu%%)\n",
+                      static_cast<unsigned long>(rs.framesRendered),
+                      static_cast<unsigned long>(rs.frameDrops),
+                      static_cast<unsigned long>(overBudgetPctTenths / 10U),
+                      static_cast<unsigned long>(overBudgetPctTenths % 10U));
         Serial.printf("Frame time: avg=%lu, min=%lu, max=%lu us\n",
                       rs.avgFrameTimeUs, rs.minFrameTimeUs, rs.maxFrameTimeUs);
         const auto& lds = m_renderer->getLedDriverStats();

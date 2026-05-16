@@ -2156,9 +2156,8 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
     // WiFi commands: wifi, wifi connect SSID PASS, wifi ap, wifi scan
     // Uses original `input` (not inputLower) to preserve SSID case.
     //
-    // WARNING: K1 is AP-ONLY. STA mode (`wifi connect`) is an escape hatch
-    // for development/debugging. It is KNOWN UNRELIABLE — see CLAUDE.md
-    // WiFi Architecture section. Do NOT add automatic STA connection logic.
+    // Production K1 builds are AP-only. STA mode (`wifi connect`) is only for
+    // validation builds and must use pure STA, not concurrent AP+STA.
     // -----------------------------------------------------------------
 #if FEATURE_WEB_SERVER
     else if (inputLower.startsWith("wifi")) {
@@ -2238,16 +2237,16 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
                 Serial.printf("Connecting to '%s' (saving to NVS)...\n", ssid.c_str());
                 bool ok = WIFI_MANAGER.connectToNetwork(ssid, password);
                 if (ok) {
-                    Serial.println("Connection initiated (AP+STA). Check 'wifi' in ~10s.");
+                    Serial.println("Connection initiated (pure STA). Check 'wifi' in ~10s.");
                 } else {
-                    Serial.println("Connect request failed");
+                    Serial.println("Connect request failed or STA unavailable in this build");
                 }
             } else {
                 // SSID only — try saved credentials (NVS)
                 Serial.printf("Connecting to saved network: '%s'...\n", ssid.c_str());
                 bool ok = WIFI_MANAGER.connectToSavedNetwork(ssid);
                 if (ok) {
-                    Serial.println("Connection initiated (AP+STA). Check 'wifi' in ~10s.");
+                    Serial.println("Connection initiated (pure STA). Check 'wifi' in ~10s.");
                 } else {
                     Serial.printf("'%s' not in NVS. Use: wifi connect %s YOUR_PASSWORD\n", ssid.c_str(), ssid.c_str());
                 }

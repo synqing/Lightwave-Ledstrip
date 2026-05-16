@@ -3,9 +3,9 @@
  * @brief Network management HTTP handlers implementation
  *
  * ╔══════════════════════════════════════════════════════════════════════╗
- * ║  ARCHITECTURAL CONSTRAINT: K1 IS AP-ONLY. NEVER ENABLE STA MODE.  ║
- * ║  /network/connect exists for legacy/escape hatch only (unreliable).║
- * ║  See WiFiManager.h and CLAUDE.md.                                  ║
+ * ║  PRODUCTION K1 BUILDS ARE AP-ONLY VIA WIFI_AP_ONLY.                ║
+ * ║  STA validation builds use pure STA only, never concurrent AP+STA.  ║
+ * ║  See WiFiManager.h and BACKLOG.md F-5.                             ║
  * ╚══════════════════════════════════════════════════════════════════════╝
  *
  * LightwaveOS v2 - Network Subsystem
@@ -65,6 +65,12 @@ void NetworkHandlers::handleStatus(AsyncWebServerRequest* request) {
 }
 
 void NetworkHandlers::handleScan(AsyncWebServerRequest* request) {
+#ifdef WIFI_AP_ONLY
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::OPERATION_FAILED,
+                      "WiFi scan unavailable in WIFI_AP_ONLY build");
+    return;
+#endif
     WiFiManager& wm = WIFI_MANAGER;
 
     // Trigger a fresh scan
@@ -136,14 +142,13 @@ void NetworkHandlers::handleConnect(AsyncWebServerRequest* request, uint8_t* dat
         return;
     }
 
-    // Save to credential manager if requested
-    if (saveNetwork && passLen > 0) {
-        WIFI_MANAGER.saveNetwork(ssid, password);
+    // Initiate explicit pure STA via WiFiManager. Production WIFI_AP_ONLY builds refuse this.
+    if (!WIFI_MANAGER.connectToNetwork(ssid, password, saveNetwork && passLen > 0)) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::OPERATION_FAILED,
+                          "STA unavailable in this build");
+        return;
     }
-
-    // Initiate connection via WiFiManager
-    WIFI_MANAGER.setCredentials(ssid, password);
-    WIFI_MANAGER.reconnect();
 
     // Return 202 Accepted - connection happens asynchronously
     sendSuccessResponse(request, [ssid](JsonObject& data) {
@@ -350,21 +355,21 @@ void NetworkHandlers::handleEnableSTA(AsyncWebServerRequest* request, uint8_t* d
 
     WiFiManager& wm = WIFI_MANAGER;
 
-    // Request STA mode enable (triggers reconnection attempt)
-    // Note: Auto-revert timer is handled by WiFiManager internally
+    // Request pure STA mode enable. Production WIFI_AP_ONLY builds refuse this.
     bool success = wm.requestSTAEnable(durationSeconds * 1000, revertToApOnly);
 
     if (!success) {
-        // Fallback: trigger reconnection manually
-        wm.reconnect();
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::OPERATION_FAILED,
+                          "STA unavailable in this build");
+        return;
     }
 
     sendSuccessResponse(request, [durationSeconds, revertToApOnly](JsonObject& data) {
         data["message"] = "STA mode requested";
         data["staEnabled"] = true;
-        if (durationSeconds > 0) {
-            data["autoRevertSeconds"] = durationSeconds;
-            data["revertToApOnly"] = revertToApOnly;
+        if (durationSeconds > 0 || revertToApOnly) {
+            data["autoRevertSupported"] = false;
         }
     });
 }

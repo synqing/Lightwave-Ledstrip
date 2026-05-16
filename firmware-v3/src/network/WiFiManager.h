@@ -390,9 +390,9 @@ public:
     }
 
     /**
-     * @brief Connect to network (stub)
+     * @brief Start an explicit upstream STA connection
      */
-    bool connectToNetwork(const String& ssid, const String& password);
+    bool connectToNetwork(const String& ssid, const String& password, bool saveNetwork = true);
 
     /**
      * @brief Connect to a saved network by SSID
@@ -517,6 +517,7 @@ private:
     uint8_t m_attemptsOnCurrentNetwork = 0;
     uint8_t m_scanAttemptsWithoutKnown = 0;
     bool m_noKnownNetworksLastScan = false;
+    bool m_connectWithoutScan = false;      ///< Explicit operator/API STA connect path
     bool m_useStaticIP = false;
     IPAddress m_staticIP;
     IPAddress m_gateway;

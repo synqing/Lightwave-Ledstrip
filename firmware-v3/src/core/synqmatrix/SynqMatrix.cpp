@@ -1003,6 +1003,7 @@ bool SynqMatrix::apply(const audio::ControlBusFrame& frame,
 
     if (changed) {
         m_parameterUpdates.fetch_add(1, std::memory_order_acq_rel);
+        setSuppressed(SynqMatrixSuppressedReason::None, SynqMatrixOwner::Director);
         const uint32_t lastSwitch = m_lastSwitchAtMs.load(std::memory_order_acquire);
         const SynqMatrixLastAction lastAction =
             static_cast<SynqMatrixLastAction>(m_lastAction.load(std::memory_order_acquire));
@@ -1012,10 +1013,6 @@ bool SynqMatrix::apply(const audio::ControlBusFrame& frame,
         }
     }
 
-    if (static_cast<SynqMatrixSuppressedReason>(m_suppressedReason.load(std::memory_order_acquire)) ==
-        SynqMatrixSuppressedReason::None) {
-        m_owner.store(static_cast<uint8_t>(SynqMatrixOwner::Director), std::memory_order_release);
-    }
     return changed;
 }
 

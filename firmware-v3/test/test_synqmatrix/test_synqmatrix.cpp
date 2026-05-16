@@ -710,6 +710,7 @@ void test_synq_matrix_enters_and_exits_coast_on_audio_confidence_duration() {
     TEST_ASSERT_FALSE(status.coasting);
     TEST_ASSERT_EQUAL_UINT32(0, status.audioConfidenceBelowFloorMs);
     TEST_ASSERT_EQUAL(SynqMatrixLastAction::ParameterUpdate, status.lastAction);
+    TEST_ASSERT_EQUAL(SynqMatrixSuppressedReason::None, status.suppressedReason);
 }
 
 void test_synq_matrix_coast_leaves_incoming_params_unchanged_and_suppresses_switches() {

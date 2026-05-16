@@ -895,6 +895,7 @@ bool SynqMatrix::apply(const audio::ControlBusFrame& frame,
 
     if (!audioAvailable) {
         setSuppressed(SynqMatrixSuppressedReason::NoAudio, SynqMatrixOwner::None);
+        m_lastAction.store(static_cast<uint8_t>(SynqMatrixLastAction::None), std::memory_order_release);
         return false;
     }
 
@@ -903,10 +904,12 @@ bool SynqMatrix::apply(const audio::ControlBusFrame& frame,
     m_confidenceQ1000.store(scaleFloat(confidence), std::memory_order_release);
     if (updateConfidenceOperatingPhase(confidence, audioAvailable, nowMs)) {
         setSuppressed(SynqMatrixSuppressedReason::LowConfidence, SynqMatrixOwner::None);
+        m_lastAction.store(static_cast<uint8_t>(SynqMatrixLastAction::None), std::memory_order_release);
         return false;
     }
     if (confidence < confidenceFloor) {
         setSuppressed(SynqMatrixSuppressedReason::LowConfidence, SynqMatrixOwner::None);
+        m_lastAction.store(static_cast<uint8_t>(SynqMatrixLastAction::None), std::memory_order_release);
         return false;
     }
 
@@ -918,6 +921,7 @@ bool SynqMatrix::apply(const audio::ControlBusFrame& frame,
                                 std::memory_order_release);
     if (state == SynqMatrixState::Silence || state == SynqMatrixState::Unknown) {
         setSuppressed(SynqMatrixSuppressedReason::LowConfidence, SynqMatrixOwner::None);
+        m_lastAction.store(static_cast<uint8_t>(SynqMatrixLastAction::None), std::memory_order_release);
         return false;
     }
 

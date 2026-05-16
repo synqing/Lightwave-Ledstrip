@@ -711,6 +711,12 @@ void test_synq_matrix_enters_and_exits_coast_on_audio_confidence_duration() {
     TEST_ASSERT_EQUAL_UINT32(0, status.audioConfidenceBelowFloorMs);
     TEST_ASSERT_EQUAL(SynqMatrixLastAction::ParameterUpdate, status.lastAction);
     TEST_ASSERT_EQUAL(SynqMatrixSuppressedReason::None, status.suppressedReason);
+
+    low.audioConfidence = 0.30f;
+    TEST_ASSERT_FALSE(director.apply(low, readyBoundaryGrid(), true, 1.0f / 120.0f, 11800, params));
+    status = director.getStatus();
+    TEST_ASSERT_EQUAL(SynqMatrixLastAction::None, status.lastAction);
+    TEST_ASSERT_EQUAL(SynqMatrixSuppressedReason::LowConfidence, status.suppressedReason);
 }
 
 void test_synq_matrix_coast_leaves_incoming_params_unchanged_and_suppresses_switches() {

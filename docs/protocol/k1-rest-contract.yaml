@@ -642,11 +642,11 @@ endpoints:
 
   /api/v1/audio/zone-agc:
     method: GET
-    description: "Get zone AGC state"
+    description: "Get zone AGC state. PipelineCore/legacy path only; ESV11 backend builds return FEATURE_DISABLED."
 
   /api/v1/audio/zone-agc:
     method: POST
-    description: "Configure zone AGC"
+    description: "Configure zone AGC. PipelineCore/legacy path only; ESV11 backend builds return FEATURE_DISABLED."
 
   /api/v1/audio/spike-detection:
     method: GET

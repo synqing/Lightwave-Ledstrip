@@ -18,7 +18,7 @@ RBDO: DEGRADED-MODE
 | Production K1v2 ESV11 calls `applyDerivedFeatures()` rather than the Zone AGC stage. | `firmware-v3/docs/research/f6_controlbus_num_zones_audit_2026-05-06.md`; `firmware-v3/src/audio/AudioActor.cpp:1041` | The defect is source/doc debt for production K1v2 today, but remains live in legacy/non-ES paths. |
 | Legacy/non-ES paths still call `UpdateFromHop()` and therefore still exercise Zone AGC. | `firmware-v3/docs/research/f6_controlbus_num_zones_audit_2026-05-06.md` | Future validation must target a path that actually runs the changed AGC logic. |
 | REST/WS Zone AGC is feature-disabled in ESV11 backend builds. | `firmware-v3/docs/research/f6_controlbus_num_zones_audit_2026-05-06.md` | API behaviour changes are not expected for production ESV11 unless F-6 deliberately changes that boundary. |
-| WS contract marks Zone AGC as PipelineCore-only, but the REST contract still lacks the same visible caveat. | `docs/protocol/k1-ws-contract.yaml`; `docs/protocol/k1-rest-contract.yaml` | Future F-6 implementation must clean contract wording after the source boundary is selected; this brief does not close API documentation drift. |
+| WS and REST contracts both mark Zone AGC as PipelineCore/legacy-only and ESV11-disabled after the 2026-05-16 protocol follow-up. | `docs/protocol/k1-ws-contract.yaml`; `docs/protocol/k1-rest-contract.yaml`; commit `e5b29a61` | Future F-6 implementation must still revisit contract wording after the source boundary is selected; this brief does not close implementation or hardware validation. |
 | The hard rule is three user-facing zones only. | `BACKLOG.md` F-6 | Do not document the fourth internal AGC zone as canonical product truth. |
 
 ## Decision Criteria
@@ -50,7 +50,7 @@ The future implementation should first add explicit band/chroma boundary tables,
 1. Captain selects A, B, or C.
 2. Source implementation replaces derived `z * 2` and `z * 3` logic with explicit coverage.
 3. Unit tests prove every retained band/chroma input is covered exactly once.
-4. REST/WS/docs are updated only after the implementation boundary is known, including the current REST Zone AGC caveat gap.
+4. REST/WS/docs are updated only after the implementation boundary is known, preserving the ESV11-disabled Zone AGC boundary unless Captain explicitly changes it.
 5. Hardware validation runs on a build/path that exercises Zone AGC.
 6. Commit only after hardware evidence records AGC behaviour against the approved reference audio corpus.
 

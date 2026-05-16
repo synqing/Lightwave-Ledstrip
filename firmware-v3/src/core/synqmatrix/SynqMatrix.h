@@ -175,6 +175,10 @@ struct SynqMatrixStatus {
     float selectionScore = 0.0f;
     uint32_t parameterUpdates = 0;
     uint32_t automaticEffectSwitches = 0;
+    bool coasting = false;
+    uint32_t audioConfidenceBelowFloorMs = 0;
+    uint32_t missedPredictionCount = 0;
+    uint32_t tempoWinnerChanges = 0;
     uint32_t lastDecisionAtMs = 0;
     uint32_t lastSwitchAtMs = 0;
     uint32_t stateAgeMs = 0;
@@ -386,6 +390,9 @@ private:
     SynqMatrixState updateStableState(SynqMatrixState rawState,
                                      float confidence,
                                      uint32_t nowMs);
+    bool updateConfidenceOperatingPhase(float confidence,
+                                        bool audioAvailable,
+                                        uint32_t nowMs);
     void updateAudioSummary(const audio::ControlBusFrame& frame, bool audioAvailable);
 #endif
     SynqMatrixIntent planIntent(SynqMatrixState state) const;
@@ -443,6 +450,10 @@ private:
     std::atomic<uint16_t> m_selectionScoreQ1000{0};
     std::atomic<uint32_t> m_parameterUpdates{0};
     std::atomic<uint32_t> m_automaticEffectSwitches{0};
+    std::atomic<bool> m_coasting{false};
+    std::atomic<uint32_t> m_audioConfidenceBelowFloorSinceMs{0};
+    std::atomic<uint32_t> m_audioConfidenceRecoveredSinceMs{0};
+    std::atomic<uint32_t> m_audioConfidenceBelowFloorMs{0};
     std::atomic<uint32_t> m_lastDecisionAtMs{0};
     std::atomic<uint32_t> m_lastSwitchAtMs{0};
     std::atomic<uint32_t> m_stateAgeMs{0};

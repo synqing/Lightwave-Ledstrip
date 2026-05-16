@@ -11,6 +11,7 @@ Work Blocks are critical tasks discovered while executing another mission. They 
 ## Technical Debt
 
 - **Restore-point latch consolidation (SynqMatrix)** — `SerialCLI.cpp`, `SerialJsonGateway.cpp`, and `WsSynqMatrixCommands.cpp` each carry an independent file-scope restore-point latch for SynqMatrix runtime state. Three-way drift risk if one surface is updated without the others. Consolidate into a single shared module under `core/synqmatrix/`. **Revisit by 2026-06-30** or when the next SynqMatrix surface (e.g. iOS direct) is added — whichever first. Deferred from PR #16 to keep blast radius bounded.
+- **SynqMatrix V1 tempo telemetry source** — V0 exposes `missedPredictionCount` and `tempoWinnerChanges` as unavailable zero counters because the current SynqMatrix input path has no beat-prediction miss source or tempo winner/bin identity. Real population requires a separately scoped V1 music-timebase / tempo-bank source brief.
 
 ### WB-1 — Systemic naming, definition, and metric accountability audit (OPEN — ASSIGN OUT)
 

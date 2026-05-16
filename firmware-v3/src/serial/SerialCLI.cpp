@@ -119,7 +119,7 @@ void printSynqMatrixStatus() {
                   cfg.intensityScalar,
                   cfg.motionScalar,
                   cfg.confidenceFloor);
-    Serial.printf("synqMatrix_status: mode=%s profile=%s owner=%s suppressed=%s state=%s intent=%s confidence=%.3f lastAction=%s actionPlan=%s boundary=%s ready=%s activeEffect=0x%04X activeEffectName=\"%s\" parameterUpdates=%lu automaticEffectSwitches=%lu lastDecisionAtMs=%lu\n",
+    Serial.printf("synqMatrix_status: mode=%s profile=%s owner=%s suppressed=%s state=%s intent=%s confidence=%.3f lastAction=%s actionPlan=%s boundary=%s ready=%s activeEffect=0x%04X activeEffectName=\"%s\" parameterUpdates=%lu automaticEffectSwitches=%lu coasting=%s audioConfidenceBelowFloorMs=%lu missedPredictionCount=%lu tempoWinnerChanges=%lu lastDecisionAtMs=%lu\n",
                   lightwaveos::synqmatrix::synqMatrixModeName(st.effectiveMode),
                   lightwaveos::synqmatrix::synqMatrixProfileName(st.profile),
                   lightwaveos::synqmatrix::synqMatrixOwnerName(st.owner),
@@ -135,6 +135,10 @@ void printSynqMatrixStatus() {
                   activeEffectName,
                   static_cast<unsigned long>(st.parameterUpdates),
                   static_cast<unsigned long>(st.automaticEffectSwitches),
+                  boolName(st.coasting),
+                  static_cast<unsigned long>(st.audioConfidenceBelowFloorMs),
+                  static_cast<unsigned long>(st.missedPredictionCount),
+                  static_cast<unsigned long>(st.tempoWinnerChanges),
                   static_cast<unsigned long>(st.lastDecisionAtMs));
     Serial.printf("synqMatrix_director: selectedEffect=0x%04X selectedFamily=%s selectedVisualLanguage=%s lastSwitchAtMs=%lu dwellRemainingMs=%lu cooldownRemainingMs=%lu lastSwitchReason=%s\n",
                   static_cast<unsigned>(st.selectedEffectId),
@@ -159,7 +163,7 @@ void printSynqMatrixStatus() {
 void printSynqMatrixCompactStatus() {
     const auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
     const auto st = lightwaveos::synqmatrix::SynqMatrix::instance().getStatus();
-    Serial.printf("sa: enabled=%s mode=%s profile=%s switching=%s state=%s intent=%s confidence=%.2f gate=%s boundary=%s action=%s\n",
+    Serial.printf("sa: enabled=%s mode=%s profile=%s switching=%s state=%s intent=%s confidence=%.2f coasting=%s belowFloorMs=%lu gate=%s boundary=%s action=%s\n",
                   boolName(cfg.enabled),
                   lightwaveos::synqmatrix::synqMatrixModeName(cfg.mode),
                   lightwaveos::synqmatrix::synqMatrixProfileName(cfg.profile),
@@ -167,6 +171,8 @@ void printSynqMatrixCompactStatus() {
                   lightwaveos::synqmatrix::synqMatrixStateName(st.currentState),
                   lightwaveos::synqmatrix::synqMatrixIntentName(st.intent),
                   st.confidence,
+                  boolName(st.coasting),
+                  static_cast<unsigned long>(st.audioConfidenceBelowFloorMs),
                   lightwaveos::synqmatrix::synqMatrixSuppressedReasonName(st.suppressedReason),
                   lightwaveos::synqmatrix::synqMatrixBoundaryGateName(st.boundaryGate),
                   lightwaveos::synqmatrix::synqMatrixActionPlanName(st.actionPlan));

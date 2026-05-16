@@ -384,6 +384,10 @@ commands:
         lastSwitchReason: string
         parameterUpdates: uint32
         automaticEffectSwitches: uint32
+        coasting: bool
+        audioConfidenceBelowFloorMs: uint32
+        missedPredictionCount: uint32
+        tempoWinnerChanges: uint32
         lastDecisionAtMs: uint32
         lastSwitchAtMs: uint32
         stateAgeMs: uint32
@@ -648,6 +652,10 @@ commands:
         lastSwitchReason: string
         parameterUpdates: uint32
         automaticEffectSwitches: uint32
+        coasting: bool
+        audioConfidenceBelowFloorMs: uint32
+        missedPredictionCount: uint32
+        tempoWinnerChanges: uint32
         lastDecisionAtMs: uint32
         lastSwitchAtMs: uint32
         stateAgeMs: uint32

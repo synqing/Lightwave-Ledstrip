@@ -651,6 +651,133 @@ void test_synq_matrix_low_confidence_suppresses_activity() {
     TEST_ASSERT_EQUAL_UINT32(0, status.automaticEffectSwitches);
 }
 
+void test_synq_matrix_confidence_floor_remains_single_config_control() {
+    SynqMatrix director;
+    SynqMatrixConfig cfg = makeConfig(SynqMatrixMode::Assist, false);
+    cfg.confidenceFloor = 0.70f;
+    restoreReadyDirector(director, cfg, SynqMatrixState::Drop);
+
+    const auto readback = director.getConfig();
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.70f, readback.confidenceFloor);
+
+    ControlBusFrame frame = frameForState(SynqMatrixState::Drop);
+    frame.audioConfidence = 0.30f;
+    SynqMatrixParams params = baseParams();
+    const SynqMatrixParams before = params;
+
+    TEST_ASSERT_FALSE(director.apply(frame, readyBoundaryGrid(), true, 1.0f / 120.0f, 10000, params));
+    const auto status = director.getStatus();
+
+    TEST_ASSERT_EQUAL_UINT8(before.speed, params.speed);
+    TEST_ASSERT_EQUAL_UINT8(before.intensity, params.intensity);
+    TEST_ASSERT_EQUAL_UINT8(before.complexity, params.complexity);
+    TEST_ASSERT_EQUAL(SynqMatrixSuppressedReason::LowConfidence, status.suppressedReason);
+    TEST_ASSERT_FALSE(status.coasting);
+    TEST_ASSERT_EQUAL_UINT32(0, status.audioConfidenceBelowFloorMs);
+}
+
+void test_synq_matrix_enters_and_exits_coast_on_audio_confidence_duration() {
+    SynqMatrix director;
+    SynqMatrixConfig cfg = makeConfig(SynqMatrixMode::Assist, false);
+    cfg.confidenceFloor = 0.70f;
+    restoreReadyDirector(director, cfg, SynqMatrixState::Drop);
+
+    ControlBusFrame low = frameForState(SynqMatrixState::Drop);
+    low.audioConfidence = 0.30f;
+    SynqMatrixParams params = baseParams();
+
+    TEST_ASSERT_FALSE(director.apply(low, readyBoundaryGrid(), true, 1.0f / 120.0f, 10000, params));
+    TEST_ASSERT_FALSE(director.getStatus().coasting);
+    TEST_ASSERT_FALSE(director.apply(low, readyBoundaryGrid(), true, 1.0f / 120.0f, 10500, params));
+    TEST_ASSERT_FALSE(director.getStatus().coasting);
+    TEST_ASSERT_FALSE(director.apply(low, readyBoundaryGrid(), true, 1.0f / 120.0f, 11000, params));
+
+    auto status = director.getStatus();
+    TEST_ASSERT_TRUE(status.coasting);
+    TEST_ASSERT_EQUAL_UINT32(1000, status.audioConfidenceBelowFloorMs);
+    TEST_ASSERT_EQUAL_UINT32(0, status.missedPredictionCount);
+    TEST_ASSERT_EQUAL_UINT32(0, status.tempoWinnerChanges);
+
+    ControlBusFrame recovered = frameForState(SynqMatrixState::Drop);
+    recovered.audioConfidence = 0.90f;
+    TEST_ASSERT_FALSE(director.apply(recovered, readyBoundaryGrid(), true, 1.0f / 120.0f, 11200, params));
+    TEST_ASSERT_TRUE(director.getStatus().coasting);
+
+    TEST_ASSERT_TRUE(director.apply(recovered, readyBoundaryGrid(), true, 0.050f, 11700, params));
+    status = director.getStatus();
+    TEST_ASSERT_FALSE(status.coasting);
+    TEST_ASSERT_EQUAL_UINT32(0, status.audioConfidenceBelowFloorMs);
+    TEST_ASSERT_EQUAL(SynqMatrixLastAction::ParameterUpdate, status.lastAction);
+}
+
+void test_synq_matrix_coast_leaves_incoming_params_unchanged_and_suppresses_switches() {
+    SynqMatrix director;
+    SynqMatrixConfig cfg = makeConfig(SynqMatrixMode::Director, true);
+    cfg.confidenceFloor = 0.70f;
+    restoreReadyDirector(director, cfg, SynqMatrixState::Drop);
+
+    ControlBusFrame low = frameForState(SynqMatrixState::Drop);
+    low.audioConfidence = 0.30f;
+    SynqMatrixParams params = baseParams();
+    const SynqMatrixParams before = params;
+    SynqMatrixSwitchRequest request;
+
+    director.tick(low, readyBoundaryGrid(), true, 10000, INVALID_EFFECT_ID, SynqMatrixContext{}, request);
+    director.tick(low, readyBoundaryGrid(), true, 10500, INVALID_EFFECT_ID, SynqMatrixContext{}, request);
+    director.tick(low, readyBoundaryGrid(), true, 11000, INVALID_EFFECT_ID, SynqMatrixContext{}, request);
+    TEST_ASSERT_TRUE(director.getStatus().coasting);
+
+    TEST_ASSERT_FALSE(director.apply(low, readyBoundaryGrid(), true, 0.050f, 11100, params));
+    TEST_ASSERT_EQUAL_UINT8(before.speed, params.speed);
+    TEST_ASSERT_EQUAL_UINT8(before.intensity, params.intensity);
+    TEST_ASSERT_EQUAL_UINT8(before.complexity, params.complexity);
+    TEST_ASSERT_EQUAL_UINT8(before.saturation, params.saturation);
+    TEST_ASSERT_EQUAL_UINT8(before.variation, params.variation);
+    TEST_ASSERT_EQUAL_UINT8(before.hue, params.hue);
+
+    request = SynqMatrixSwitchRequest{};
+    TEST_ASSERT_FALSE(director.tick(low, readyBoundaryGrid(), true, 11500, INVALID_EFFECT_ID,
+                                    SynqMatrixContext{}, request));
+    TEST_ASSERT_FALSE(request.requested);
+    const auto status = director.getStatus();
+    TEST_ASSERT_TRUE(status.coasting);
+    TEST_ASSERT_EQUAL_UINT32(0, status.parameterUpdates);
+    TEST_ASSERT_EQUAL_UINT32(0, status.automaticEffectSwitches);
+}
+
+void test_synq_matrix_low_confidence_pre_coast_blocks_state_promotion() {
+    SynqMatrix director;
+    SynqMatrixConfig cfg = makeConfig(SynqMatrixMode::Director, true);
+    cfg.confidenceFloor = 0.70f;
+    restoreReadyDirector(director, cfg, SynqMatrixState::Ambient);
+
+    ControlBusFrame lowDrop = frameForState(SynqMatrixState::Drop);
+    lowDrop.audioConfidence = 0.30f;
+    SynqMatrixSwitchRequest request;
+
+    TEST_ASSERT_FALSE(director.tick(lowDrop,
+                                    readyBoundaryGrid(),
+                                    true,
+                                    10000,
+                                    INVALID_EFFECT_ID,
+                                    SynqMatrixContext{},
+                                    request));
+    TEST_ASSERT_FALSE(director.tick(lowDrop,
+                                    readyBoundaryGrid(),
+                                    true,
+                                    10999,
+                                    INVALID_EFFECT_ID,
+                                    SynqMatrixContext{},
+                                    request));
+
+    const auto status = director.getStatus();
+    TEST_ASSERT_FALSE(request.requested);
+    TEST_ASSERT_FALSE(status.coasting);
+    TEST_ASSERT_EQUAL(SynqMatrixState::Ambient, status.currentState);
+    TEST_ASSERT_EQUAL(SynqMatrixSuppressedReason::LowConfidence, status.suppressedReason);
+    TEST_ASSERT_EQUAL_UINT32(0, status.automaticEffectSwitches);
+}
+
 void test_synq_matrix_policy_and_string_telemetry_helpers() {
     TEST_ASSERT_TRUE(SynqMatrix::policyCount() > 1);
 
@@ -894,6 +1021,10 @@ int main() {
     RUN_TEST(test_synq_matrix_assist_mode_changes_controls_without_switching);
     RUN_TEST(test_synq_matrix_director_apply_is_parameter_only_and_never_switches_effect);
     RUN_TEST(test_synq_matrix_low_confidence_suppresses_activity);
+    RUN_TEST(test_synq_matrix_confidence_floor_remains_single_config_control);
+    RUN_TEST(test_synq_matrix_enters_and_exits_coast_on_audio_confidence_duration);
+    RUN_TEST(test_synq_matrix_coast_leaves_incoming_params_unchanged_and_suppresses_switches);
+    RUN_TEST(test_synq_matrix_low_confidence_pre_coast_blocks_state_promotion);
     RUN_TEST(test_synq_matrix_policy_and_string_telemetry_helpers);
     RUN_TEST(test_synq_matrix_transition_telemetry_blocks_switch_until_complete);
     RUN_TEST(test_synq_matrix_mode_taxonomy_collapsed);

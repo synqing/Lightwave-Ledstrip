@@ -27,6 +27,8 @@ static constexpr uint32_t kAntiThrashWindowMs = 45000;
 static constexpr uint32_t kHealthCleanWindowMs = 3000;
 static constexpr uint32_t kManualSuppressMs = 15000;
 static constexpr uint32_t kShowSuppressMs = 1000;
+static constexpr uint32_t kCoastEnterMs = 1000;
+static constexpr uint32_t kCoastRecoverMs = 500;
 
 struct DirectorPolicy {
     SynqMatrixState state;
@@ -140,6 +142,10 @@ void SynqMatrix::reset() {
     m_selectionScoreQ1000.store(0, std::memory_order_release);
     m_parameterUpdates.store(0, std::memory_order_release);
     m_automaticEffectSwitches.store(0, std::memory_order_release);
+    m_coasting.store(false, std::memory_order_release);
+    m_audioConfidenceBelowFloorSinceMs.store(0, std::memory_order_release);
+    m_audioConfidenceRecoveredSinceMs.store(0, std::memory_order_release);
+    m_audioConfidenceBelowFloorMs.store(0, std::memory_order_release);
     m_lastDecisionAtMs.store(0, std::memory_order_release);
     m_lastSwitchAtMs.store(0, std::memory_order_release);
     m_stateAgeMs.store(0, std::memory_order_release);
@@ -283,6 +289,12 @@ SynqMatrixStatus SynqMatrix::getStatus() const {
     status.selectionScore = unscaleFloat(m_selectionScoreQ1000.load(std::memory_order_acquire));
     status.parameterUpdates = m_parameterUpdates.load(std::memory_order_acquire);
     status.automaticEffectSwitches = m_automaticEffectSwitches.load(std::memory_order_acquire);
+    status.coasting = m_coasting.load(std::memory_order_acquire);
+    status.audioConfidenceBelowFloorMs = m_audioConfidenceBelowFloorMs.load(std::memory_order_acquire);
+    // V0 receives ControlBusFrame/MusicalGridSnapshot summaries, not ESV11
+    // winner-bin or beat-prediction identity. Real counters are V1 tempo work.
+    status.missedPredictionCount = 0;
+    status.tempoWinnerChanges = 0;
     status.lastDecisionAtMs = m_lastDecisionAtMs.load(std::memory_order_acquire);
     status.lastSwitchAtMs = m_lastSwitchAtMs.load(std::memory_order_acquire);
     status.stateAgeMs = m_stateAgeMs.load(std::memory_order_acquire);
@@ -374,6 +386,10 @@ void SynqMatrix::restoreRuntimeState(const SynqMatrixRuntimeState& state) {
     m_selectionScoreQ1000.store(scaleFloat(state.status.selectionScore), std::memory_order_release);
     m_parameterUpdates.store(state.status.parameterUpdates, std::memory_order_release);
     m_automaticEffectSwitches.store(state.status.automaticEffectSwitches, std::memory_order_release);
+    m_coasting.store(state.status.coasting, std::memory_order_release);
+    m_audioConfidenceBelowFloorMs.store(state.status.audioConfidenceBelowFloorMs, std::memory_order_release);
+    m_audioConfidenceBelowFloorSinceMs.store(0, std::memory_order_release);
+    m_audioConfidenceRecoveredSinceMs.store(0, std::memory_order_release);
     m_lastDecisionAtMs.store(state.status.lastDecisionAtMs, std::memory_order_release);
     m_lastSwitchAtMs.store(state.status.lastSwitchAtMs, std::memory_order_release);
     m_stateAgeMs.store(state.status.stateAgeMs, std::memory_order_release);
@@ -599,6 +615,16 @@ bool SynqMatrix::tick(const audio::ControlBusFrame& frame,
     const float confidence = clamp01(frame.audioConfidence);
     const float confidenceFloor = unscaleFloat(m_confidenceFloorQ1000.load(std::memory_order_acquire));
     m_confidenceQ1000.store(scaleFloat(confidence), std::memory_order_release);
+    if (updateConfidenceOperatingPhase(confidence, audioAvailable, nowMs)) {
+        setSuppressed(SynqMatrixSuppressedReason::LowConfidence, SynqMatrixOwner::None);
+        m_lastAction.store(static_cast<uint8_t>(SynqMatrixLastAction::SwitchSuppressed), std::memory_order_release);
+        return false;
+    }
+    if (confidence < confidenceFloor) {
+        setSuppressed(SynqMatrixSuppressedReason::LowConfidence, SynqMatrixOwner::None);
+        m_lastAction.store(static_cast<uint8_t>(SynqMatrixLastAction::SwitchSuppressed), std::memory_order_release);
+        return false;
+    }
 
     const SynqMatrixState rawState = classifyState(frame, features, audioAvailable, confidence);
     const SynqMatrixState previousStable =
@@ -857,6 +883,10 @@ bool SynqMatrix::apply(const audio::ControlBusFrame& frame,
     const float confidence = clamp01(frame.audioConfidence);
     const float confidenceFloor = unscaleFloat(m_confidenceFloorQ1000.load(std::memory_order_acquire));
     m_confidenceQ1000.store(scaleFloat(confidence), std::memory_order_release);
+    if (updateConfidenceOperatingPhase(confidence, audioAvailable, nowMs)) {
+        setSuppressed(SynqMatrixSuppressedReason::LowConfidence, SynqMatrixOwner::None);
+        return false;
+    }
     if (confidence < confidenceFloor) {
         setSuppressed(SynqMatrixSuppressedReason::LowConfidence, SynqMatrixOwner::None);
         return false;
@@ -1171,6 +1201,55 @@ SynqMatrixState SynqMatrix::updateStableState(SynqMatrixState rawState,
     m_candidateAgeMs.store(candidateAgeMs, std::memory_order_release);
     m_candidateHoldRemainingMs.store(0, std::memory_order_release);
     return stable;
+}
+
+bool SynqMatrix::updateConfidenceOperatingPhase(float confidence,
+                                                bool audioAvailable,
+                                                uint32_t nowMs) {
+    if (!audioAvailable) {
+        m_coasting.store(false, std::memory_order_release);
+        m_audioConfidenceBelowFloorSinceMs.store(0, std::memory_order_release);
+        m_audioConfidenceRecoveredSinceMs.store(0, std::memory_order_release);
+        m_audioConfidenceBelowFloorMs.store(0, std::memory_order_release);
+        return false;
+    }
+
+    const float confidenceFloor = unscaleFloat(m_confidenceFloorQ1000.load(std::memory_order_acquire));
+    if (confidence < confidenceFloor) {
+        uint32_t belowSince = m_audioConfidenceBelowFloorSinceMs.load(std::memory_order_acquire);
+        if (belowSince == 0) {
+            belowSince = nowMs;
+            m_audioConfidenceBelowFloorSinceMs.store(belowSince, std::memory_order_release);
+        }
+        const uint32_t belowForMs = elapsedSince(nowMs, belowSince);
+        m_audioConfidenceBelowFloorMs.store(belowForMs, std::memory_order_release);
+        m_audioConfidenceRecoveredSinceMs.store(0, std::memory_order_release);
+        if (belowForMs >= kCoastEnterMs) {
+            m_coasting.store(true, std::memory_order_release);
+        }
+        return m_coasting.load(std::memory_order_acquire);
+    }
+
+    m_audioConfidenceBelowFloorSinceMs.store(0, std::memory_order_release);
+    m_audioConfidenceBelowFloorMs.store(0, std::memory_order_release);
+    if (!m_coasting.load(std::memory_order_acquire)) {
+        m_audioConfidenceRecoveredSinceMs.store(0, std::memory_order_release);
+        return false;
+    }
+
+    uint32_t recoveredSince = m_audioConfidenceRecoveredSinceMs.load(std::memory_order_acquire);
+    if (recoveredSince == 0) {
+        recoveredSince = nowMs;
+        m_audioConfidenceRecoveredSinceMs.store(recoveredSince, std::memory_order_release);
+        return true;
+    }
+
+    if (elapsedSince(nowMs, recoveredSince) >= kCoastRecoverMs) {
+        m_coasting.store(false, std::memory_order_release);
+        m_audioConfidenceRecoveredSinceMs.store(0, std::memory_order_release);
+        return false;
+    }
+    return true;
 }
 
 void SynqMatrix::updateAudioSummary(const audio::ControlBusFrame& frame, bool audioAvailable) {

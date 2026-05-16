@@ -125,6 +125,10 @@ void encodeStatus(JsonObject& data, const synqmatrix::SynqMatrixStatus& status) 
     data["lastSwitchReason"] = status.lastSwitchReason;
     data["parameterUpdates"] = status.parameterUpdates;
     data["automaticEffectSwitches"] = status.automaticEffectSwitches;
+    data["coasting"] = status.coasting;
+    data["audioConfidenceBelowFloorMs"] = status.audioConfidenceBelowFloorMs;
+    data["missedPredictionCount"] = status.missedPredictionCount;
+    data["tempoWinnerChanges"] = status.tempoWinnerChanges;
     data["lastDecisionAtMs"] = status.lastDecisionAtMs;
     data["lastSwitchAtMs"] = status.lastSwitchAtMs;
     data["stateAgeMs"] = status.stateAgeMs;

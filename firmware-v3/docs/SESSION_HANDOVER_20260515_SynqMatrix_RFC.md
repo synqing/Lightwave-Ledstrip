@@ -120,15 +120,14 @@ The next agent will translate the RFC into a V0 implementation specification. Th
    - Run `git log firmware-v3/src/core/synqmatrix/` since `dc46cc9b` to check for drift.
    - Verify the `kMatrix[]` table at `SynqMatrix.cpp:40-50` against the per-state matrix in RFC § 4.
    - Verify the gating constants at `SynqMatrix.cpp:16-29` against RFC § 5.2.
-3. **Implement the new V0 fields:**
-   - `SynqMatrixConfig.confidenceFloor` (float, default per Captain's Q9.1 answer; clamp 0.0 – 1.0).
-   - `SynqMatrixStatus.audioConfidenceBelowFloorMs` (uint32, rolling 10 s window).
-   - `SynqMatrixStatus.missedPredictionCount` (uint32, rolling 10 s window).
-   - `SynqMatrixStatus.tempoWinnerChanges` (uint32, rolling 10 s window).
-4. **Implement the coast state machine per Q6 closure (§ 3.2):**
+3. **Source-delta reconcile first; do not blindly add existing fields.** The following V0 fields and behaviours need to be reconciled against current source — some already exist (default needs change), others are genuine additions. Grep-verified against `firmware-v3/src/core/synqmatrix/` at 2026-05-16:
+   - **`SynqMatrixConfig.confidenceFloor` ALREADY EXISTS** at `SynqMatrix.h:152` with current default `0.20f` (mirror `m_confidenceFloorQ1000{200}` at `SynqMatrix.h:422`). **DO NOT add it; reconcile the default to `0.40f`** per the accepted Q9.1 value (2026-05-16 reconciliation). Update the Q1000 mirror correspondingly (`{400}`).
+   - **`SynqMatrixStatus.audioConfidenceBelowFloorMs`, `missedPredictionCount`, `tempoWinnerChanges` DO NOT EXIST** (grep-verified). **These are genuine additions** — `uint32_t` rolling 10 s window counters per the Q6 closure (RFC § 3.2). Add to `SynqMatrixStatus` struct in `SynqMatrix.h` and the corresponding accumulator state in `SynqMatrix.cpp`.
+4. **Implement the COAST state machine per Q6 closure (RFC § 3.2) — also a genuine addition.** No `COAST` / `kCoast` symbol exists in `firmware-v3/src/core/synqmatrix/` (grep-verified). Add as new behaviour, not as a reconcile:
    - LOCKED → COAST when `audio.confidence < confidenceFloor` for ≥ 1 000 ms.
    - COAST → LOCKED when `audio.confidence ≥ confidenceFloor` for ≥ 500 ms.
-   - During COAST: hold current parameters, no switching, no new state-promotion.
+   - During COAST: hold current parameters, no switching, no new state-promotion attempts.
+   - The COAST state is a Director-internal lock-state mode, **NOT** a new `SynqMatrixState` enum value (the 9-state vocabulary stays unchanged per Q8 closure). Implement as a private flag on the `SynqMatrix` singleton plus a `SuppressedReason::Coast` or equivalent telemetry surface.
 5. **Update the protocol contract YAML** (`docs/protocol/k1-ws-contract.yaml` + `docs/protocol/k1-rest-contract.yaml`) FIRST — gate rule per repo CLAUDE.md.
 6. **Write a failing test FIRST** per `/test-driven-development` skill — gate rule per repo CLAUDE.md.
 7. **Centre-origin enforced** for any new effect work — Hard Constraint per repo CLAUDE.md.
@@ -172,7 +171,7 @@ The next agent does NOT need to handle these — they are out of V0 scope or alr
 
 ## RFC sign-off status
 
-**Awaiting Captain.** Sign-off line is blank in the RFC § 12 changelog. Five batched confirmations (Q9.1 – Q9.5) at RFC § 9 are the gate.
+**Captain plan approval 2026-05-16 — Q9.1 – Q9.4 ACCEPTED; Q9.5 PROCEED_WITH_DEGRADED_Q9_5** (shorthand interpretation confirmed). The five batched Q9.1 – Q9.5 confirmations at RFC § 9 are now closed; no further Captain action is required for V0 sign-off. The optional physical sign-off line at the bottom of the RFC § 12 changelog awaits Captain's mark at his discretion. **This supersedes the prior "Awaiting Captain" framing.**
 
 After sign-off, this session's outputs are:
 
@@ -187,3 +186,4 @@ No firmware source files modified. No new tools or libraries. No V1 / V2 impleme
 |------|--------|--------|
 | 2026-05-15 | agent:claude (opus-4.7) | Created session handover after SynqMatrix Director RFC was authored at firmware-v3/docs/research/SynqMatrix_Director_RFC_2026-05-15.md. Documents what was authored (12-section RFC), what was decided (Q4 / Q6 / Q8 / Q10 closures), what was surfaced for Captain (Q9.1 – Q9.5 batched confirmations), what is deliberately out of scope (V1 / V2 implementation, AP-VP rework, WiFi mode), and the recommended next implementation agent's brief. RBDO: GROUNDED. |
 | 2026-05-16 | agent:claude (opus-4.7) | RFC reconciliation against Synesthesia Authority Audit 2026-05-16 applied to firmware-v3/docs/research/SynqMatrix_Director_RFC_2026-05-15.md (10 edits). Q9.1 – Q9.4 ACCEPTED. Q9.5 PROCEED_WITH_DEGRADED_Q9_5 with Q9.5(f) closed at shorthand interpretation per Captain plan approval 2026-05-16. V1+ TempoBank / Music-Timebase Contract Investigation opened as RFC § 8.5. Zero firmware source files modified. RBDO: GROUNDED for V0 closure and Q9.1–Q9.4 reconciliation; DEGRADED_Q9_5 for Synesthesia / Family-B authority framing. |
+| 2026-05-16 | agent:claude (opus-4.7) | Handover amendments post Captain-feedback. Two mandatory amendments applied: (1) "RFC sign-off status" section header re-stated as "Captain plan approval 2026-05-16 — Q9.1 – Q9.4 ACCEPTED; Q9.5 PROCEED_WITH_DEGRADED_Q9_5", superseding the stale "Awaiting Captain" framing. (2) Next-agent brief items 3-4 rewritten to "source-delta reconcile first; do not blindly add existing fields": `SynqMatrixConfig.confidenceFloor` already exists at `SynqMatrix.h:152` with default `0.20f` (mirror at `:422`) — directive is RECONCILE default to `0.40f`, not add; `audioConfidenceBelowFloorMs` / `missedPredictionCount` / `tempoWinnerChanges` / COAST state symbols grep-verified absent — genuine additions. Prior "untracked docs" framing in the post-execution report withdrawn (RFC + handover are tracked per `git ls-files`). Zero firmware source files modified by this amendment. RBDO: GROUNDED. |

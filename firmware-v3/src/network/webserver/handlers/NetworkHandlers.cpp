@@ -46,6 +46,8 @@ void NetworkHandlers::handleStatus(AsyncWebServerRequest* request) {
         data["connected"] = connected;
         data["state"] = wm.getStateString();
         data["apMode"] = apMode;
+        data["bootModePreference"] =
+            WiFiCredentialsStorage::bootModePreferenceToString(wm.getBootModePreference());
 
         if (connected) {
             data["ssid"] = wm.getSSID();

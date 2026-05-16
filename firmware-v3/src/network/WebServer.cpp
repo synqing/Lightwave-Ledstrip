@@ -417,9 +417,12 @@ bool WebServer::begin() {
     } else if (WIFI_MANAGER.isConnected()) {
         LW_LOGI("WiFi connected via WiFiManager, IP: %s", WiFi.localIP().toString().c_str());
         m_apMode = false;
+    } else if (WiFi.getMode() == WIFI_MODE_STA) {
+        LW_LOGI("WiFi STA mode active via WiFiManager, waiting for IP");
+        m_apMode = false;
     } else {
-        // Default to AP mode if state is unclear
-        LW_LOGW("WiFi state unclear, defaulting to AP mode");
+        // Default to AP mode only when the radio is not already in pure STA.
+        LW_LOGW("WiFi state unclear, defaulting server context to AP mode");
         m_apMode = true;
     }
 
@@ -444,11 +447,11 @@ bool WebServer::begin() {
     // Start mDNS
     startMDNS();
 
-    // AP mode: AP IP (192.168.4.1) is available immediately
-    // No need for IP validation or delays in AP mode
-    IPAddress apIP = WiFi.softAPIP();
-    LW_LOGI("Starting AsyncWebServer on port %d (AP IP: %s)...", 
-            WebServerConfig::HTTP_PORT, apIP.toString().c_str());
+    IPAddress listenIP = m_apMode ? WiFi.softAPIP() : WiFi.localIP();
+    LW_LOGI("Starting AsyncWebServer on port %d (%s IP: %s)...",
+            WebServerConfig::HTTP_PORT,
+            m_apMode ? "AP" : "STA",
+            listenIP.toString().c_str());
 
     // Start the server (simple startup like commit 937c9abc)
     m_server->begin();
@@ -990,7 +993,7 @@ void WebServer::update() {
         }
     }
     
-    // Re-register mDNS if IP changed (e.g. after WiFi reconnect with new DHCP lease)
+    // Start or re-register mDNS once STA obtains an IP, and whenever the IP changes.
     if (m_mdnsStarted) {
         IPAddress currentIP = WiFi.localIP();
         if (currentIP != m_lastRegisteredIP && currentIP != INADDR_NONE && currentIP != IPAddress(0, 0, 0, 0)) {
@@ -1001,6 +1004,11 @@ void WebServer::update() {
                 m_lastRegisteredIP = currentIP;
                 LW_LOGI("[MDNS] Re-registered %s.local at %s", WebServerConfig::MDNS_HOSTNAME, currentIP.toString().c_str());
             }
+        }
+    } else if (!WIFI_MANAGER.isAPMode()) {
+        IPAddress currentIP = WiFi.localIP();
+        if (currentIP != INADDR_NONE && currentIP != IPAddress(0, 0, 0, 0)) {
+            startMDNS();
         }
     }
 
@@ -1120,6 +1128,12 @@ void WebServer::startMDNS() {
     LW_LOGI("  IP Address: %s", ip.toString().c_str());
     LW_LOGI("  WiFi Mode: %s", WiFi.getMode() == WIFI_MODE_AP ? "AP" :
                                WiFi.getMode() == WIFI_MODE_STA ? "STA" : "UNKNOWN");
+
+    if (!m_apMode && (ip == INADDR_NONE || ip == IPAddress(0, 0, 0, 0))) {
+        LW_LOGW("  STA IP not assigned yet; mDNS will start after DHCP");
+        m_mdnsStarted = false;
+        return;
+    }
     
     // AP IP (192.168.4.1) is valid immediately - no need for validation
     if (MDNS.begin(WebServerConfig::MDNS_HOSTNAME)) {
@@ -1141,7 +1155,7 @@ void WebServer::startMDNS() {
 #endif
 
         m_mdnsStarted = true;
-        m_lastRegisteredIP = WiFi.localIP();
+        m_lastRegisteredIP = ip;
         LW_LOGI("mDNS started successfully: http://%s.local", WebServerConfig::MDNS_HOSTNAME);
         LW_LOGI("  WebSocket: ws://%s.local:%d/ws", WebServerConfig::MDNS_HOSTNAME, WebServerConfig::HTTP_PORT);
     } else {

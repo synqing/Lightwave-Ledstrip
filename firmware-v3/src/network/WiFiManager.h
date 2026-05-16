@@ -362,6 +362,13 @@ public:
     bool isForceApOnlyRuntime() const { return m_forceApOnly; }
 
     /**
+     * @brief Get persisted AP-or-STA boot preference.
+     */
+    WiFiCredentialsStorage::BootModePreference getBootModePreference() const {
+        return m_credentialsStorage.getBootModePreference();
+    }
+
+    /**
      * @brief Get saved networks from NVS storage
      */
     uint8_t getSavedNetworks(WiFiCredentialsStorage::NetworkCredential* out, uint8_t maxNetworks) const {

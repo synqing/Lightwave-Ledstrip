@@ -447,6 +447,48 @@ bool WiFiCredentialsStorage::getCredentialsForSSID(const String& ssid, String& o
     return false;
 }
 
+bool WiFiCredentialsStorage::setBootModePreference(BootModePreference mode) {
+    if (!m_initialized) {
+        LW_LOGE("WiFiCredentialsStorage not initialized");
+        return false;
+    }
+
+    const char* value = bootModePreferenceToString(mode);
+    if (m_prefs.putString("mode", value)) {
+        LW_LOGI("Boot WiFi mode preference saved: %s", value);
+        return true;
+    }
+
+    LW_LOGE("Failed to save boot WiFi mode preference");
+    return false;
+}
+
+WiFiCredentialsStorage::BootModePreference WiFiCredentialsStorage::getBootModePreference() const {
+    if (!m_initialized) {
+        return BootModePreference::AP;
+    }
+
+    String value = m_prefs.getString("mode", "ap");
+    value.toLowerCase();
+    if (value == "sta") {
+        return BootModePreference::STA;
+    }
+    if (value != "ap") {
+        LW_LOGW("Invalid boot WiFi mode preference '%s', defaulting to AP", value.c_str());
+    }
+    return BootModePreference::AP;
+}
+
+const char* WiFiCredentialsStorage::bootModePreferenceToString(BootModePreference mode) {
+    switch (mode) {
+        case BootModePreference::STA:
+            return "sta";
+        case BootModePreference::AP:
+        default:
+            return "ap";
+    }
+}
+
 } // namespace network
 } // namespace lightwaveos
 

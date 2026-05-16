@@ -1,11 +1,11 @@
 /**
  * @file WiFiCredentialsStorage.h
- * @brief NVS-based storage for WiFi network credentials
+ * @brief NVS-based storage for WiFi network credentials and boot mode preference
  *
  * ╔══════════════════════════════════════════════════════════════════════╗
- * ║  ARCHITECTURAL CONSTRAINT: K1 IS AP-ONLY. NEVER ENABLE STA MODE.  ║
- * ║  Stored credentials are for the serial escape hatch only (known    ║
- * ║  unreliable). See WiFiManager.h and CLAUDE.md.                     ║
+ * ║  PRODUCTION K1 BUILDS ARE AP-ONLY VIA WIFI_AP_ONLY.                ║
+ * ║  STA validation builds use pure STA only, never concurrent AP+STA.  ║
+ * ║  See WiFiManager.h and BACKLOG.md F-5.                             ║
  * ╚══════════════════════════════════════════════════════════════════════╝
  *
  * Stores multiple WiFi networks (SSID + password pairs) in NVS.
@@ -15,6 +15,7 @@
  * - Namespace: "wifi_creds"
  * - Keys: "net_0", "net_1", ... "net_N" (JSON format: {"ssid":"...","password":"..."})
  * - Metadata key: "count" (number of saved networks)
+ * - Boot mode key: "mode" ("ap" or "sta")
  *
  * Limitations:
  * - Maximum 10 networks (ESP32-S3 NVS namespace size ~4000 bytes)
@@ -43,6 +44,11 @@ namespace network {
  */
 class WiFiCredentialsStorage {
 public:
+    enum class BootModePreference : uint8_t {
+        AP = 0,
+        STA = 1
+    };
+
     /**
      * @brief Network credential structure
      */
@@ -157,6 +163,24 @@ public:
      * @return true if SSID found and password retrieved, false otherwise
      */
     bool getCredentialsForSSID(const String& ssid, String& outPassword);
+
+    /**
+     * @brief Persist preferred boot WiFi mode.
+     * @param mode Preferred boot mode ("ap" or pure "sta")
+     * @return true if saved successfully
+     */
+    bool setBootModePreference(BootModePreference mode);
+
+    /**
+     * @brief Load preferred boot WiFi mode.
+     * @return Preferred boot mode; AP if unset or invalid
+     */
+    BootModePreference getBootModePreference() const;
+
+    /**
+     * @brief Convert a boot mode preference to a stable string.
+     */
+    static const char* bootModePreferenceToString(BootModePreference mode);
 
 private:
     mutable Preferences m_prefs;

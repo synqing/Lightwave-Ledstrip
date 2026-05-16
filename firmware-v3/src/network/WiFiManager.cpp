@@ -68,18 +68,42 @@ bool WiFiManager::begin() {
     // Register WiFi event handler
     WiFi.onEvent(onWiFiEvent);
 
-    // Boot into AP-only mode. STA is ONLY activated via serial `wifi connect`.
-    // This prevents STA scanning/reconnection loops from destabilising the AP,
-    // which is the PRIMARY connection path for Tab5 and iOS clients.
+    // Production boots into AP-only mode. Validation builds may honour the
+    // persisted AP-or-STA preference, but AP and STA remain exclusive.
 #ifdef WIFI_AP_ONLY
     LW_LOGW("WIFI_AP_ONLY enabled - starting in AP mode only");
 #endif
-    // Minimal AP startup — matches restructure commit (5ee8aa84) proven working path.
-    // Uses bare 3-param softAP call identical to the original startSoftAP().
-    // AP-ONLY INVARIANT: K1 never enters STA mode. softAP() retry is for AP bring-up only.
-    // On persistent failure we reboot — a dark device with no radio is unrecoverable in
-    // the field, whereas a clean restart often clears transient radio/driver state.
+    bool bootSta = false;
+#ifndef WIFI_AP_ONLY
+    const auto bootMode = m_credentialsStorage.getBootModePreference();
+    if (bootMode == WiFiCredentialsStorage::BootModePreference::STA) {
+        if (hasAnyStaCandidates()) {
+            bootSta = true;
+            m_forceApOnly = false;
+            LW_LOGI("Boot WiFi mode preference: STA");
+        } else {
+            LW_LOGW("Boot WiFi mode preference is STA but no credentials are available; starting AP");
+            m_forceApOnly = true;
+        }
+    } else {
+        LW_LOGI("Boot WiFi mode preference: AP");
+        m_forceApOnly = true;
+    }
+#else
+    m_forceApOnly = true;
+#endif
+
+    if (bootSta) {
+        WiFi.setAutoReconnect(false);
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_MODE_STA);
+        setState(STATE_WIFI_INIT);
+    } else
     {
+        // Minimal AP startup — matches restructure commit (5ee8aa84) proven working path.
+        // Uses bare 3-param softAP call identical to the original startSoftAP().
+        // AP bring-up retry is AP-only; persistent failure reboots because a dark
+        // device with no radio is unrecoverable in the field.
         WiFi.mode(WIFI_MODE_AP);
 
         constexpr int kSoftApMaxAttempts = 3;
@@ -451,6 +475,10 @@ void WiFiManager::handleStateConnected() {
         }
         // Always update last-connected SSID for priority boost
         m_credentialsStorage.setLastConnectedSSID(m_ssid);
+        if (!m_forceApOnly) {
+            m_credentialsStorage.setBootModePreference(
+                WiFiCredentialsStorage::BootModePreference::STA);
+        }
         m_credentialsSaved = true;
     }
 
@@ -1257,6 +1285,7 @@ bool WiFiManager::requestAPOnly() {
     LW_LOGI("AP-only mode requested");
     m_forceApOnly = true;
     m_connectWithoutScan = false;
+    m_credentialsStorage.setBootModePreference(WiFiCredentialsStorage::BootModePreference::AP);
     WiFi.setAutoReconnect(false);
     WiFi.disconnect(true);
     startSoftAP();

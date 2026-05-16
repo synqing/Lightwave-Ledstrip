@@ -316,9 +316,9 @@ void startActorsAndPlugins(
 
 void initWiFiAP() {
 #if FEATURE_WEB_SERVER
-    // Start WiFiManager — boots into AP-only mode.
-    // STA is activated ONLY via serial `wifi connect` command.
-    LW_LOGI("Initializing WiFiManager (AP-only boot)...");
+    // Start WiFiManager. Production builds remain AP-only via WIFI_AP_ONLY;
+    // validation builds may honour the persisted AP-or-STA boot preference.
+    LW_LOGI("Initializing WiFiManager...");
     WIFI_MANAGER.setCredentials(
         NetworkConfig::WIFI_SSID_VALUE,
         NetworkConfig::WIFI_PASSWORD_VALUE
@@ -330,7 +330,7 @@ void initWiFiAP() {
     } else {
         LW_LOGI("WiFiManager: STARTED (AP: %s, IP: %s)",
                 NetworkConfig::AP_SSID, WiFi.softAPIP().toString().c_str());
-        LW_LOGI("Use serial 'wifi connect SSID PASS' to enable STA mode");
+        LW_LOGI("Use serial 'wifi connect SSID PASS' to enable pure STA mode in validation builds");
 
         // Initialise WiFi Credential Manager (for saved networks)
         if (!WIFI_CREDENTIALS.begin()) {

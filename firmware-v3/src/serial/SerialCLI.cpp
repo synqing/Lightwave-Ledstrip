@@ -2175,6 +2175,9 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
                 WiFi.getMode() == WIFI_MODE_AP ? "AP" :
                 WiFi.getMode() == WIFI_MODE_STA ? "STA" :
                 WiFi.getMode() == WIFI_MODE_APSTA ? "AP+STA" : "OFF");
+            Serial.printf("  Boot Preference: %s\n",
+                lightwaveos::network::WiFiCredentialsStorage::bootModePreferenceToString(
+                    WIFI_MANAGER.getBootModePreference()));
             if (WiFi.isConnected()) {
                 Serial.printf("  Connected: YES\n");
                 Serial.printf("  SSID: %s\n", WiFi.SSID().c_str());

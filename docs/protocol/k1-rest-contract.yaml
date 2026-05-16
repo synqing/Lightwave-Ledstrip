@@ -1001,15 +1001,15 @@ endpoints:
   /api/v1/network/status:
     method: GET
     auth: false
-    description: "Get network status"
+    description: "Get network status, including current AP/STA state and persisted bootModePreference (`ap` or `sta`)"
 
   /api/v1/network/sta/enable:
     method: POST
-    description: "Enable STA mode. Current shipping K1 is AP-only via WIFI_AP_ONLY build flag; this endpoint is gated. Pure-STA path under re-validation via _sta_validation env (commit 11e040d6). Do NOT use to enable concurrent AP+STA — that is the genuine ESP-IDF 802.11 bug surface. See _FORENSIC_WIFI_REPORT.md."
+    description: "Enable pure STA mode. Current shipping K1 is AP-only via WIFI_AP_ONLY build flag; this endpoint is gated. Pure-STA path is re-validated through the _sta_validation env; commit 0987ba67 restored AP OR STA semantics. Do NOT use to enable concurrent AP+STA — that is the genuine ESP-IDF 802.11 bug surface. See _FORENSIC_WIFI_REPORT.md."
 
   /api/v1/network/ap/enable:
     method: POST
-    description: "Enable AP mode"
+    description: "Enable AP mode and persist AP as the preferred boot WiFi mode"
 
   /api/v1/network/networks:
     method: GET
@@ -1021,7 +1021,7 @@ endpoints:
 
   /api/v1/network/connect:
     method: POST
-    description: "Connect K1 to a network in STA mode. Current shipping K1 is AP-only; this endpoint is gated until pure-STA path is re-validated via the _sta_validation build env (commit 11e040d6). See _FORENSIC_WIFI_REPORT.md."
+    description: "Connect K1 to a network in pure STA mode. Current shipping K1 is AP-only; this endpoint is gated in WIFI_AP_ONLY builds and validated through the _sta_validation build env. Successful STA connection persists `sta` as the preferred boot WiFi mode. See _FORENSIC_WIFI_REPORT.md."
 
   /api/v1/network/disconnect:
     method: POST

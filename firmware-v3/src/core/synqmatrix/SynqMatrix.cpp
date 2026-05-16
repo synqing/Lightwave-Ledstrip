@@ -146,6 +146,12 @@ void SynqMatrix::reset() {
     m_audioConfidenceBelowFloorSinceMs.store(0, std::memory_order_release);
     m_audioConfidenceRecoveredSinceMs.store(0, std::memory_order_release);
     m_audioConfidenceBelowFloorMs.store(0, std::memory_order_release);
+    m_missedPredictionCount.store(0, std::memory_order_release);
+    m_tempoWinnerChanges.store(0, std::memory_order_release);
+    m_lastSourceMissedPredictionCount.store(0, std::memory_order_release);
+    m_lastSourceTempoWinnerChanges.store(0, std::memory_order_release);
+    m_lastTimebaseTelemetryHopSeq.store(0, std::memory_order_release);
+    m_timebaseTelemetryPrimed.store(false, std::memory_order_release);
     m_lastDecisionAtMs.store(0, std::memory_order_release);
     m_lastSwitchAtMs.store(0, std::memory_order_release);
     m_stateAgeMs.store(0, std::memory_order_release);
@@ -202,6 +208,12 @@ void SynqMatrix::resetCounters() {
     m_failures.store(0, std::memory_order_release);
     m_rmtErrors.store(0, std::memory_order_release);
     m_underruns.store(0, std::memory_order_release);
+    m_missedPredictionCount.store(0, std::memory_order_release);
+    m_tempoWinnerChanges.store(0, std::memory_order_release);
+    m_lastSourceMissedPredictionCount.store(0, std::memory_order_release);
+    m_lastSourceTempoWinnerChanges.store(0, std::memory_order_release);
+    m_lastTimebaseTelemetryHopSeq.store(0, std::memory_order_release);
+    m_timebaseTelemetryPrimed.store(false, std::memory_order_release);
     m_switchWindowStartMs.store(0, std::memory_order_release);
     m_switchesInWindow.store(0, std::memory_order_release);
     m_switchWindowRemainingMs.store(0, std::memory_order_release);
@@ -291,10 +303,8 @@ SynqMatrixStatus SynqMatrix::getStatus() const {
     status.automaticEffectSwitches = m_automaticEffectSwitches.load(std::memory_order_acquire);
     status.coasting = m_coasting.load(std::memory_order_acquire);
     status.audioConfidenceBelowFloorMs = m_audioConfidenceBelowFloorMs.load(std::memory_order_acquire);
-    // V0 receives ControlBusFrame/MusicalGridSnapshot summaries, not ESV11
-    // winner-bin or beat-prediction identity. Real counters are V1 tempo work.
-    status.missedPredictionCount = 0;
-    status.tempoWinnerChanges = 0;
+    status.missedPredictionCount = m_missedPredictionCount.load(std::memory_order_acquire);
+    status.tempoWinnerChanges = m_tempoWinnerChanges.load(std::memory_order_acquire);
     status.lastDecisionAtMs = m_lastDecisionAtMs.load(std::memory_order_acquire);
     status.lastSwitchAtMs = m_lastSwitchAtMs.load(std::memory_order_acquire);
     status.stateAgeMs = m_stateAgeMs.load(std::memory_order_acquire);
@@ -390,6 +400,12 @@ void SynqMatrix::restoreRuntimeState(const SynqMatrixRuntimeState& state) {
     m_audioConfidenceBelowFloorMs.store(state.status.audioConfidenceBelowFloorMs, std::memory_order_release);
     m_audioConfidenceBelowFloorSinceMs.store(0, std::memory_order_release);
     m_audioConfidenceRecoveredSinceMs.store(0, std::memory_order_release);
+    m_missedPredictionCount.store(state.status.missedPredictionCount, std::memory_order_release);
+    m_tempoWinnerChanges.store(state.status.tempoWinnerChanges, std::memory_order_release);
+    m_lastSourceMissedPredictionCount.store(0, std::memory_order_release);
+    m_lastSourceTempoWinnerChanges.store(0, std::memory_order_release);
+    m_lastTimebaseTelemetryHopSeq.store(0, std::memory_order_release);
+    m_timebaseTelemetryPrimed.store(false, std::memory_order_release);
     m_lastDecisionAtMs.store(state.status.lastDecisionAtMs, std::memory_order_release);
     m_lastSwitchAtMs.store(state.status.lastSwitchAtMs, std::memory_order_release);
     m_stateAgeMs.store(state.status.stateAgeMs, std::memory_order_release);
@@ -561,6 +577,7 @@ bool SynqMatrix::tick(const audio::ControlBusFrame& frame,
     m_failures.store(context.health.failures, std::memory_order_release);
     m_rmtErrors.store(context.health.rmtErrors, std::memory_order_release);
     m_underruns.store(context.health.underruns, std::memory_order_release);
+    consumeTimebaseTelemetry(frame, audioAvailable);
     updateAudioSummary(frame, audioAvailable);
     updateRemainingGates(nowMs);
     updateTransitionTelemetry(nowMs);
@@ -847,6 +864,7 @@ bool SynqMatrix::apply(const audio::ControlBusFrame& frame,
     const SynqMatrixFeatureSnapshot features = buildFeatureSnapshot(frame, grid, audioAvailable, dtSeconds);
 
     m_activeEffectId.store(params.effectId, std::memory_order_release);
+    consumeTimebaseTelemetry(frame, audioAvailable);
     updateAudioSummary(frame, audioAvailable);
     updateRemainingGates(nowMs);
     updateTransitionTelemetry(nowMs);
@@ -1250,6 +1268,55 @@ bool SynqMatrix::updateConfidenceOperatingPhase(float confidence,
         return false;
     }
     return true;
+}
+
+void SynqMatrix::consumeTimebaseTelemetry(const audio::ControlBusFrame& frame, bool audioAvailable) {
+    if (!audioAvailable) {
+        return;
+    }
+
+    const uint32_t hopSeq = frame.hop_seq;
+    if (hopSeq != 0 &&
+        hopSeq == m_lastTimebaseTelemetryHopSeq.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    const uint32_t sourceMisses = frame.missedPredictionCount;
+    const uint32_t sourceWinnerChanges = frame.tempoWinnerChanges;
+    if (!m_timebaseTelemetryPrimed.load(std::memory_order_acquire)) {
+        m_lastSourceMissedPredictionCount.store(sourceMisses, std::memory_order_release);
+        m_lastSourceTempoWinnerChanges.store(sourceWinnerChanges, std::memory_order_release);
+        if (hopSeq != 0) {
+            m_lastTimebaseTelemetryHopSeq.store(hopSeq, std::memory_order_release);
+        }
+        m_timebaseTelemetryPrimed.store(true, std::memory_order_release);
+        return;
+    }
+
+    const uint32_t previousMisses =
+        m_lastSourceMissedPredictionCount.load(std::memory_order_acquire);
+    const uint32_t previousWinnerChanges =
+        m_lastSourceTempoWinnerChanges.load(std::memory_order_acquire);
+
+    const uint32_t missDelta =
+        (sourceMisses >= previousMisses) ? (sourceMisses - previousMisses) : sourceMisses;
+    const uint32_t winnerDelta =
+        (sourceWinnerChanges >= previousWinnerChanges)
+            ? (sourceWinnerChanges - previousWinnerChanges)
+            : sourceWinnerChanges;
+
+    if (missDelta > 0) {
+        m_missedPredictionCount.fetch_add(missDelta, std::memory_order_acq_rel);
+    }
+    if (winnerDelta > 0) {
+        m_tempoWinnerChanges.fetch_add(winnerDelta, std::memory_order_acq_rel);
+    }
+
+    m_lastSourceMissedPredictionCount.store(sourceMisses, std::memory_order_release);
+    m_lastSourceTempoWinnerChanges.store(sourceWinnerChanges, std::memory_order_release);
+    if (hopSeq != 0) {
+        m_lastTimebaseTelemetryHopSeq.store(hopSeq, std::memory_order_release);
+    }
 }
 
 void SynqMatrix::updateAudioSummary(const audio::ControlBusFrame& frame, bool audioAvailable) {

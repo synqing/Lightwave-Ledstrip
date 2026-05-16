@@ -393,6 +393,7 @@ private:
     bool updateConfidenceOperatingPhase(float confidence,
                                         bool audioAvailable,
                                         uint32_t nowMs);
+    void consumeTimebaseTelemetry(const audio::ControlBusFrame& frame, bool audioAvailable);
     void updateAudioSummary(const audio::ControlBusFrame& frame, bool audioAvailable);
 #endif
     SynqMatrixIntent planIntent(SynqMatrixState state) const;
@@ -454,6 +455,12 @@ private:
     std::atomic<uint32_t> m_audioConfidenceBelowFloorSinceMs{0};
     std::atomic<uint32_t> m_audioConfidenceRecoveredSinceMs{0};
     std::atomic<uint32_t> m_audioConfidenceBelowFloorMs{0};
+    std::atomic<uint32_t> m_missedPredictionCount{0};
+    std::atomic<uint32_t> m_tempoWinnerChanges{0};
+    std::atomic<uint32_t> m_lastSourceMissedPredictionCount{0};
+    std::atomic<uint32_t> m_lastSourceTempoWinnerChanges{0};
+    std::atomic<uint32_t> m_lastTimebaseTelemetryHopSeq{0};
+    std::atomic<bool> m_timebaseTelemetryPrimed{false};
     std::atomic<uint32_t> m_lastDecisionAtMs{0};
     std::atomic<uint32_t> m_lastSwitchAtMs{0};
     std::atomic<uint32_t> m_stateAgeMs{0};

@@ -4,9 +4,11 @@
 
 #include <unity.h>
 
+#include "../../src/audio/contracts/ControlBus.h"
 #include "../../src/core/synqmatrix/SynqMatrix.h"
 
 using lightwaveos::audio::ControlBusFrame;
+using lightwaveos::audio::TimebaseTelemetryTracker;
 using lightwaveos::audio::MusicalGridSnapshot;
 using lightwaveos::INVALID_EFFECT_ID;
 using lightwaveos::synqmatrix::SynqMatrixClassificationReason;
@@ -745,6 +747,102 @@ void test_synq_matrix_coast_leaves_incoming_params_unchanged_and_suppresses_swit
     TEST_ASSERT_EQUAL_UINT32(0, status.automaticEffectSwitches);
 }
 
+void test_synq_matrix_timebase_tracker_counts_winner_changes_only_on_identity_change() {
+    TimebaseTelemetryTracker tracker;
+    ControlBusFrame frame = baseFrame();
+    frame.t.monotonic_us = 1000000;
+    frame.tempoWinnerBinValid = true;
+    frame.tempoWinnerBin = 40;
+    tracker.update(frame, true);
+    TEST_ASSERT_EQUAL_UINT32(0, frame.tempoWinnerChanges);
+
+    frame.t.monotonic_us = 1020000;
+    tracker.update(frame, true);
+    TEST_ASSERT_EQUAL_UINT32(0, frame.tempoWinnerChanges);
+
+    frame.t.monotonic_us = 1040000;
+    frame.tempoWinnerBin = 41;
+    tracker.update(frame, true);
+    TEST_ASSERT_EQUAL_UINT32(1, frame.tempoWinnerChanges);
+}
+
+void test_synq_matrix_timebase_tracker_counts_missed_predictions_only_when_unmatched() {
+    TimebaseTelemetryTracker tracker;
+    ControlBusFrame frame = baseFrame();
+    frame.audioConfidence = 1.0f;
+    frame.es_tempo_confidence = 0.8f;
+
+    frame.t.monotonic_us = 1000000;
+    frame.es_beat_tick = true;
+    tracker.update(frame, true);
+    TEST_ASSERT_EQUAL_UINT32(0, frame.missedPredictionCount);
+
+    frame.t.monotonic_us = 1130000;
+    frame.es_beat_tick = false;
+    tracker.update(frame, true);
+    TEST_ASSERT_EQUAL_UINT32(1, frame.missedPredictionCount);
+
+    frame.t.monotonic_us = 2000000;
+    frame.es_beat_tick = true;
+    tracker.update(frame, true);
+    TEST_ASSERT_EQUAL_UINT32(1, frame.missedPredictionCount);
+
+    frame.t.monotonic_us = 2060000;
+    frame.es_beat_tick = false;
+    frame.kickTrigger = true;
+    tracker.update(frame, true);
+    TEST_ASSERT_EQUAL_UINT32(1, frame.missedPredictionCount);
+
+    frame.t.monotonic_us = 3000000;
+    frame.kickTrigger = false;
+    frame.es_beat_tick = true;
+    frame.es_tempo_confidence = 0.1f;
+    tracker.update(frame, true);
+
+    frame.t.monotonic_us = 3130000;
+    frame.es_beat_tick = false;
+    tracker.update(frame, true);
+    TEST_ASSERT_EQUAL_UINT32(1, frame.missedPredictionCount);
+}
+
+void test_synq_matrix_consumes_timebase_counter_deltas_once_per_hop() {
+    SynqMatrix director;
+    SynqMatrixConfig cfg = makeConfig(SynqMatrixMode::Assist, false);
+    cfg.confidenceFloor = 0.0f;
+    restoreReadyDirector(director, cfg, SynqMatrixState::Dense);
+
+    ControlBusFrame frame = frameForState(SynqMatrixState::Dense);
+    frame.audioConfidence = 1.0f;
+    frame.hop_seq = 99;
+    SynqMatrixParams params = baseParams();
+    TEST_ASSERT_TRUE(director.apply(frame, readyBoundaryGrid(), true, 1.0f / 120.0f, 10000, params));
+    auto status = director.getStatus();
+    TEST_ASSERT_EQUAL_UINT32(0, status.tempoWinnerChanges);
+    TEST_ASSERT_EQUAL_UINT32(0, status.missedPredictionCount);
+
+    frame.hop_seq = 100;
+    frame.tempoWinnerChanges = 2;
+    frame.missedPredictionCount = 1;
+    TEST_ASSERT_TRUE(director.apply(frame, readyBoundaryGrid(), true, 1.0f / 120.0f, 10008, params));
+    status = director.getStatus();
+    TEST_ASSERT_EQUAL_UINT32(2, status.tempoWinnerChanges);
+    TEST_ASSERT_EQUAL_UINT32(1, status.missedPredictionCount);
+
+    TEST_ASSERT_TRUE(director.apply(frame, readyBoundaryGrid(), true, 1.0f / 120.0f, 10016, params));
+    status = director.getStatus();
+    TEST_ASSERT_EQUAL_UINT32(2, status.tempoWinnerChanges);
+    TEST_ASSERT_EQUAL_UINT32(1, status.missedPredictionCount);
+
+    frame.hop_seq = 101;
+    frame.tempoWinnerChanges = 5;
+    frame.missedPredictionCount = 4;
+    TEST_ASSERT_TRUE(director.apply(frame, readyBoundaryGrid(), true, 1.0f / 120.0f, 10024, params));
+    status = director.getStatus();
+    TEST_ASSERT_EQUAL_UINT32(5, status.tempoWinnerChanges);
+    TEST_ASSERT_EQUAL_UINT32(4, status.missedPredictionCount);
+    TEST_ASSERT_EQUAL_UINT32(0, status.automaticEffectSwitches);
+}
+
 void test_synq_matrix_low_confidence_pre_coast_blocks_state_promotion() {
     SynqMatrix director;
     SynqMatrixConfig cfg = makeConfig(SynqMatrixMode::Director, true);
@@ -1024,6 +1122,9 @@ int main() {
     RUN_TEST(test_synq_matrix_confidence_floor_remains_single_config_control);
     RUN_TEST(test_synq_matrix_enters_and_exits_coast_on_audio_confidence_duration);
     RUN_TEST(test_synq_matrix_coast_leaves_incoming_params_unchanged_and_suppresses_switches);
+    RUN_TEST(test_synq_matrix_timebase_tracker_counts_winner_changes_only_on_identity_change);
+    RUN_TEST(test_synq_matrix_timebase_tracker_counts_missed_predictions_only_when_unmatched);
+    RUN_TEST(test_synq_matrix_consumes_timebase_counter_deltas_once_per_hop);
     RUN_TEST(test_synq_matrix_low_confidence_pre_coast_blocks_state_promotion);
     RUN_TEST(test_synq_matrix_policy_and_string_telemetry_helpers);
     RUN_TEST(test_synq_matrix_transition_telemetry_blocks_switch_until_complete);

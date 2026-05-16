@@ -656,6 +656,7 @@ private:
     // ES backend + adapter
     esv11::EsV11Backend m_esBackend;
     esv11::EsV11Adapter m_esAdapter;
+    TimebaseTelemetryTracker m_timebaseTelemetry;
     float m_stmFftBuffer[ControlBusRawInput::BINS_256_COUNT * 2U] = {0.0f};
     float m_stmBins256[ControlBusRawInput::BINS_256_COUNT] = {0.0f};
     uint32_t m_esHopSeq = 0;

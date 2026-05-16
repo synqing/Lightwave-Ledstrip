@@ -419,6 +419,8 @@ void EsV11Adapter::buildFrame(lightwaveos::audio::ControlBusFrame& out,
     out.es_tempo_confidence = clamp01(es.tempo_confidence);
     out.es_beat_tick = es.beat_tick;
     out.es_beat_strength = clamp01(es.beat_strength);
+    out.tempoWinnerBinValid = es.tempo_winner_bin_valid;
+    out.tempoWinnerBin = es.tempo_winner_bin;
 
     // Phase conversion: ES phase in radians [-pi, pi] -> [0,1)
     float phase01 = (es.phase_radians + static_cast<float>(M_PI)) / (2.0f * static_cast<float>(M_PI));

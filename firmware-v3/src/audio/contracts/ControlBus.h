@@ -222,6 +222,10 @@ struct ControlBusFrame {
     float es_phase01_at_audio_t = 0.0f;  // Phase at frame timestamp t, [0,1)
     uint8_t es_beat_in_bar = 0;
     bool es_downbeat_tick = false;
+    bool tempoWinnerBinValid = false;    ///< True when ESV11 stable tempo winner identity is valid
+    uint16_t tempoWinnerBin = 0;         ///< Stabilised ESV11 tempo winner bin, post-hysteresis
+    uint32_t tempoWinnerChanges = 0;     ///< Cumulative producer-side stable winner-bin changes
+    uint32_t missedPredictionCount = 0;  ///< Cumulative V1 beat-alignment diagnostic misses
 
     // -----------------------------------------------------------------------
     // ES v1.1_320 raw signals (for ES reference show parity)
@@ -260,6 +264,83 @@ struct ControlBusFrame {
 
 static_assert(sizeof(ControlBusRawInput) <= 5120, "ControlBusRawInput must remain within 5 KB");
 static_assert(sizeof(ControlBusFrame) <= 5120, "ControlBusFrame must remain within 5 KB");
+
+static constexpr uint32_t kTimebaseBeatAlignmentWindowMs = 120;
+
+/**
+ * @brief Producer-side V1 music-timebase telemetry.
+ *
+ * The 120 ms window is an uncalibrated V1 diagnostic tolerance. It is not a
+ * product truth and must not drive SynqMatrix behaviour without corpus evidence.
+ */
+class TimebaseTelemetryTracker {
+public:
+    void reset() {
+        m_lastWinnerValid = false;
+        m_lastWinnerBin = 0;
+        m_tempoWinnerChanges = 0;
+        m_missedPredictionCount = 0;
+        m_pendingPrediction = false;
+        m_pendingPredictionMs = 0;
+        m_lastObservedMs = 0;
+        m_haveObserved = false;
+    }
+
+    void update(ControlBusFrame& frame, bool audioAvailable) {
+        const uint32_t nowMs = static_cast<uint32_t>(frame.t.monotonic_us / 1000ULL);
+
+        if (audioAvailable && frame.tempoWinnerBinValid) {
+            if (m_lastWinnerValid && frame.tempoWinnerBin != m_lastWinnerBin) {
+                ++m_tempoWinnerChanges;
+            }
+            m_lastWinnerValid = true;
+            m_lastWinnerBin = frame.tempoWinnerBin;
+        }
+
+        const bool observed = audioAvailable && (frame.kickTrigger || frame.onsetEvent > 0.0f);
+        if (observed) {
+            m_lastObservedMs = nowMs;
+            m_haveObserved = true;
+            if (m_pendingPrediction && elapsedMs(nowMs, m_pendingPredictionMs) <= kTimebaseBeatAlignmentWindowMs) {
+                m_pendingPrediction = false;
+            }
+        }
+
+        const bool predicted = audioAvailable && frame.es_beat_tick &&
+                               frame.es_tempo_confidence >= 0.25f &&
+                               frame.audioConfidence >= 0.20f;
+        if (predicted) {
+            const bool matchedRecent =
+                m_haveObserved && elapsedMs(nowMs, m_lastObservedMs) <= kTimebaseBeatAlignmentWindowMs;
+            if (!matchedRecent) {
+                m_pendingPrediction = true;
+                m_pendingPredictionMs = nowMs;
+            }
+        }
+
+        if (m_pendingPrediction && elapsedMs(nowMs, m_pendingPredictionMs) > kTimebaseBeatAlignmentWindowMs) {
+            ++m_missedPredictionCount;
+            m_pendingPrediction = false;
+        }
+
+        frame.tempoWinnerChanges = m_tempoWinnerChanges;
+        frame.missedPredictionCount = m_missedPredictionCount;
+    }
+
+private:
+    static uint32_t elapsedMs(uint32_t nowMs, uint32_t thenMs) {
+        return nowMs - thenMs;
+    }
+
+    bool m_lastWinnerValid = false;
+    uint16_t m_lastWinnerBin = 0;
+    uint32_t m_tempoWinnerChanges = 0;
+    uint32_t m_missedPredictionCount = 0;
+    bool m_pendingPrediction = false;
+    uint32_t m_pendingPredictionMs = 0;
+    uint32_t m_lastObservedMs = 0;
+    bool m_haveObserved = false;
+};
 
 /**
  * @brief Lookahead buffer for spike detection (Sensory Bridge pattern).

@@ -303,6 +303,8 @@ void EsV11Backend::refreshOutputs(uint64_t now_us)
 
     const float bpm = static_cast<float>(TEMPO_LOW + top_i);
     out.top_bpm = bpm;
+    out.tempo_winner_bin_valid = true;
+    out.tempo_winner_bin = top_i;
 
     // Composite confidence from three independent evidence sources:
     //  1. Raw vendor confidence (spectral dominance: peak/sum of tempi bank)

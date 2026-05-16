@@ -34,6 +34,8 @@ struct EsV11Outputs {
     // Tempo/beat (derived from ES tempi bank)
     float top_bpm = 120.0f;
     float tempo_confidence = 0.0f;          // 0..1
+    bool tempo_winner_bin_valid = false;
+    uint16_t tempo_winner_bin = 0;          // Stabilised post-hysteresis tempi-bank winner
     float phase_radians = 0.0f;             // [-pi, pi]
     bool beat_tick = false;                 // True on wrap event of selected tempo
     float beat_strength = 0.0f;             // 0..1

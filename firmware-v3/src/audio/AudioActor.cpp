@@ -1111,6 +1111,7 @@ void AudioActor::onTick()
 #else
     frame.scene = kDefaultSceneParameters;
 #endif
+    m_timebaseTelemetry.update(frame, true);
 #if FEATURE_TRACE_AUDIO_DSP
     TRACE_END();  // controlbus_build
 #endif

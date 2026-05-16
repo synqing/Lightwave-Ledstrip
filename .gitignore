@@ -64,6 +64,10 @@ wifi_credentials.ini
 # Vite dependency pre-bundle cache (regenerated locally)
 lightwave-dashboard/.vite/
 
+# Lane D raw video captures are local evidence artefacts; manifests and serial
+# logs are tracked, but MOV payloads exceed normal Git object limits.
+firmware-v3/docs/research/k1_songaware_lane_d_evidence/**/*.mov
+
 # iOS build artifacts and design tool outputs
 lightwave-ios-v2/build/
 lightwave-ios-v2/docs/Rive/

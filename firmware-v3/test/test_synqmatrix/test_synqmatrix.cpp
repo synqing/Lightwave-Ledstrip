@@ -605,6 +605,33 @@ void test_synq_matrix_assist_mode_changes_controls_without_switching() {
     TEST_ASSERT_EQUAL_UINT32(0, status.automaticEffectSwitches);
 }
 
+void test_synq_matrix_no_audio_clears_stale_parameter_action() {
+    SynqMatrix director;
+    restoreReadyDirector(director, makeConfig(SynqMatrixMode::Assist, false), SynqMatrixState::Drop);
+
+    ControlBusFrame frame = frameForState(SynqMatrixState::Drop);
+    MusicalGridSnapshot grid = readyBoundaryGrid();
+    SynqMatrixParams params = baseParams(0x1302);
+
+    TEST_ASSERT_TRUE(director.apply(frame, grid, true, 0.050f, 10000, params));
+    auto status = director.getStatus();
+    TEST_ASSERT_EQUAL(SynqMatrixLastAction::ParameterUpdate, status.lastAction);
+    TEST_ASSERT_EQUAL(SynqMatrixSuppressedReason::None, status.suppressedReason);
+    TEST_ASSERT_EQUAL_UINT32(1, status.parameterUpdates);
+
+    const SynqMatrixParams before = params;
+    TEST_ASSERT_FALSE(director.apply(frame, grid, false, 1.0f / 120.0f, 10008, params));
+    status = director.getStatus();
+
+    TEST_ASSERT_EQUAL_UINT8(before.speed, params.speed);
+    TEST_ASSERT_EQUAL_UINT8(before.intensity, params.intensity);
+    TEST_ASSERT_EQUAL_UINT8(before.complexity, params.complexity);
+    TEST_ASSERT_EQUAL(SynqMatrixLastAction::None, status.lastAction);
+    TEST_ASSERT_EQUAL(SynqMatrixSuppressedReason::NoAudio, status.suppressedReason);
+    TEST_ASSERT_EQUAL_UINT32(1, status.parameterUpdates);
+    TEST_ASSERT_EQUAL_UINT32(0, status.automaticEffectSwitches);
+}
+
 void test_synq_matrix_director_apply_is_parameter_only_and_never_switches_effect() {
     SynqMatrix director;
     restoreReadyDirector(director, makeConfig(), SynqMatrixState::Dense);
@@ -1124,6 +1151,7 @@ int main() {
     RUN_TEST(test_synq_matrix_health_gate_and_recovery_window_suppress_switches);
     RUN_TEST(test_synq_matrix_restore_runtime_state_and_reset_counters);
     RUN_TEST(test_synq_matrix_assist_mode_changes_controls_without_switching);
+    RUN_TEST(test_synq_matrix_no_audio_clears_stale_parameter_action);
     RUN_TEST(test_synq_matrix_director_apply_is_parameter_only_and_never_switches_effect);
     RUN_TEST(test_synq_matrix_low_confidence_suppresses_activity);
     RUN_TEST(test_synq_matrix_confidence_floor_remains_single_config_control);

@@ -1029,6 +1029,7 @@ public:
     uint8_t m_synqMatrixDirectorTargetPalette = 0xFF;
     bool m_synqMatrixDirectorApplyColourModifier = false;
     uint8_t m_synqMatrixDirectorTargetColourModifier = 0;
+    uint8_t m_synqMatrixDirectorSpeedCap = 0xFF;
 
     /**
      * MusicalGrid PLL - owned by renderer for 120 FPS Tick()

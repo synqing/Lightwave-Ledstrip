@@ -93,6 +93,17 @@ enum class SynqMatrixActionPlan : uint8_t {
     EffectSwitch = 6
 };
 
+// Director Effect Registry markers. Captain's locked semantic markers govern
+// which Tier 1 effects the Director may select per state. ATMOSPHERE is the
+// passive fallback pool, not an active high-energy marker.
+enum class DirectorMarker : uint8_t {
+    None = 0,
+    Groove = 1,
+    Tension = 2,
+    Impact = 3,
+    Atmosphere = 4
+};
+
 enum class SynqMatrixIntent : uint8_t {
     QuietHold = 0,
     CalmHold = 1,
@@ -258,6 +269,10 @@ struct SynqMatrixSwitchRequest {
     // valid hue, so a separate flag is required.
     bool applyColourModifier = false;
     uint8_t targetColourModifier = 0;
+    // Director Effect Registry: per-effect speed cap. 0xFF = no cap. When set,
+    // the renderer clamps m_speed down (never raises) so registry-curated slow
+    // effects don't get over-driven by user speed slider state at switch time.
+    uint8_t speedCap = 0xFF;
 };
 
 struct SynqMatrixPolicySnapshot {
@@ -426,6 +441,10 @@ private:
     bool wouldCreateAbaSwitch(uint16_t activeEffectId, uint16_t targetEffectId, uint32_t nowMs) const;
     bool healthIsDegraded(SynqMatrixHealthCounters health) const;
     float scorePolicy(SynqMatrixState state, float confidence, const SynqMatrixPolicySnapshot& policy) const;
+    // Director Effect Registry: pick an approved effect for the current state
+    // per Captain's default-deny allowlist (GROOVE/TENSION/IMPACT/ATMOSPHERE).
+    // Returns INVALID_EFFECT_ID if no candidate matches (e.g. Unknown state).
+    uint16_t selectDirectorEffect(SynqMatrixState state, uint16_t activeEffectId);
 
     std::atomic<bool> m_enabled{false};
     std::atomic<uint8_t> m_mode{static_cast<uint8_t>(SynqMatrixMode::Off)};
@@ -518,6 +537,13 @@ private:
     std::atomic<uint32_t> m_healthCleanForMs{0};
     std::atomic<uint32_t> m_healthCleanWindowRemainingMs{0};
     std::atomic<uint16_t> m_policyAllowMask{0x01FF};
+
+    // Director Effect Registry: per-state round-robin index into kDirectorRegistry[].
+    // Provides variety across repeat visits to the same SynqMatrixState. Stateless
+    // across reboots (acceptable — boot starts at index 0 per state). Index [0]
+    // tracks Unknown state but is unused (selectDirectorEffect returns INVALID
+    // for Unknown).
+    std::atomic<uint8_t> m_directorRoundRobin[9]{};
 };
 
 const char* synqMatrixModeName(SynqMatrixMode mode);
@@ -527,6 +553,10 @@ const char* synqMatrixSuppressedReasonName(SynqMatrixSuppressedReason reason);
 const char* synqMatrixStateName(SynqMatrixState state);
 const char* synqMatrixLastActionName(SynqMatrixLastAction action);
 const char* synqMatrixActionPlanName(SynqMatrixActionPlan action);
+const char* directorMarkerName(DirectorMarker marker);
+// Look up the marker of an effect in the Director Effect Registry. Returns
+// DirectorMarker::None for effects not in the registry (e.g. boot baseline).
+DirectorMarker directorMarkerForEffect(uint16_t effectId);
 const char* synqMatrixIntentName(SynqMatrixIntent intent);
 const char* synqMatrixBoundaryGateName(SynqMatrixBoundaryGate gate);
 const char* synqMatrixSwitchReasonName(SynqMatrixSwitchReason reason);

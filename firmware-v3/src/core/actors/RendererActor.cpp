@@ -1617,6 +1617,7 @@ void RendererActor::queueSynqMatrixTransition(
     m_synqMatrixDirectorTargetPalette = request.targetPaletteIndex;
     m_synqMatrixDirectorApplyColourModifier = request.applyColourModifier;
     m_synqMatrixDirectorTargetColourModifier = request.targetColourModifier;
+    m_synqMatrixDirectorSpeedCap = request.speedCap;
 }
 
 bool RendererActor::processSynqMatrixTransition(uint32_t nowMs)
@@ -1633,6 +1634,7 @@ bool RendererActor::processSynqMatrixTransition(uint32_t nowMs)
     const uint8_t targetPalette = m_synqMatrixDirectorTargetPalette;
     const bool applyColourModifier = m_synqMatrixDirectorApplyColourModifier;
     const uint8_t targetColourModifier = m_synqMatrixDirectorTargetColourModifier;
+    const uint8_t speedCap = m_synqMatrixDirectorSpeedCap;
     m_synqMatrixDirectorTransitionQueued = false;
 
     auto& director = synqmatrix::SynqMatrix::instance();
@@ -1694,6 +1696,16 @@ bool RendererActor::processSynqMatrixTransition(uint32_t nowMs)
         LW_LOGI("Director hue: %u -> %u", prevHue, m_hue);
     }
 
+    // Director Effect Registry speed cap: clamp m_speed DOWN to the registry-
+    // specified cap if the user's current speed exceeds it. Never raises
+    // m_speed. Two effects carry caps: 0x0D02 caps at 14, 0x0B01 caps at 1.
+    if (speedCap != 0xFF && m_speed > speedCap) {
+        const uint8_t prevSpeed = m_speed;
+        handleSetSpeed(speedCap);
+        LW_LOGI("Director speed cap: %u -> %u (effect 0x%04X cap=%u)",
+                prevSpeed, m_speed, targetEffect, speedCap);
+    }
+
     const uint32_t appliedAtMs = millis();
     director.notifySwitchApplied(previousEffect,
                                  targetEffect,
@@ -1711,14 +1723,23 @@ bool RendererActor::processSynqMatrixTransition(uint32_t nowMs)
         m_synqMatrixDirectorTransitionActiveNotified = false;
     }
 
-    LW_LOGI("SynqMatrix Director transition state=%s confidence=%.3f prev=0x%04X target=0x%04X family=%s language=%s reason=%s",
-            synqmatrix::synqMatrixStateName(director.getStatus().currentState),
-            director.getStatus().confidence,
-            previousEffect,
-            targetEffect,
-            targetFamily,
-            targetLanguage,
-            reason);
+    {
+        const synqmatrix::DirectorMarker marker =
+            synqmatrix::directorMarkerForEffect(static_cast<uint16_t>(targetEffect));
+        const char* source = (marker == synqmatrix::DirectorMarker::None)
+                                 ? "fallback"
+                                 : "registry";
+        LW_LOGI("SynqMatrix Director transition state=%s confidence=%.3f prev=0x%04X target=0x%04X marker=%s source=%s family=%s language=%s reason=%s",
+                synqmatrix::synqMatrixStateName(director.getStatus().currentState),
+                director.getStatus().confidence,
+                previousEffect,
+                targetEffect,
+                synqmatrix::directorMarkerName(marker),
+                source,
+                targetFamily,
+                targetLanguage,
+                reason);
+    }
     return true;
 #else
     director.notifySwitchRejected(targetEffect, nowMs, synqmatrix::SynqMatrixSuppressedReason::SwitchingDisabled);

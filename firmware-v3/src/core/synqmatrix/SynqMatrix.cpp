@@ -52,17 +52,102 @@ struct DirectorPolicy {
     uint8_t targetColourModifier;
 };
 
+// Per-state default policy. Each effectId MUST be a member of Captain's
+// approved Tier 1 registry (kDirectorRegistry below) so default-deny holds
+// even when selectDirectorEffect falls back to the per-state default.
+// Unknown is the only exception: EID_SB_K1_WAVEFORM is the boot/baseline
+// effect and Director never auto-selects on Unknown (returns INVALID).
+// Palette + hue per-state remain intact — they describe the state's vibe and
+// are applied regardless of which registry effect the selector picks.
 static constexpr DirectorPolicy kMatrix[] = {
-    {SynqMatrixState::Unknown,    EID_SB_K1_WAVEFORM,      "baseline",         "k1_waveform_restore_baseline", SynqMatrixSwitchReason::None,              1.0f,  0xFF, false,   0},
-    {SynqMatrixState::Silence,    EID_MODAL_RESONANCE,     "interference",     "modal_low_density_hold",       SynqMatrixSwitchReason::AmbientPosture,    1.0f,  0xFF, false,   0},
-    {SynqMatrixState::Ambient,    EID_MODAL_RESONANCE,     "interference",     "calm_modal_resonance",         SynqMatrixSwitchReason::AmbientPosture,    0.30f, 4,    true,  160},  // cool blue
-    {SynqMatrixState::Steady,     EID_LGP_HOLOGRAPHIC,     "interference",     "flagship_holographic_depth",   SynqMatrixSwitchReason::SteadyReadability, 0.32f, 2,    true,   96},  // cool teal
-    {SynqMatrixState::Build,      EID_LGP_WAVE_COLLISION,  "interference",     "colliding_wave_pressure",      SynqMatrixSwitchReason::BuildPressure,     0.45f, 7,    true,   32},  // warm orange — pressure
-    {SynqMatrixState::Drop,       EID_LGP_PHOTONIC_CRYSTAL,"advanced_optical", "photonic_drop_texture",        SynqMatrixSwitchReason::DropImpact,        0.60f, 7,    true,    0},  // red — peak heat
-    {SynqMatrixState::Breakdown,  EID_LGP_CHROMATIC_LENS,  "advanced_optical", "chromatic_space_release",      SynqMatrixSwitchReason::BreakdownRelease,  0.35f, 5,    true,  192},  // cool magenta release
-    {SynqMatrixState::Dense,      EID_LGP_KDV_SOLITON_PAIR,"mathematical",     "dense_soliton_pair",           SynqMatrixSwitchReason::DenseLegibility,   0.55f, 3,    true,  224},  // saturated purple
-    {SynqMatrixState::Transition, EID_LGP_CHROMATIC_PULSE, "advanced_optical", "chromatic_transition_pulse",   SynqMatrixSwitchReason::TransitionBridge,  0.45f, 6,    true,   48},  // warm yellow bridge
+    {SynqMatrixState::Unknown,    EID_SB_K1_WAVEFORM,                  "baseline",         "k1_waveform_boot_baseline",     SynqMatrixSwitchReason::None,              1.0f,  0xFF, false,   0},
+    {SynqMatrixState::Silence,    EID_BLOOM_PARITY,                    "atmosphere",       "silence_bloom_parity_hold",     SynqMatrixSwitchReason::AmbientPosture,    1.0f,  0xFF, false,   0},
+    {SynqMatrixState::Ambient,    EID_SB_K1_BLOOM,                     "atmosphere",       "ambient_k1_bloom",              SynqMatrixSwitchReason::AmbientPosture,    0.30f, 4,    true,  160},  // cool blue
+    {SynqMatrixState::Steady,     EID_SB_SPECTRAL_ENVELOPE,            "groove",           "steady_spectral_envelope",      SynqMatrixSwitchReason::SteadyReadability, 0.32f, 2,    true,   96},  // cool teal
+    {SynqMatrixState::Build,      EID_SB_K1_WAVEFORM_HYBRID,           "tension",          "build_waveform_hybrid",         SynqMatrixSwitchReason::BuildPressure,     0.45f, 7,    true,   32},  // warm orange — pressure
+    {SynqMatrixState::Drop,       EID_RIPPLE_ES_TUNED,                 "impact",           "drop_ripple_es_tuned",          SynqMatrixSwitchReason::DropImpact,        0.60f, 7,    true,    0},  // red — peak heat
+    {SynqMatrixState::Breakdown,  EID_SB_K1_BLOOM_V2_COLOR_HISTORY,    "atmosphere",       "breakdown_colour_history",      SynqMatrixSwitchReason::BreakdownRelease,  0.35f, 5,    true,  192},  // cool magenta release
+    {SynqMatrixState::Dense,      EID_LGP_BASS_QUAKE,                  "tension",          "dense_bass_quake",              SynqMatrixSwitchReason::DenseLegibility,   0.55f, 3,    true,  224},  // saturated purple
+    {SynqMatrixState::Transition, EID_LGP_TIME_REVERSAL_MIRROR_MOD1,   "impact",           "transition_time_reversal_mirror",SynqMatrixSwitchReason::TransitionBridge, 0.45f, 6,    true,   48},  // warm yellow bridge
 };
+
+// Director Effect Registry — Captain's locked Tier 1 allowlist (2026-05-17).
+// Default-deny: only these 19 effects are Director-selectable. All other
+// firmware effects (including Tier 2 "TUNING_BACKLOG" and any unlisted entry)
+// are unreachable through the Director path.
+struct DirectorRegistryEntry {
+    EffectId effectId;
+    const char* name;
+    DirectorMarker marker;
+    uint16_t allowedStatesMask;  // bit per SynqMatrixState ordinal
+    uint8_t speedCap;            // 0xFF = no cap
+};
+
+#define DIR_STATE(s) (1U << static_cast<uint8_t>(SynqMatrixState::s))
+
+static constexpr DirectorRegistryEntry kDirectorRegistry[] = {
+    // Tier 1A — GROOVE (stable rhythm carriers)
+    {EID_SB_SPECTRAL_ENVELOPE,                "SB Spectral Envelope",          DirectorMarker::Groove,     DIR_STATE(Steady)|DIR_STATE(Ambient)|DIR_STATE(Build),                       0xFF},
+    {EID_SB_K1_BLOOM_V2_BASS_TREBLE,          "K1 Bloom BassTreble",           DirectorMarker::Groove,     DIR_STATE(Steady)|DIR_STATE(Build)|DIR_STATE(Dense),                         0xFF},
+    // Tier 1A — TENSION (pressure builders)
+    {EID_SB_K1_WAVEFORM_HYBRID,               "K1 Waveform Hybrid",            DirectorMarker::Tension,    DIR_STATE(Build)|DIR_STATE(Transition)|DIR_STATE(Dense),                     0xFF},
+    {EID_LGP_BASS_QUAKE,                      "LGP Bass Quake",                DirectorMarker::Tension,    DIR_STATE(Build)|DIR_STATE(Dense)|DIR_STATE(Drop),                           0xFF},
+    {EID_BEAT_PULSE_RESONANT,                 "Beat Pulse Resonant",           DirectorMarker::Tension,    DIR_STATE(Build)|DIR_STATE(Steady)|DIR_STATE(Transition),                    0xFF},
+    // Tier 1A — IMPACT (drop / payoff)
+    {EID_RIPPLE_ES_TUNED,                     "Ripple ES tuned",               DirectorMarker::Impact,     DIR_STATE(Drop)|DIR_STATE(Transition)|DIR_STATE(Dense),                      0xFF},
+    {EID_LGP_TIME_REVERSAL_MIRROR_MOD1,       "LGP Time-Reversal Mirror Mod1", DirectorMarker::Impact,     DIR_STATE(Drop)|DIR_STATE(Dense)|DIR_STATE(Transition),                      0xFF},
+    // Tier 1B — ATMOSPHERE (passive review pool — used for low-energy/fallback)
+    {EID_LGP_SALIENCY_BLOOM,                  "LGP Saliency Bloom",            DirectorMarker::Atmosphere, DIR_STATE(Ambient)|DIR_STATE(Breakdown)|DIR_STATE(Build),                    0xFF},
+    {EID_SB_K1_BLOOM,                         "K1 Bloom",                      DirectorMarker::Atmosphere, DIR_STATE(Silence)|DIR_STATE(Ambient)|DIR_STATE(Breakdown),                  0xFF},
+    {EID_SB_K1_BLOOM_V2_COLOR_HISTORY,        "K1 Bloom Color History",        DirectorMarker::Atmosphere, DIR_STATE(Ambient)|DIR_STATE(Breakdown),                                     0xFF},
+    {EID_SB_K1_BLOOM_V2_EXPONENTIAL,          "K1 Bloom Exponential",          DirectorMarker::Atmosphere, DIR_STATE(Ambient)|DIR_STATE(Build)|DIR_STATE(Breakdown),                    0xFF},
+    {EID_LGP_TIME_REVERSAL_MIRROR_MOD3,       "LGP Time-Reversal Mirror Mod3", DirectorMarker::Atmosphere, DIR_STATE(Ambient)|DIR_STATE(Breakdown)|DIR_STATE(Transition),               0xFF},
+    {EID_LGP_MOIRE_SILK,                      "LGP Moire Silk",                DirectorMarker::Atmosphere, DIR_STATE(Silence)|DIR_STATE(Ambient)|DIR_STATE(Breakdown),                  0xFF},
+    {EID_BLOOM_PARITY,                        "Bloom Parity",                  DirectorMarker::Atmosphere, DIR_STATE(Silence)|DIR_STATE(Ambient)|DIR_STATE(Breakdown),                  0xFF},
+    {EID_BEAT_PULSE_RIPPLE,                   "Beat Pulse Ripple",             DirectorMarker::Atmosphere, DIR_STATE(Steady)|DIR_STATE(Ambient)|DIR_STATE(Breakdown),                   0xFF},
+    {EID_LGP_SPECTRUM_DETAIL_ENHANCED,        "LGP Spectrum Detail Enhanced",  DirectorMarker::Atmosphere, DIR_STATE(Ambient)|DIR_STATE(Steady)|DIR_STATE(Breakdown),                   0xFF},
+    {EID_LGP_INTERFERENCE_SCANNER_ENHANCED,   "LGP Interference Scanner",      DirectorMarker::Atmosphere, DIR_STATE(Ambient)|DIR_STATE(Transition)|DIR_STATE(Breakdown),               0xFF},
+    {EID_LGP_PERLIN_BACKEND_EMOTISCOPE_QUARTER, "Perlin Test Emo2 Quarter",    DirectorMarker::Atmosphere, DIR_STATE(Ambient)|DIR_STATE(Breakdown),                                     14},
+    {EID_LGP_PERLIN_SHOCKLINES,               "LGP Perlin Shocklines",         DirectorMarker::Atmosphere, DIR_STATE(Transition)|DIR_STATE(Dense),                                       1},
+};
+
+static constexpr uint8_t kDirectorRegistryCount = sizeof(kDirectorRegistry) / sizeof(kDirectorRegistry[0]);
+
+// State → marker preference. primary tried first; secondary tried only if
+// primary yields no candidates; fallback is the ATMOSPHERE pool as a last
+// resort. None means "no further pool to try" — Director will not switch.
+struct StatePreference {
+    SynqMatrixState state;
+    DirectorMarker primary;
+    DirectorMarker secondary;
+    DirectorMarker fallback;
+};
+
+static constexpr StatePreference kStatePreferences[] = {
+    {SynqMatrixState::Unknown,    DirectorMarker::None,       DirectorMarker::None,   DirectorMarker::None},        // no switch on boot
+    {SynqMatrixState::Silence,    DirectorMarker::Atmosphere, DirectorMarker::None,   DirectorMarker::None},
+    {SynqMatrixState::Ambient,    DirectorMarker::Atmosphere, DirectorMarker::None,   DirectorMarker::None},
+    {SynqMatrixState::Steady,     DirectorMarker::Groove,     DirectorMarker::None,   DirectorMarker::Atmosphere},
+    {SynqMatrixState::Build,      DirectorMarker::Tension,    DirectorMarker::None,   DirectorMarker::Atmosphere},
+    {SynqMatrixState::Drop,       DirectorMarker::Impact,     DirectorMarker::None,   DirectorMarker::Atmosphere},
+    {SynqMatrixState::Breakdown,  DirectorMarker::Atmosphere, DirectorMarker::None,   DirectorMarker::None},
+    {SynqMatrixState::Dense,      DirectorMarker::Tension,    DirectorMarker::Impact, DirectorMarker::Atmosphere},
+    {SynqMatrixState::Transition, DirectorMarker::Tension,    DirectorMarker::Impact, DirectorMarker::Atmosphere},
+};
+
+const StatePreference& preferenceForState(SynqMatrixState state) {
+    for (const auto& p : kStatePreferences) {
+        if (p.state == state) return p;
+    }
+    return kStatePreferences[0];  // Unknown fallback
+}
+
+const DirectorRegistryEntry* lookupRegistryEntry(uint16_t effectId) {
+    for (const auto& e : kDirectorRegistry) {
+        if (static_cast<uint16_t>(e.effectId) == effectId) return &e;
+    }
+    return nullptr;
+}
 
 static constexpr uint8_t kPolicyCount = sizeof(kMatrix) / sizeof(kMatrix[0]);
 static constexpr uint16_t kAllPoliciesMask = (static_cast<uint16_t>(1U) << kPolicyCount) - 1U;
@@ -478,6 +563,53 @@ SynqMatrixDebugSnapshot SynqMatrix::getDebugSnapshot() const {
     return snapshot;
 }
 
+// Director Effect Registry — round-robin pick from a marker pool, filtered
+// by per-effect allowed-states mask, skipping the currently-active effect to
+// provide variety on repeat visits to the same state.
+uint16_t SynqMatrix::selectDirectorEffect(SynqMatrixState state, uint16_t activeEffectId) {
+    // Unknown state: never auto-switch. Boot effect stays.
+    if (state == SynqMatrixState::Unknown) {
+        return INVALID_EFFECT_ID;
+    }
+
+    const StatePreference& pref = preferenceForState(state);
+    const uint8_t stateOrdinal = static_cast<uint8_t>(state);
+    const uint16_t stateMask = static_cast<uint16_t>(1U << stateOrdinal);
+
+    auto tryPool = [&](DirectorMarker marker) -> uint16_t {
+        if (marker == DirectorMarker::None) return INVALID_EFFECT_ID;
+        const uint8_t startIdx = m_directorRoundRobin[stateOrdinal].load(std::memory_order_acquire);
+        for (uint8_t i = 0; i < kDirectorRegistryCount; ++i) {
+            const uint8_t idx = static_cast<uint8_t>((startIdx + i) % kDirectorRegistryCount);
+            const auto& e = kDirectorRegistry[idx];
+            if (e.marker != marker) continue;
+            if ((e.allowedStatesMask & stateMask) == 0U) continue;
+            if (static_cast<uint16_t>(e.effectId) == activeEffectId) continue;
+            // Advance round-robin past this pick so next visit tries the next slot.
+            m_directorRoundRobin[stateOrdinal].store(
+                static_cast<uint8_t>((idx + 1U) % kDirectorRegistryCount),
+                std::memory_order_release);
+            return static_cast<uint16_t>(e.effectId);
+        }
+        return INVALID_EFFECT_ID;
+    };
+
+    uint16_t pick = tryPool(pref.primary);
+    if (pick != INVALID_EFFECT_ID) return pick;
+    pick = tryPool(pref.secondary);
+    if (pick != INVALID_EFFECT_ID) return pick;
+    pick = tryPool(pref.fallback);
+    if (pick != INVALID_EFFECT_ID) return pick;
+
+    // Final fallback: per-state kMatrix default (which is itself an approved
+    // registry member by construction). Only used if every marker pool is
+    // exhausted (e.g. activeEffectId is the only candidate). Same-effect gate
+    // downstream will suppress the actual switch in that case.
+    uint8_t policyIndex = 0;
+    const DirectorPolicy& policy = policyForState(state, policyIndex);
+    return static_cast<uint16_t>(policy.effectId);
+}
+
 SynqMatrixSelectionSnapshot SynqMatrix::resolveSelection(SynqMatrixState state,
                                                                float confidence,
                                                                uint16_t activeEffectId) const {
@@ -676,8 +808,14 @@ bool SynqMatrix::tick(const audio::ControlBusFrame& frame,
     uint8_t policyIndex = 0;
     const DirectorPolicy& policy = policyForState(stableState, policyIndex);
     const SynqMatrixSelectionSnapshot selection = resolveSelection(stableState, confidence, activeEffectId);
+    // Director Effect Registry default-deny selector. May return a different
+    // effect from policy.effectId — the registry provides variety within an
+    // allowlisted pool. policy.effectId remains the per-state fallback default
+    // exposed via REST/WS/serial allowlist (and is itself an approved
+    // registry member by construction).
+    const uint16_t selectedEffectId = selectDirectorEffect(stableState, activeEffectId);
     m_selectedPolicyIndex.store(policyIndex, std::memory_order_release);
-    m_selectedEffectId.store(policy.effectId, std::memory_order_release);
+    m_selectedEffectId.store(selectedEffectId, std::memory_order_release);
     m_lastSwitchReason.store(static_cast<uint8_t>(policy.reason), std::memory_order_release);
     m_selectionScoreQ1000.store(scaleFloat(selection.score), std::memory_order_release);
 
@@ -734,7 +872,7 @@ bool SynqMatrix::tick(const audio::ControlBusFrame& frame,
         return false;
     }
 
-    if (policy.effectId == INVALID_EFFECT_ID) {
+    if (selectedEffectId == INVALID_EFFECT_ID) {
         setSuppressed(SynqMatrixSuppressedReason::TargetUnavailable, SynqMatrixOwner::Director);
         m_lastAction.store(static_cast<uint8_t>(SynqMatrixLastAction::SwitchSuppressed), std::memory_order_release);
         return false;
@@ -746,13 +884,13 @@ bool SynqMatrix::tick(const audio::ControlBusFrame& frame,
         return false;
     }
 
-    if (policy.effectId == activeEffectId) {
+    if (selectedEffectId == activeEffectId) {
         setSuppressed(SynqMatrixSuppressedReason::SameEffect, SynqMatrixOwner::Director);
         m_lastAction.store(static_cast<uint8_t>(SynqMatrixLastAction::None), std::memory_order_release);
         return false;
     }
 
-    if (wouldCreateAbaSwitch(activeEffectId, static_cast<uint16_t>(policy.effectId), nowMs)) {
+    if (wouldCreateAbaSwitch(activeEffectId, selectedEffectId, nowMs)) {
         setSuppressed(SynqMatrixSuppressedReason::AntiThrash, SynqMatrixOwner::Director);
         m_lastAction.store(static_cast<uint8_t>(SynqMatrixLastAction::SwitchSuppressed), std::memory_order_release);
         return false;
@@ -800,13 +938,20 @@ bool SynqMatrix::tick(const audio::ControlBusFrame& frame,
     }
 
     request.requested = true;
-    request.targetEffectId = policy.effectId;
+    request.targetEffectId = selectedEffectId;
     request.targetFamily = policy.family;
     request.targetVisualLanguage = policy.visualLanguage;
     request.reason = synqMatrixSwitchReasonName(policy.reason);
     request.targetPaletteIndex = policy.targetPaletteIndex;
     request.applyColourModifier = policy.applyColourModifier;
     request.targetColourModifier = policy.targetColourModifier;
+    // Director Effect Registry: per-effect speed cap (0xFF = no cap). Applied
+    // by RendererActor after the effect switch lands, clamping m_speed down
+    // (never raising) if the user's current speed exceeds the cap.
+    {
+        const auto* regEntry = lookupRegistryEntry(selectedEffectId);
+        request.speedCap = (regEntry != nullptr) ? regEntry->speedCap : 0xFF;
+    }
     m_dwellRemainingMs.store(0, std::memory_order_release);
     m_cooldownRemainingMs.store(0, std::memory_order_release);
     m_actionPlan.store(static_cast<uint8_t>(SynqMatrixActionPlan::EffectSwitch), std::memory_order_release);
@@ -1714,6 +1859,22 @@ const char* synqMatrixActionPlanName(SynqMatrixActionPlan action) {
         case SynqMatrixActionPlan::EffectSwitch: return "effect_switch";
         default: return "unknown";
     }
+}
+
+const char* directorMarkerName(DirectorMarker marker) {
+    switch (marker) {
+        case DirectorMarker::None: return "none";
+        case DirectorMarker::Groove: return "GROOVE";
+        case DirectorMarker::Tension: return "TENSION";
+        case DirectorMarker::Impact: return "IMPACT";
+        case DirectorMarker::Atmosphere: return "ATMOSPHERE";
+        default: return "unknown";
+    }
+}
+
+DirectorMarker directorMarkerForEffect(uint16_t effectId) {
+    const auto* entry = lookupRegistryEntry(effectId);
+    return entry ? entry->marker : DirectorMarker::None;
 }
 
 const char* synqMatrixIntentName(SynqMatrixIntent intent) {

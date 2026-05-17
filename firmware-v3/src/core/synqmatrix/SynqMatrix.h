@@ -273,6 +273,10 @@ struct SynqMatrixSwitchRequest {
     // the renderer clamps m_speed down (never raises) so registry-curated slow
     // effects don't get over-driven by user speed slider state at switch time.
     uint8_t speedCap = 0xFF;
+    // EdgeMixerAdjust: per-state EdgeMixer mode (0..8 = mode ordinal; see
+    // EdgeMixerMode enum). 0xFF = leave EdgeMixer unchanged. Applied at the
+    // same state-change trigger as EffectSwitch + PaletteShift + ColourModifierShift.
+    uint8_t edgeMixerMode = 0xFF;
 };
 
 struct SynqMatrixPolicySnapshot {

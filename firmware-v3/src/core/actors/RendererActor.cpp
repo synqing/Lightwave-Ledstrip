@@ -1618,6 +1618,7 @@ void RendererActor::queueSynqMatrixTransition(
     m_synqMatrixDirectorApplyColourModifier = request.applyColourModifier;
     m_synqMatrixDirectorTargetColourModifier = request.targetColourModifier;
     m_synqMatrixDirectorSpeedCap = request.speedCap;
+    m_synqMatrixDirectorEdgeMixerMode = request.edgeMixerMode;
 }
 
 bool RendererActor::processSynqMatrixTransition(uint32_t nowMs)
@@ -1635,6 +1636,7 @@ bool RendererActor::processSynqMatrixTransition(uint32_t nowMs)
     const bool applyColourModifier = m_synqMatrixDirectorApplyColourModifier;
     const uint8_t targetColourModifier = m_synqMatrixDirectorTargetColourModifier;
     const uint8_t speedCap = m_synqMatrixDirectorSpeedCap;
+    const uint8_t edgeMixerMode = m_synqMatrixDirectorEdgeMixerMode;
     m_synqMatrixDirectorTransitionQueued = false;
 
     auto& director = synqmatrix::SynqMatrix::instance();
@@ -1708,6 +1710,25 @@ bool RendererActor::processSynqMatrixTransition(uint32_t nowMs)
         handleSetSpeed(speedCap);
         LW_LOGI("Director speed cap: %u -> %u (effect 0x%04X cap=%u)",
                 prevSpeed, m_speed, targetEffect, speedCap);
+    }
+
+    // EdgeMixerAdjust: bundled with EffectSwitch on the same state-change
+    // trigger. Per-state mode differentiates strip 2 colour treatment for
+    // richer K1 LGP depth perception. RendererActor runs on Core 1 alongside
+    // EdgeMixer::process() (called from showLeds() each frame), so direct
+    // setMode() is thread-safe here.
+    if (edgeMixerMode != 0xFF) {
+        auto& mixer = enhancement::EdgeMixer::getInstance();
+        const uint8_t currentMode = static_cast<uint8_t>(mixer.getMode());
+        if (edgeMixerMode != currentMode) {
+            const auto newMode = static_cast<enhancement::EdgeMixerMode>(edgeMixerMode);
+            mixer.setMode(newMode);
+            LW_LOGI("Director edgemixer: %u (%s) -> %u (%s)",
+                    currentMode,
+                    enhancement::EdgeMixer::modeName(static_cast<enhancement::EdgeMixerMode>(currentMode)),
+                    edgeMixerMode,
+                    enhancement::EdgeMixer::modeName(newMode));
+        }
     }
 
     const uint32_t appliedAtMs = millis();

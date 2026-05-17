@@ -536,50 +536,22 @@ void SerialCLI::tick() {
         char c = Serial.read();
 
         // Immediate single-char commands (no Enter needed, no buffering).
-        // These work even mid-buffer — they are "hotkeys".
+        // These work even mid-buffer — they are "hotkeys".  The allowlist
+        // is owned by isImmediateHotkeyChar() so the in-loop guard and the
+        // end-of-tick lone-hotkey safety net cannot drift apart.
         if (m_cmdBuffer.length() == 0) {
-            bool isImmediate = false;
-            switch (c) {
-                case ' ':   // Next effect
-                case '+': case '=':  // Brightness up
-                case '-': case '_':  // Brightness down
-                case '[': case ']':  // Speed
-                case ',': case '.':  // Palette
-                case 'e':            // EdgeMixer mode cycle
-                case 'D':            // SynqMatrix mode cycle
-                case 'G':            // SynqMatrix profile cycle
-                case 'Q':            // SynqMatrix compact status
-                case 'w': case 'W':  // EdgeMixer spread +/-
-                case '<': case '>':  // EdgeMixer strength -/+
-                case 'y':            // EdgeMixer spatial toggle
-                case 'Y':            // EdgeMixer temporal toggle
-                case '}':            // EdgeMixer save to NVS
-                case 'a':            // Audio debug toggle
-                case 'p': case 'P':  // Bloom prism opacity
-                case 'o': case 'O':  // Bloom bulb opacity
-                case 'i': case 'I':  // Mood
-                case 'f': case 'F':  // Bloom alpha (persistence)
-                case 'h': case 'H':  // Bloom square iter (contrast)
-                case 'j': case 'J':  // Bloom prism iterations
-                case 'k': case 'K':  // Bloom gHue speed (palette sweep)
-                case 'u': case 'U':  // Bloom spatial spread
-                case 'v': case 'V':  // Bloom intensity coupling
-                case 'b': case 'B':  // RD Triangle K +/-
-                case 't': case 'T':  // RD Triangle F +/-
-                case 'x': case 'X':  // Bands observability (one-shot dump)
-                case 'q':            // Cinema post-processing toggle
-                case '`':            // Status strip idle mode cycle
-                    isImmediate = true;
-                    break;
-            }
-            if (isImmediate) {
-                // Check if more chars are pending — if so, this might be
-                // the start of a multi-char command (e.g. 'a' in "adbg 5")
+            if (isImmediateHotkeyChar(c)) {
+                // More bytes already pending in the RX FIFO — this may be
+                // the start of a multi-char command whose first letter is
+                // also a hotkey (e.g. 'a' in "adbg 5\n").  Buffer it and let
+                // the rest of the burst accumulate.  If no newline arrives
+                // to resolve the buffer, the end-of-tick lone-hotkey safety
+                // net below catches the case so single keypresses are not
+                // stranded indefinitely.
                 if (Serial.available() > 0) {
-                    // Buffer it instead of processing immediately
                     m_cmdBuffer += c;
                 } else {
-                    // Process immediately without buffering
+                    // No trailing bytes — dispatch immediately.
                     m_cmdBuffer = String(c);
                     shouldProcess = true;
                     break; // Exit while loop to process
@@ -603,12 +575,62 @@ void SerialCLI::tick() {
         }
     }
 
-    // Process a complete line or a single immediate hotkey only.
-    if (shouldProcess && m_cmdBuffer.length() > 0) {
+    // Dispatch on either:
+    //   (a) a complete line (newline-terminated, or an in-loop hotkey that
+    //       resolved with no trailing RX byte pending), or
+    //   (b) a lone allowlisted hotkey that was buffered mid-loop because the
+    //       RX FIFO happened to hold a trailing byte (CR/LF echo, USB-CDC
+    //       framing, or a subsequent keystroke that the loop already drained).
+    //       Without this safety net, single keypresses are stranded in
+    //       m_cmdBuffer until a newline arrives — which is the regression
+    //       Captain observed when the shouldProcess gate was introduced.
+    const bool isLoneHotkey =
+        (m_cmdBuffer.length() == 1) && isImmediateHotkeyChar(m_cmdBuffer[0]);
+    if ((shouldProcess || isLoneHotkey) && m_cmdBuffer.length() > 0) {
         String input = m_cmdBuffer;
         char firstChar = input[0]; // Save before trim (for space, etc.)
         m_cmdBuffer = ""; // Clear for next command
         processCommand(input, firstChar);
+    }
+}
+
+// Single source of truth for the immediate-hotkey character set.
+// Mirrored against the in-loop guard in tick() — keep both call sites in sync
+// by editing only this function.
+bool SerialCLI::isImmediateHotkeyChar(char c) {
+    switch (c) {
+        case ' ':   // Next effect
+        case '+': case '=':  // Brightness up
+        case '-': case '_':  // Brightness down
+        case '[': case ']':  // Speed
+        case ',': case '.':  // Palette
+        case 'e':            // EdgeMixer mode cycle
+        case 'D':            // SynqMatrix mode cycle
+        case 'G':            // SynqMatrix profile cycle
+        case 'Q':            // SynqMatrix compact status
+        case 'w': case 'W':  // EdgeMixer spread +/-
+        case '<': case '>':  // EdgeMixer strength -/+
+        case 'y':            // EdgeMixer spatial toggle
+        case 'Y':            // EdgeMixer temporal toggle
+        case '}':            // EdgeMixer save to NVS
+        case 'a':            // Audio debug toggle
+        case 'p': case 'P':  // Bloom prism opacity
+        case 'o': case 'O':  // Bloom bulb opacity
+        case 'i': case 'I':  // Mood
+        case 'f': case 'F':  // Bloom alpha (persistence)
+        case 'h': case 'H':  // Bloom square iter (contrast)
+        case 'j': case 'J':  // Bloom prism iterations
+        case 'k': case 'K':  // Bloom gHue speed (palette sweep)
+        case 'u': case 'U':  // Bloom spatial spread
+        case 'v': case 'V':  // Bloom intensity coupling
+        case 'b': case 'B':  // RD Triangle K +/-
+        case 't': case 'T':  // RD Triangle F +/-
+        case 'x': case 'X':  // Bands observability (one-shot dump)
+        case 'q':            // Cinema post-processing toggle
+        case '`':            // Status strip idle mode cycle
+            return true;
+        default:
+            return false;
     }
 }
 

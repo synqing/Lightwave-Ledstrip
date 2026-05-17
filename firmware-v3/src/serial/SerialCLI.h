@@ -99,6 +99,11 @@ private:
     void handleMultiCharCommand(const String& input, const String& inputLower, bool& handled);
     void handleSingleCharCommand(char cmd);
 
+    // Single source of truth for the immediate-hotkey character set.
+    // Used both by the in-loop guard and by the end-of-tick lone-hotkey
+    // safety net, so the two cannot drift apart.
+    static bool isImmediateHotkeyChar(char c);
+
     // Phase 1C — fork point for effect-cycle keystrokes. In Unified mode
     // routes to actors.setEffect (legacy); in Independent mode routes to
     // renderer->setStripEffectId(m_activeStripEditing, ...).

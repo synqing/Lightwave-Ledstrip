@@ -555,6 +555,10 @@ void loop() {
             TRACE_COUNTER("led_show_skips_total", static_cast<int32_t>(led.showSkips));
             TRACE_COUNTER("led_show_avg_us", static_cast<int32_t>(led.avgShowUs));
             TRACE_COUNTER("led_show_max_us", static_cast<int32_t>(led.maxShowUs));
+            TRACE_COUNTER("led_fastled_show_call_avg_us",
+                          static_cast<int32_t>(led.avgFastLedShowCallUs));
+            TRACE_COUNTER("led_rmt_fence_avg_us", static_cast<int32_t>(led.avgRmtFenceUs));
+            TRACE_COUNTER("led_latch_wait_avg_us", static_cast<int32_t>(led.avgLatchWaitUs));
             TRACE_COUNTER("led_show_failures_total", static_cast<int32_t>(led.ledShowFailures));
             TRACE_COUNTER("rmt_errors_total", static_cast<int32_t>(led.rmtErrors));
             TRACE_COUNTER("rmt_underruns_total", static_cast<int32_t>(led.rmtUnderruns));

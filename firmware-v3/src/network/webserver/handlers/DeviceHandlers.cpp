@@ -47,6 +47,22 @@ void DeviceHandlers::handleStatus(AsyncWebServerRequest* request,
         data["cpuPercent"] = stats.cpuPercent;
         data["frameBudgetPercent"] = stats.cpuPercent;
         data["framesRendered"] = stats.framesRendered;
+        const auto& ledStats = renderer->getLedDriverStats();
+        JsonObject ledTransport = data["ledTransport"].to<JsonObject>();
+        ledTransport["frameCount"] = ledStats.frameCount;
+        ledTransport["showSkips"] = ledStats.showSkips;
+        ledTransport["lastShowUs"] = ledStats.lastShowUs;
+        ledTransport["avgShowUs"] = ledStats.avgShowUs;
+        ledTransport["maxShowUs"] = ledStats.maxShowUs;
+        ledTransport["lastFastLedShowCallUs"] = ledStats.lastFastLedShowCallUs;
+        ledTransport["avgFastLedShowCallUs"] = ledStats.avgFastLedShowCallUs;
+        ledTransport["lastRmtFenceUs"] = ledStats.lastRmtFenceUs;
+        ledTransport["avgRmtFenceUs"] = ledStats.avgRmtFenceUs;
+        ledTransport["lastLatchWaitUs"] = ledStats.lastLatchWaitUs;
+        ledTransport["avgLatchWaitUs"] = ledStats.avgLatchWaitUs;
+        ledTransport["failures"] = ledStats.ledShowFailures;
+        ledTransport["rmtErrors"] = ledStats.rmtErrors;
+        ledTransport["underruns"] = ledStats.rmtUnderruns;
 
         // Audio sync mode (local ES backend vs external Trinity sync)
         data["audioSyncMode"] = renderer->getAudioSyncMode();

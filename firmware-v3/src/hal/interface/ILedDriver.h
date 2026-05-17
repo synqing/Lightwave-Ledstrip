@@ -11,6 +11,8 @@
 #include <cstdint>
 #include <FastLED.h>
 
+#include "hal/interface/LedTransportStats.h"
+
 namespace lightwaveos {
 namespace hal {
 
@@ -23,21 +25,6 @@ struct LedStripConfig {
     uint8_t brightness = 128;       ///< Initial brightness (0-255)
     bool reverseOrder = false;      ///< Reverse LED addressing
     CRGB colorCorrection = TypicalLEDStrip; ///< Color correction profile
-};
-
-/**
- * @brief LED driver statistics
- */
-struct LedDriverStats {
-    uint32_t frameCount = 0;        ///< Total frames rendered
-    uint32_t showSkips = 0;         ///< Frames skipped by RMT safety guard
-    uint32_t lastShowUs = 0;        ///< Last show() duration in microseconds
-    uint32_t avgShowUs = 0;         ///< Average show() duration
-    uint32_t maxShowUs = 0;         ///< Maximum show() duration
-    uint32_t ledShowFailures = 0;   ///< show() calls that failed before FastLED/RMT dispatch
-    uint32_t rmtErrors = 0;         ///< Hardware RMT error count if exposed by backend
-    uint32_t rmtUnderruns = 0;      ///< Hardware RMT underrun count if exposed by backend
-    uint8_t currentBrightness = 0;  ///< Current brightness setting
 };
 
 /**

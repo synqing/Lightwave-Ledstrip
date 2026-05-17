@@ -54,6 +54,20 @@ void test_system_health_renderer_budget_alias_preserves_legacy_cpu_percent() {
     data.hasWebSocket = true;
     data.wsClients = 2;
     data.wsMaxClients = 8;
+    data.ledTransportFrameCount = 300;
+    data.ledTransportShowSkips = 1;
+    data.ledTransportLastShowUs = 6100;
+    data.ledTransportAvgShowUs = 6000;
+    data.ledTransportMaxShowUs = 6400;
+    data.ledTransportLastFastLedShowCallUs = 240;
+    data.ledTransportAvgFastLedShowCallUs = 220;
+    data.ledTransportLastRmtFenceUs = 5600;
+    data.ledTransportAvgRmtFenceUs = 5590;
+    data.ledTransportLastLatchWaitUs = 12;
+    data.ledTransportAvgLatchWaitUs = 8;
+    data.ledTransportFailures = 2;
+    data.ledTransportRmtErrors = 3;
+    data.ledTransportUnderruns = 4;
 
     JsonDocument doc;
     JsonObject obj = doc.to<JsonObject>();
@@ -62,12 +76,19 @@ void test_system_health_renderer_budget_alias_preserves_legacy_cpu_percent() {
     const char* allowedKeys[] = {
         "uptime", "freeHeap", "totalHeap", "minFreeHeap", "rendererRunning",
         "queueUtilization", "queueLength", "queueCapacity", "fps", "cpuPercent",
-        "frameBudgetPercent", "wsClients", "wsMaxClients"
+        "frameBudgetPercent", "ledTransport", "wsClients", "wsMaxClients"
     };
     TEST_ASSERT_TRUE(validateKeysAgainstAllowList(obj, allowedKeys,
                                                   sizeof(allowedKeys) / sizeof(allowedKeys[0])));
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 55.0f, obj["cpuPercent"].as<float>());
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 55.0f, obj["frameBudgetPercent"].as<float>());
+    JsonObject ledTransport = obj["ledTransport"].as<JsonObject>();
+    TEST_ASSERT_EQUAL_UINT32(300, ledTransport["frameCount"].as<uint32_t>());
+    TEST_ASSERT_EQUAL_UINT32(1, ledTransport["showSkips"].as<uint32_t>());
+    TEST_ASSERT_EQUAL_UINT32(240, ledTransport["lastFastLedShowCallUs"].as<uint32_t>());
+    TEST_ASSERT_EQUAL_UINT32(5600, ledTransport["lastRmtFenceUs"].as<uint32_t>());
+    TEST_ASSERT_EQUAL_UINT32(12, ledTransport["lastLatchWaitUs"].as<uint32_t>());
+    TEST_ASSERT_EQUAL_UINT32(2, ledTransport["failures"].as<uint32_t>());
 }
 
 void setUp(void) {}

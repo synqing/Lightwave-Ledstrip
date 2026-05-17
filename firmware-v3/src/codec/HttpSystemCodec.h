@@ -46,6 +46,20 @@ struct HttpSystemHealthData {
     uint8_t queueCapacity;
     float fps;
     float cpuPercent;
+    uint32_t ledTransportFrameCount;
+    uint32_t ledTransportShowSkips;
+    uint32_t ledTransportLastShowUs;
+    uint32_t ledTransportAvgShowUs;
+    uint32_t ledTransportMaxShowUs;
+    uint32_t ledTransportLastFastLedShowCallUs;
+    uint32_t ledTransportAvgFastLedShowCallUs;
+    uint32_t ledTransportLastRmtFenceUs;
+    uint32_t ledTransportAvgRmtFenceUs;
+    uint32_t ledTransportLastLatchWaitUs;
+    uint32_t ledTransportAvgLatchWaitUs;
+    uint32_t ledTransportFailures;
+    uint32_t ledTransportRmtErrors;
+    uint32_t ledTransportUnderruns;
     bool hasWebSocket;
     uint8_t wsClients;
     uint8_t wsMaxClients;
@@ -54,6 +68,12 @@ struct HttpSystemHealthData {
         : uptime(0), freeHeap(0), totalHeap(0), minFreeHeap(0),
           hasRenderer(false), rendererRunning(false), queueUtilization(0.0f),
           queueLength(0), queueCapacity(32), fps(0.0f), cpuPercent(0.0f),
+          ledTransportFrameCount(0), ledTransportShowSkips(0),
+          ledTransportLastShowUs(0), ledTransportAvgShowUs(0), ledTransportMaxShowUs(0),
+          ledTransportLastFastLedShowCallUs(0), ledTransportAvgFastLedShowCallUs(0),
+          ledTransportLastRmtFenceUs(0), ledTransportAvgRmtFenceUs(0),
+          ledTransportLastLatchWaitUs(0), ledTransportAvgLatchWaitUs(0),
+          ledTransportFailures(0), ledTransportRmtErrors(0), ledTransportUnderruns(0),
           hasWebSocket(false), wsClients(0), wsMaxClients(0) {}
 };
 

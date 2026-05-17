@@ -75,6 +75,21 @@ static void handleLegacyGetStatus(AsyncWebSocketClient* client, JsonDocument& do
         response["fps"] = cached.stats.currentFPS;
         response["cpuPercent"] = cached.stats.cpuPercent;
         response["frameBudgetPercent"] = cached.stats.cpuPercent;
+        JsonObject ledTransport = response["ledTransport"].to<JsonObject>();
+        ledTransport["frameCount"] = cached.ledTransport.frameCount;
+        ledTransport["showSkips"] = cached.ledTransport.showSkips;
+        ledTransport["lastShowUs"] = cached.ledTransport.lastShowUs;
+        ledTransport["avgShowUs"] = cached.ledTransport.avgShowUs;
+        ledTransport["maxShowUs"] = cached.ledTransport.maxShowUs;
+        ledTransport["lastFastLedShowCallUs"] = cached.ledTransport.lastFastLedShowCallUs;
+        ledTransport["avgFastLedShowCallUs"] = cached.ledTransport.avgFastLedShowCallUs;
+        ledTransport["lastRmtFenceUs"] = cached.ledTransport.lastRmtFenceUs;
+        ledTransport["avgRmtFenceUs"] = cached.ledTransport.avgRmtFenceUs;
+        ledTransport["lastLatchWaitUs"] = cached.ledTransport.lastLatchWaitUs;
+        ledTransport["avgLatchWaitUs"] = cached.ledTransport.avgLatchWaitUs;
+        ledTransport["failures"] = cached.ledTransport.failures;
+        ledTransport["rmtErrors"] = cached.ledTransport.rmtErrors;
+        ledTransport["underruns"] = cached.ledTransport.underruns;
         response["freeHeap"] = ESP.getFreeHeap();
         response["uptime"] = millis() / 1000;
         // Edge mixer state (from cache)
@@ -131,6 +146,22 @@ static void handleDeviceGetStatus(AsyncWebSocketClient* client, JsonDocument& do
             data["cpuPercent"] = stats.cpuPercent;
             data["frameBudgetPercent"] = stats.cpuPercent;
             data["framesRendered"] = stats.framesRendered;
+            const auto& ledStats = ctx.renderer->getLedDriverStats();
+            JsonObject ledTransport = data["ledTransport"].to<JsonObject>();
+            ledTransport["frameCount"] = ledStats.frameCount;
+            ledTransport["showSkips"] = ledStats.showSkips;
+            ledTransport["lastShowUs"] = ledStats.lastShowUs;
+            ledTransport["avgShowUs"] = ledStats.avgShowUs;
+            ledTransport["maxShowUs"] = ledStats.maxShowUs;
+            ledTransport["lastFastLedShowCallUs"] = ledStats.lastFastLedShowCallUs;
+            ledTransport["avgFastLedShowCallUs"] = ledStats.avgFastLedShowCallUs;
+            ledTransport["lastRmtFenceUs"] = ledStats.lastRmtFenceUs;
+            ledTransport["avgRmtFenceUs"] = ledStats.avgRmtFenceUs;
+            ledTransport["lastLatchWaitUs"] = ledStats.lastLatchWaitUs;
+            ledTransport["avgLatchWaitUs"] = ledStats.avgLatchWaitUs;
+            ledTransport["failures"] = ledStats.ledShowFailures;
+            ledTransport["rmtErrors"] = ledStats.rmtErrors;
+            ledTransport["underruns"] = ledStats.rmtUnderruns;
         }
 
         // Network info

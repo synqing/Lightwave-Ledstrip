@@ -55,6 +55,20 @@ void test_device_status_extended_encoding_allowlist() {
     data.networkIP = "192.168.1.100";
     data.networkRSSI = -42;
     data.wsClients = 2;
+    data.ledTransportFrameCount = 300;
+    data.ledTransportShowSkips = 1;
+    data.ledTransportLastShowUs = 6100;
+    data.ledTransportAvgShowUs = 6000;
+    data.ledTransportMaxShowUs = 6400;
+    data.ledTransportLastFastLedShowCallUs = 240;
+    data.ledTransportAvgFastLedShowCallUs = 220;
+    data.ledTransportLastRmtFenceUs = 5600;
+    data.ledTransportAvgRmtFenceUs = 5590;
+    data.ledTransportLastLatchWaitUs = 12;
+    data.ledTransportAvgLatchWaitUs = 8;
+    data.ledTransportFailures = 2;
+    data.ledTransportRmtErrors = 3;
+    data.ledTransportUnderruns = 4;
 
     JsonDocument doc;
     JsonObject obj = doc.to<JsonObject>();
@@ -62,11 +76,26 @@ void test_device_status_extended_encoding_allowlist() {
 
     const char* allowedKeys[] = {
         "uptime", "freeHeap", "heapSize", "cpuFreq", "fps", "cpuPercent", "frameBudgetPercent",
-        "framesRendered", "network", "wsClients"
+        "framesRendered", "ledTransport", "network", "wsClients"
     };
     TEST_ASSERT_TRUE(validateKeysAgainstAllowList(obj, allowedKeys, sizeof(allowedKeys) / sizeof(allowedKeys[0])));
     TEST_ASSERT_EQUAL(55, obj["cpuPercent"].as<int>());
     TEST_ASSERT_EQUAL(55, obj["frameBudgetPercent"].as<int>());
+    JsonObject ledTransport = obj["ledTransport"].as<JsonObject>();
+    const char* ledTransportKeys[] = {
+        "frameCount", "showSkips", "lastShowUs", "avgShowUs", "maxShowUs",
+        "lastFastLedShowCallUs", "avgFastLedShowCallUs", "lastRmtFenceUs",
+        "avgRmtFenceUs", "lastLatchWaitUs", "avgLatchWaitUs", "failures",
+        "rmtErrors", "underruns"
+    };
+    TEST_ASSERT_TRUE(validateKeysAgainstAllowList(ledTransport, ledTransportKeys,
+                                                  sizeof(ledTransportKeys) / sizeof(ledTransportKeys[0])));
+    TEST_ASSERT_EQUAL_UINT32(300, ledTransport["frameCount"].as<uint32_t>());
+    TEST_ASSERT_EQUAL_UINT32(1, ledTransport["showSkips"].as<uint32_t>());
+    TEST_ASSERT_EQUAL_UINT32(240, ledTransport["lastFastLedShowCallUs"].as<uint32_t>());
+    TEST_ASSERT_EQUAL_UINT32(5600, ledTransport["lastRmtFenceUs"].as<uint32_t>());
+    TEST_ASSERT_EQUAL_UINT32(12, ledTransport["lastLatchWaitUs"].as<uint32_t>());
+    TEST_ASSERT_EQUAL_UINT32(2, ledTransport["failures"].as<uint32_t>());
     TEST_ASSERT_TRUE(obj.containsKey("network"));
 
     JsonObject network = obj["network"].as<JsonObject>();

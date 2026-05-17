@@ -75,10 +75,10 @@ private:
 
     LedDriverStats m_stats{};
 
-    void updateShowStats(uint32_t showUs);
+    void updateShowStats(const LedTransportTimingSample& timing);
     void applyColorCorrection(const LedStripConfig& config);
 #ifndef NATIVE_BUILD
-    void syncBuffersToFastLED();
+    uint32_t syncBuffersToFastLED();
 #endif
 };
 

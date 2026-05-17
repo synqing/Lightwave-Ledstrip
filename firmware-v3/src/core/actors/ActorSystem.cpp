@@ -855,8 +855,15 @@ void ActorSystem::printStatus()
         Serial.printf("Frame time: avg=%lu, min=%lu, max=%lu us\n",
                       rs.avgFrameTimeUs, rs.minFrameTimeUs, rs.maxFrameTimeUs);
         const auto& lds = m_renderer->getLedDriverStats();
-        Serial.printf("LED show: avg=%lu, max=%lu us, skips=%lu\n",
-                      lds.avgShowUs, lds.maxShowUs, lds.showSkips);
+        Serial.printf("LED show: avg=%lu, max=%lu us, skips=%lu, failures=%lu\n",
+                      static_cast<unsigned long>(lds.avgShowUs),
+                      static_cast<unsigned long>(lds.maxShowUs),
+                      static_cast<unsigned long>(lds.showSkips),
+                      static_cast<unsigned long>(lds.ledShowFailures));
+        Serial.printf("LED transport: fastled_avg=%lu us, rmt_fence_avg=%lu us, latch_wait_avg=%lu us\n",
+                      static_cast<unsigned long>(lds.avgFastLedShowCallUs),
+                      static_cast<unsigned long>(lds.avgRmtFenceUs),
+                      static_cast<unsigned long>(lds.avgLatchWaitUs));
         Serial.printf("Stack watermark: %d words\n",
                       m_renderer->getStackHighWaterMark());
     }

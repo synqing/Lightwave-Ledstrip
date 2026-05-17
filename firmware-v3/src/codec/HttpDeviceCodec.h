@@ -51,6 +51,20 @@ struct HttpDeviceStatusExtendedData {
     uint16_t fps;              // frames per second
     uint8_t cpuPercent;        // CPU usage percentage
     uint32_t framesRendered;   // total frames rendered
+    uint32_t ledTransportFrameCount;
+    uint32_t ledTransportShowSkips;
+    uint32_t ledTransportLastShowUs;
+    uint32_t ledTransportAvgShowUs;
+    uint32_t ledTransportMaxShowUs;
+    uint32_t ledTransportLastFastLedShowCallUs;
+    uint32_t ledTransportAvgFastLedShowCallUs;
+    uint32_t ledTransportLastRmtFenceUs;
+    uint32_t ledTransportAvgRmtFenceUs;
+    uint32_t ledTransportLastLatchWaitUs;
+    uint32_t ledTransportAvgLatchWaitUs;
+    uint32_t ledTransportFailures;
+    uint32_t ledTransportRmtErrors;
+    uint32_t ledTransportUnderruns;
     bool networkConnected;     // WiFi connected
     bool apMode;               // AP mode active
     const char* networkIP;     // IP address (if connected)
@@ -59,7 +73,14 @@ struct HttpDeviceStatusExtendedData {
     
     HttpDeviceStatusExtendedData() 
         : uptime(0), freeHeap(0), heapSize(0), cpuFreq(0), fps(0),
-          cpuPercent(0), framesRendered(0), networkConnected(false),
+          cpuPercent(0), framesRendered(0), ledTransportFrameCount(0),
+          ledTransportShowSkips(0), ledTransportLastShowUs(0),
+          ledTransportAvgShowUs(0), ledTransportMaxShowUs(0),
+          ledTransportLastFastLedShowCallUs(0), ledTransportAvgFastLedShowCallUs(0),
+          ledTransportLastRmtFenceUs(0), ledTransportAvgRmtFenceUs(0),
+          ledTransportLastLatchWaitUs(0), ledTransportAvgLatchWaitUs(0),
+          ledTransportFailures(0), ledTransportRmtErrors(0), ledTransportUnderruns(0),
+          networkConnected(false),
           apMode(false), networkIP(nullptr), networkRSSI(0), wsClients(0) {}
 };
 

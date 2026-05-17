@@ -354,6 +354,22 @@ public:
             uint8_t cpuPercent;
             uint32_t framesRendered;
         } stats;
+        struct {
+            uint32_t frameCount;
+            uint32_t showSkips;
+            uint32_t lastShowUs;
+            uint32_t avgShowUs;
+            uint32_t maxShowUs;
+            uint32_t lastFastLedShowCallUs;
+            uint32_t avgFastLedShowCallUs;
+            uint32_t lastRmtFenceUs;
+            uint32_t avgRmtFenceUs;
+            uint32_t lastLatchWaitUs;
+            uint32_t avgLatchWaitUs;
+            uint32_t failures;
+            uint32_t rmtErrors;
+            uint32_t underruns;
+        } ledTransport;
         // Effect names - pointers to stable strings in RendererActor (valid until next cache update)
         // Uses limits::MAX_EFFECTS (single source of truth)
         static constexpr uint16_t MAX_CACHED_EFFECTS = limits::MAX_EFFECTS;

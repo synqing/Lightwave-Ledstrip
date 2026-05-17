@@ -33,6 +33,22 @@ void HttpDeviceCodec::encodeStatusExtended(const HttpDeviceStatusExtendedData& d
     obj["cpuPercent"] = data.cpuPercent;
     obj["frameBudgetPercent"] = data.cpuPercent;
     obj["framesRendered"] = data.framesRendered;
+
+    JsonObject ledTransport = obj["ledTransport"].to<JsonObject>();
+    ledTransport["frameCount"] = data.ledTransportFrameCount;
+    ledTransport["showSkips"] = data.ledTransportShowSkips;
+    ledTransport["lastShowUs"] = data.ledTransportLastShowUs;
+    ledTransport["avgShowUs"] = data.ledTransportAvgShowUs;
+    ledTransport["maxShowUs"] = data.ledTransportMaxShowUs;
+    ledTransport["lastFastLedShowCallUs"] = data.ledTransportLastFastLedShowCallUs;
+    ledTransport["avgFastLedShowCallUs"] = data.ledTransportAvgFastLedShowCallUs;
+    ledTransport["lastRmtFenceUs"] = data.ledTransportLastRmtFenceUs;
+    ledTransport["avgRmtFenceUs"] = data.ledTransportAvgRmtFenceUs;
+    ledTransport["lastLatchWaitUs"] = data.ledTransportLastLatchWaitUs;
+    ledTransport["avgLatchWaitUs"] = data.ledTransportAvgLatchWaitUs;
+    ledTransport["failures"] = data.ledTransportFailures;
+    ledTransport["rmtErrors"] = data.ledTransportRmtErrors;
+    ledTransport["underruns"] = data.ledTransportUnderruns;
     
     JsonObject network = obj["network"].to<JsonObject>();
     network["connected"] = data.networkConnected;

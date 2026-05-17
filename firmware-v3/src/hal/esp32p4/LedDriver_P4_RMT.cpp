@@ -639,19 +639,9 @@ void LedDriver_P4_RMT::resetStats() {
 }
 
 void LedDriver_P4_RMT::updateShowStats(uint32_t showUs) {
-    m_stats.frameCount++;
-    m_stats.lastShowUs = showUs;
-
-    if (showUs > m_stats.maxShowUs) {
-        m_stats.maxShowUs = showUs;
-    }
-
-    if (m_stats.frameCount == 1) {
-        m_stats.avgShowUs = showUs;
-    } else {
-        // Exponential moving average (7/8 old + 1/8 new)
-        m_stats.avgShowUs = (m_stats.avgShowUs * 7 + showUs) / 8;
-    }
+    LedTransportTimingSample timing{};
+    timing.totalShowUs = showUs;
+    recordLedTransportSample(m_stats, timing);
 }
 
 void LedDriver_P4_RMT::initRandomDitherError() {

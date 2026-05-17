@@ -155,6 +155,21 @@ void WebServer::doBroadcastStatus() {
     doc["fps"] = cached.stats.currentFPS;
     doc["cpuPercent"] = cached.stats.cpuPercent;
     doc["frameBudgetPercent"] = cached.stats.cpuPercent;
+    JsonObject ledTransport = doc["ledTransport"].to<JsonObject>();
+    ledTransport["frameCount"] = cached.ledTransport.frameCount;
+    ledTransport["showSkips"] = cached.ledTransport.showSkips;
+    ledTransport["lastShowUs"] = cached.ledTransport.lastShowUs;
+    ledTransport["avgShowUs"] = cached.ledTransport.avgShowUs;
+    ledTransport["maxShowUs"] = cached.ledTransport.maxShowUs;
+    ledTransport["lastFastLedShowCallUs"] = cached.ledTransport.lastFastLedShowCallUs;
+    ledTransport["avgFastLedShowCallUs"] = cached.ledTransport.avgFastLedShowCallUs;
+    ledTransport["lastRmtFenceUs"] = cached.ledTransport.lastRmtFenceUs;
+    ledTransport["avgRmtFenceUs"] = cached.ledTransport.avgRmtFenceUs;
+    ledTransport["lastLatchWaitUs"] = cached.ledTransport.lastLatchWaitUs;
+    ledTransport["avgLatchWaitUs"] = cached.ledTransport.avgLatchWaitUs;
+    ledTransport["failures"] = cached.ledTransport.failures;
+    ledTransport["rmtErrors"] = cached.ledTransport.rmtErrors;
+    ledTransport["underruns"] = cached.ledTransport.underruns;
     doc["ledDitheringEnabled"] = cached.ledDitheringEnabled;
 
     doc["freeHeap"] = ESP.getFreeHeap();

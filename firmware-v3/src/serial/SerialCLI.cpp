@@ -484,6 +484,15 @@ void printVpStackSnapshot(const RendererActor::VpStackSnapshot& snap) {
                   static_cast<unsigned long>(snap.ledStats.avgShowUs),
                   static_cast<unsigned long>(snap.ledStats.maxShowUs),
                   snap.ledStats.currentBrightness);
+    Serial.printf("  led_transport: output_prep last_us=%lu avg_us=%lu fastled_call last_us=%lu avg_us=%lu rmt_fence last_us=%lu avg_us=%lu latch_wait last_us=%lu avg_us=%lu\n",
+                  static_cast<unsigned long>(snap.ledStats.lastOutputPrepUs),
+                  static_cast<unsigned long>(snap.ledStats.avgOutputPrepUs),
+                  static_cast<unsigned long>(snap.ledStats.lastFastLedShowCallUs),
+                  static_cast<unsigned long>(snap.ledStats.avgFastLedShowCallUs),
+                  static_cast<unsigned long>(snap.ledStats.lastRmtFenceUs),
+                  static_cast<unsigned long>(snap.ledStats.avgRmtFenceUs),
+                  static_cast<unsigned long>(snap.ledStats.lastLatchWaitUs),
+                  static_cast<unsigned long>(snap.ledStats.avgLatchWaitUs));
 
     Serial.println("capture:");
     Serial.printf("  enabled=%s tap_mask=0x%02X last_effect=0x%04X last_palette=%u frame=%lu timestamp_us=%lu\n",

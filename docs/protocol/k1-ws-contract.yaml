@@ -2340,6 +2340,7 @@ commands:
         cpuPercent: { type: float, owner: "RendererActor", description: "Renderer frame-budget occupancy: avgFrameTimeUs * 100 / LedConfig::FRAME_TIME_US, clamped to 100. Not whole-device CPU utilisation and not audio benchmark load." }
         frameBudgetPercent: { type: float, owner: "RendererActor", alias_of: cpuPercent, description: "Clear-name alias for renderer frame-budget occupancy. Added for WB-1; cpuPercent remains for compatibility." }
         framesRendered: uint32
+        ledTransport: { type: object, owner: "LedDriver", fields: [frameCount, showSkips, lastShowUs, avgShowUs, maxShowUs, lastFastLedShowCallUs, avgFastLedShowCallUs, lastRmtFenceUs, avgRmtFenceUs, lastLatchWaitUs, avgLatchWaitUs, failures, rmtErrors, underruns], description: "Additive WB-2 LED transport timing and counter object. Source-only evidence; physical TX-start/TX-complete boundaries still require hardware instrumentation." }
         network: "{connected, apMode, ip?, rssi?}"
     consumers: [ios]
 
@@ -2506,6 +2507,7 @@ broadcasts:
       fps: float
       cpuPercent: { type: float, owner: "RendererActor", description: "Renderer frame-budget occupancy: avgFrameTimeUs * 100 / LedConfig::FRAME_TIME_US, clamped to 100. Not whole-device CPU utilisation and not audio benchmark load." }
       frameBudgetPercent: { type: float, owner: "RendererActor", alias_of: cpuPercent, description: "Clear-name alias for renderer frame-budget occupancy. Added for WB-1; cpuPercent remains for compatibility." }
+      ledTransport: { type: object, owner: "LedDriver", fields: [frameCount, showSkips, lastShowUs, avgShowUs, maxShowUs, lastFastLedShowCallUs, avgFastLedShowCallUs, lastRmtFenceUs, avgRmtFenceUs, lastLatchWaitUs, avgLatchWaitUs, failures, rmtErrors, underruns], description: "Additive WB-2 LED transport timing and counter object. Source-only evidence; physical TX-start/TX-complete boundaries still require hardware instrumentation." }
       ledDitheringEnabled: bool
       freeHeap: uint32
       uptime: uint32

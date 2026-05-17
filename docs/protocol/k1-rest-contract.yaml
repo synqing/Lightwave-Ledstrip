@@ -48,6 +48,7 @@ endpoints:
       cpuPercent: { type: uint8, owner: "RendererActor", description: "Renderer frame-budget occupancy: avgFrameTimeUs * 100 / LedConfig::FRAME_TIME_US, clamped to 100. Not whole-device CPU utilisation and not the audio benchmark load metric." }
       frameBudgetPercent: { type: uint8, owner: "RendererActor", alias_of: cpuPercent, description: "Clear-name alias for renderer frame-budget occupancy. Added for WB-1; cpuPercent remains for compatibility." }
       framesRendered: { type: uint32, owner: "RendererActor", description: "Rendered frame counter since renderer start." }
+      ledTransport: { type: object, owner: "LedDriver", fields: [frameCount, showSkips, lastShowUs, avgShowUs, maxShowUs, lastFastLedShowCallUs, avgFastLedShowCallUs, lastRmtFenceUs, avgRmtFenceUs, lastLatchWaitUs, avgLatchWaitUs, failures, rmtErrors, underruns], description: "Additive WB-2 LED transport timing and counter object. Source-only evidence; physical TX-start/TX-complete boundaries still require hardware instrumentation." }
     consumers: [ios]
 
   /api/v1/device/info:

@@ -128,12 +128,15 @@ uint16_t LedDriver_S3::getLedCount(uint8_t stripIndex) const {
 }
 
 #ifndef NATIVE_BUILD
-void LedDriver_S3::syncBuffersToFastLED() {
+uint32_t LedDriver_S3::syncBuffersToFastLED() {
+    uint32_t latchWaitUs = 0;
     if (m_lastShowStartUs != 0) {
         uint32_t now = static_cast<uint32_t>(esp_timer_get_time());
         const uint32_t elapsed = now - m_lastShowStartUs;
         if (elapsed < kWireTimeUs) {
-            esp_rom_delay_us(kWireTimeUs - elapsed);
+            const uint32_t waitUs = kWireTimeUs - elapsed;
+            esp_rom_delay_us(waitUs);
+            latchWaitUs += waitUs;
         }
     }
 
@@ -141,11 +144,14 @@ void LedDriver_S3::syncBuffersToFastLED() {
     if (m_dual) {
         memcpy(m_txStrip2, m_strip2, sizeof(CRGB) * m_stripCounts[1]);
     }
+    return latchWaitUs;
 }
 #endif
 
 void LedDriver_S3::show() {
 #ifndef NATIVE_BUILD
+    LedTransportTimingSample timing{};
+
     // Layer 2: Mutex with timeout — skip frame on contention rather than crash
     if (m_showMutex && xSemaphoreTake(m_showMutex, pdMS_TO_TICKS(2)) != pdTRUE) {
         m_stats.showSkips++;
@@ -156,7 +162,9 @@ void LedDriver_S3::show() {
     // Layer 1: Minimum interval guard — wait (do not drop) to keep RMT stable.
     uint32_t now = static_cast<uint32_t>(esp_timer_get_time());
     if (m_lastShowEndUs != 0 && (now - m_lastShowEndUs) < kMinShowGapUs) {
-        esp_rom_delay_us(kMinShowGapUs - (now - m_lastShowEndUs));
+        const uint32_t waitUs = kMinShowGapUs - (now - m_lastShowEndUs);
+        esp_rom_delay_us(waitUs);
+        timing.latchWaitUs += waitUs;
         now = static_cast<uint32_t>(esp_timer_get_time());
     }
 
@@ -164,7 +172,10 @@ void LedDriver_S3::show() {
     // Cross-core calls cause RMT spinlock corruption (see fix/stable-effect-ids).
     configASSERT(xPortGetCoreID() == 1);
 
-    syncBuffersToFastLED();
+    const uint32_t prepStartUs = static_cast<uint32_t>(esp_timer_get_time());
+    timing.latchWaitUs += syncBuffersToFastLED();
+    const uint32_t prepEndUs = static_cast<uint32_t>(esp_timer_get_time());
+    timing.outputPrepUs = prepEndUs - prepStartUs;
 
     m_showInProgress.store(true, std::memory_order_relaxed);
 
@@ -173,20 +184,28 @@ void LedDriver_S3::show() {
     // 2026-05-05 showed visible white flashes unless Core 1 waits for the full
     // WS2812 wire time before render continues.
     m_lastShowStartUs = static_cast<uint32_t>(esp_timer_get_time());
+    const uint32_t fastLedStartUs = m_lastShowStartUs;
     FastLED.show();
+    const uint32_t fastLedEndUs = static_cast<uint32_t>(esp_timer_get_time());
+    timing.fastLedShowCallUs = fastLedEndUs - fastLedStartUs;
     esp_rom_delay_us(kWireTimeUs);
+    const uint32_t fenceEndUs = static_cast<uint32_t>(esp_timer_get_time());
+    timing.rmtFenceUs = fenceEndUs - fastLedEndUs;
 
-    const uint32_t end = static_cast<uint32_t>(esp_timer_get_time());
+    const uint32_t end = fenceEndUs;
     const uint32_t showUs = (end >= now) ? (end - now) : 0U;
 
-    updateShowStats(showUs);
+    timing.totalShowUs = showUs;
+    updateShowStats(timing);
     m_lastShowEndUs = static_cast<uint32_t>(esp_timer_get_time());
     // Cleared after FastLED.show() returns; RMT may still be shifting out the frame.
     m_showInProgress.store(false, std::memory_order_relaxed);
 
     if (m_showMutex) xSemaphoreGive(m_showMutex);
 #else
-    m_stats.frameCount++;
+    LedTransportTimingSample timing{};
+    timing.totalShowUs = 1;
+    recordLedTransportSample(m_stats, timing);
 #endif
 }
 
@@ -246,17 +265,8 @@ void LedDriver_S3::setDithering(bool enabled) {
 #endif
 }
 
-void LedDriver_S3::updateShowStats(uint32_t showUs) {
-    m_stats.frameCount++;
-    m_stats.lastShowUs = showUs;
-    if (showUs > m_stats.maxShowUs) {
-        m_stats.maxShowUs = showUs;
-    }
-    if (m_stats.frameCount == 1) {
-        m_stats.avgShowUs = showUs;
-    } else {
-        m_stats.avgShowUs = (m_stats.avgShowUs * 7 + showUs) / 8;
-    }
+void LedDriver_S3::updateShowStats(const LedTransportTimingSample& timing) {
+    recordLedTransportSample(m_stats, timing);
 }
 
 void LedDriver_S3::applyColorCorrection(const LedStripConfig& config) {

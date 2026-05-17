@@ -43,6 +43,22 @@ void SystemHandlers::handleHealth(AsyncWebServerRequest* request,
         data["fps"] = stats.currentFPS;
         data["cpuPercent"] = stats.cpuPercent;
         data["frameBudgetPercent"] = stats.cpuPercent;
+        const auto& ledStats = renderer->getLedDriverStats();
+        JsonObject ledTransport = data["ledTransport"].to<JsonObject>();
+        ledTransport["frameCount"] = ledStats.frameCount;
+        ledTransport["showSkips"] = ledStats.showSkips;
+        ledTransport["lastShowUs"] = ledStats.lastShowUs;
+        ledTransport["avgShowUs"] = ledStats.avgShowUs;
+        ledTransport["maxShowUs"] = ledStats.maxShowUs;
+        ledTransport["lastFastLedShowCallUs"] = ledStats.lastFastLedShowCallUs;
+        ledTransport["avgFastLedShowCallUs"] = ledStats.avgFastLedShowCallUs;
+        ledTransport["lastRmtFenceUs"] = ledStats.lastRmtFenceUs;
+        ledTransport["avgRmtFenceUs"] = ledStats.avgRmtFenceUs;
+        ledTransport["lastLatchWaitUs"] = ledStats.lastLatchWaitUs;
+        ledTransport["avgLatchWaitUs"] = ledStats.avgLatchWaitUs;
+        ledTransport["failures"] = ledStats.ledShowFailures;
+        ledTransport["rmtErrors"] = ledStats.rmtErrors;
+        ledTransport["underruns"] = ledStats.rmtUnderruns;
     }
     
     if (ws) {

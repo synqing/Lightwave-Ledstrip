@@ -1089,6 +1089,21 @@ void WebServer::updateCachedRendererState() {
     m_cachedRendererState.stats.currentFPS = srcStats.currentFPS;
     m_cachedRendererState.stats.cpuPercent = srcStats.cpuPercent;
     m_cachedRendererState.stats.framesRendered = srcStats.framesRendered;
+    const auto& ledStats = m_renderer->getLedDriverStats();
+    m_cachedRendererState.ledTransport.frameCount = ledStats.frameCount;
+    m_cachedRendererState.ledTransport.showSkips = ledStats.showSkips;
+    m_cachedRendererState.ledTransport.lastShowUs = ledStats.lastShowUs;
+    m_cachedRendererState.ledTransport.avgShowUs = ledStats.avgShowUs;
+    m_cachedRendererState.ledTransport.maxShowUs = ledStats.maxShowUs;
+    m_cachedRendererState.ledTransport.lastFastLedShowCallUs = ledStats.lastFastLedShowCallUs;
+    m_cachedRendererState.ledTransport.avgFastLedShowCallUs = ledStats.avgFastLedShowCallUs;
+    m_cachedRendererState.ledTransport.lastRmtFenceUs = ledStats.lastRmtFenceUs;
+    m_cachedRendererState.ledTransport.avgRmtFenceUs = ledStats.avgRmtFenceUs;
+    m_cachedRendererState.ledTransport.lastLatchWaitUs = ledStats.lastLatchWaitUs;
+    m_cachedRendererState.ledTransport.avgLatchWaitUs = ledStats.avgLatchWaitUs;
+    m_cachedRendererState.ledTransport.failures = ledStats.ledShowFailures;
+    m_cachedRendererState.ledTransport.rmtErrors = ledStats.rmtErrors;
+    m_cachedRendererState.ledTransport.underruns = ledStats.rmtUnderruns;
     
     // Cache effect names (pointers to stable strings in RendererActor)
     uint16_t count = m_cachedRendererState.effectCount;

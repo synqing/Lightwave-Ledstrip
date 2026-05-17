@@ -133,7 +133,7 @@ struct RenderStats {
     uint32_t maxFrameTimeUs;      // Maximum frame time seen
     uint32_t minFrameTimeUs;      // Minimum frame time seen
     uint16_t currentFPS;          // Measured FPS
-    uint8_t cpuPercent;           // CPU usage estimate
+    uint8_t cpuPercent;           // Legacy wire field: renderer frame-budget occupancy
 
     RenderStats()
         : framesRendered(0), frameDrops(0)

@@ -154,6 +154,7 @@ void WebServer::doBroadcastStatus() {
     doc["variation"] = cached.variation;
     doc["fps"] = cached.stats.currentFPS;
     doc["cpuPercent"] = cached.stats.cpuPercent;
+    doc["frameBudgetPercent"] = cached.stats.cpuPercent;
     doc["ledDitheringEnabled"] = cached.ledDitheringEnabled;
 
     doc["freeHeap"] = ESP.getFreeHeap();

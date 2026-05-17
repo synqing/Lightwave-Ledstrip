@@ -139,7 +139,7 @@ void PerformanceMonitor::endFrame() {
         m_peakMetrics.totalFrame = m_currentFrame.totalFrame;
     }
 
-    // Calculate CPU usage
+    // Calculate active frame-time occupancy, not whole-device CPU usage.
     m_totalCPUTime += m_currentFrame.totalFrame;
     m_activeCPUTime += activeTime;
     if (m_totalCPUTime > 0) {
@@ -182,7 +182,7 @@ void PerformanceMonitor::updateHistory() {
                      : 0;
     m_fpsHistory[m_historyIndex] = (fps > 255) ? 255 : static_cast<uint8_t>(fps);
 
-    // Store CPU usage in history (clamped to 0-100)
+    // Store active frame-time occupancy in history (clamped to 0-100)
     m_cpuHistory[m_historyIndex] = (m_cpuUsagePercent > 100.0f)
                                       ? 100
                                       : static_cast<uint8_t>(m_cpuUsagePercent);
@@ -283,21 +283,21 @@ void PerformanceMonitor::getTimingPercentages(float& effectPct, float& ledPct,
 void PerformanceMonitor::printStatus() const {
     // Select log level based on fragmentation status
     if (isFragmentationCritical()) {
-        LW_LOGE("FPS: %.1f | CPU: %.1f%% | Effect: %luus | LED: %luus | Heap: %u | Frag: %u%% [CRITICAL]",
+        LW_LOGE("FPS: %.1f | ActiveFrame: %.1f%% | Effect: %luus | LED: %luus | Heap: %u | Frag: %u%% [CRITICAL]",
                 getFPS(), m_cpuUsagePercent,
                 (unsigned long)m_avgMetrics.effectProcessing,
                 (unsigned long)m_avgMetrics.fastLEDShow,
                 m_memoryMetrics.freeHeap,
                 m_memoryMetrics.fragmentationPercent);
     } else if (isFragmentationWarning()) {
-        LW_LOGW("FPS: %.1f | CPU: %.1f%% | Effect: %luus | LED: %luus | Heap: %u | Frag: %u%% [WARN]",
+        LW_LOGW("FPS: %.1f | ActiveFrame: %.1f%% | Effect: %luus | LED: %luus | Heap: %u | Frag: %u%% [WARN]",
                 getFPS(), m_cpuUsagePercent,
                 (unsigned long)m_avgMetrics.effectProcessing,
                 (unsigned long)m_avgMetrics.fastLEDShow,
                 m_memoryMetrics.freeHeap,
                 m_memoryMetrics.fragmentationPercent);
     } else {
-        LW_LOGI("FPS: %.1f | CPU: %.1f%% | Effect: %luus | LED: %luus | Heap: %u | Frag: %u%%",
+        LW_LOGI("FPS: %.1f | ActiveFrame: %.1f%% | Effect: %luus | LED: %luus | Heap: %u | Frag: %u%%",
                 getFPS(), m_cpuUsagePercent,
                 (unsigned long)m_avgMetrics.effectProcessing,
                 (unsigned long)m_avgMetrics.fastLEDShow,
@@ -334,7 +334,7 @@ void PerformanceMonitor::printDetailedReport() const {
     LW_LOGI("  Current FPS:       %.1f", getFPS());
     LW_LOGI("  Target FPS:        %.1f",
             1000000.0f / static_cast<float>(m_targetFrameTime));
-    LW_LOGI("  CPU Usage:         %.1f%%", m_cpuUsagePercent);
+    LW_LOGI("  Active Frame Time: %.1f%%", m_cpuUsagePercent);
 
     if (m_frameCount > 0) {
         LW_LOGI("  Dropped Frames:    %lu (%.2f%%)",

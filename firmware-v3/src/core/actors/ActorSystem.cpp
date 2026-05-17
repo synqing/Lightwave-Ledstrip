@@ -840,7 +840,7 @@ void ActorSystem::printStatus()
         Serial.printf("Brightness: %d\n", m_renderer->getBrightness());
         Serial.printf("Speed: %d\n", m_renderer->getSpeed());
         Serial.printf("FPS: %d (target: %d)\n", rs.currentFPS, LedConfig::TARGET_FPS);
-        Serial.printf("CPU: %d%%\n", rs.cpuPercent);
+        Serial.printf("Frame budget: %d%%\n", rs.cpuPercent);
         const uint32_t overBudgetPctTenths = rs.framesRendered > 0
             ? static_cast<uint32_t>(
                 ((static_cast<uint64_t>(rs.frameDrops) * 1000ULL)

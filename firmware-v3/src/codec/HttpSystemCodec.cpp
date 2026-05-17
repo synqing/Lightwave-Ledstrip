@@ -31,6 +31,7 @@ void HttpSystemCodec::encodeHealth(const HttpSystemHealthData& data, JsonObject&
         obj["queueCapacity"] = data.queueCapacity;
         obj["fps"] = data.fps;
         obj["cpuPercent"] = data.cpuPercent;
+        obj["frameBudgetPercent"] = data.cpuPercent;
     }
     
     if (data.hasWebSocket) {

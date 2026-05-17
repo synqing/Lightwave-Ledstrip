@@ -69,7 +69,7 @@ struct MemoryMetrics {
  */
 struct PerformanceStats {
     float fps;                       ///< Current FPS (EMA smoothed)
-    float cpuPercent;                ///< CPU usage percentage
+    float cpuPercent;                ///< Legacy name: active frame-time percentage
     uint32_t effectTimeUs;           ///< Effect processing time (us)
     uint32_t showTimeUs;             ///< FastLED.show() time (us)
     uint32_t totalFrameTimeUs;       ///< Total frame time (us)
@@ -170,8 +170,8 @@ public:
     float getFPS() const;
 
     /**
-     * @brief Get CPU usage percentage
-     * @return CPU usage (0-100%)
+     * @brief Get active frame-time percentage
+     * @return Active frame-time occupancy (0-100%)
      */
     float getCPUPercent() const;
 
@@ -266,7 +266,7 @@ public:
     /**
      * @brief Print compact status line to serial
      *
-     * Format: [PERF] FPS: XX.X | CPU: XX.X% | Effect: XXXus | LED: XXXus | Heap: XXXXX | Frag: XX%
+     * Format: [PERF] FPS: XX.X | ActiveFrame: XX.X% | Effect: XXXus | LED: XXXus | Heap: XXXXX | Frag: XX%
      */
     void printStatus() const;
 
@@ -311,7 +311,7 @@ private:
     int64_t m_frameStartTime = 0;
     int64_t m_sectionStartTime = 0;
 
-    // CPU usage calculation
+    // Active frame-time calculation. Legacy member names preserve API compatibility.
     uint64_t m_totalCPUTime = 0;
     uint64_t m_activeCPUTime = 0;
     float m_cpuUsagePercent = 0.0f;

@@ -42,6 +42,7 @@ void SystemHandlers::handleHealth(AsyncWebServerRequest* request,
         const RenderStats& stats = renderer->getStats();
         data["fps"] = stats.currentFPS;
         data["cpuPercent"] = stats.cpuPercent;
+        data["frameBudgetPercent"] = stats.cpuPercent;
     }
     
     if (ws) {

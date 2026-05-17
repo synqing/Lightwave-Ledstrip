@@ -46,6 +46,7 @@ endpoints:
     response_fields:
       fps: { type: uint16, owner: "RendererActor", description: "Renderer FPS derived from rolling average frame time." }
       cpuPercent: { type: uint8, owner: "RendererActor", description: "Renderer frame-budget occupancy: avgFrameTimeUs * 100 / LedConfig::FRAME_TIME_US, clamped to 100. Not whole-device CPU utilisation and not the audio benchmark load metric." }
+      frameBudgetPercent: { type: uint8, owner: "RendererActor", alias_of: cpuPercent, description: "Clear-name alias for renderer frame-budget occupancy. Added for WB-1; cpuPercent remains for compatibility." }
       framesRendered: { type: uint32, owner: "RendererActor", description: "Rendered frame counter since renderer start." }
     consumers: [ios]
 

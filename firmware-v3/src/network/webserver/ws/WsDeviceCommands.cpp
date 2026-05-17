@@ -74,6 +74,7 @@ static void handleLegacyGetStatus(AsyncWebSocketClient* client, JsonDocument& do
         response["variation"] = cached.variation;
         response["fps"] = cached.stats.currentFPS;
         response["cpuPercent"] = cached.stats.cpuPercent;
+        response["frameBudgetPercent"] = cached.stats.cpuPercent;
         response["freeHeap"] = ESP.getFreeHeap();
         response["uptime"] = millis() / 1000;
         // Edge mixer state (from cache)
@@ -128,6 +129,7 @@ static void handleDeviceGetStatus(AsyncWebSocketClient* client, JsonDocument& do
             const auto& stats = ctx.renderer->getStats();
             data["fps"] = stats.currentFPS;
             data["cpuPercent"] = stats.cpuPercent;
+            data["frameBudgetPercent"] = stats.cpuPercent;
             data["framesRendered"] = stats.framesRendered;
         }
 

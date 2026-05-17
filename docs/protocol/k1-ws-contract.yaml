@@ -2338,6 +2338,7 @@ commands:
         cpuFreq: uint16
         fps: float
         cpuPercent: { type: float, owner: "RendererActor", description: "Renderer frame-budget occupancy: avgFrameTimeUs * 100 / LedConfig::FRAME_TIME_US, clamped to 100. Not whole-device CPU utilisation and not audio benchmark load." }
+        frameBudgetPercent: { type: float, owner: "RendererActor", alias_of: cpuPercent, description: "Clear-name alias for renderer frame-budget occupancy. Added for WB-1; cpuPercent remains for compatibility." }
         framesRendered: uint32
         network: "{connected, apMode, ip?, rssi?}"
     consumers: [ios]
@@ -2504,6 +2505,7 @@ broadcasts:
       variation: uint8
       fps: float
       cpuPercent: { type: float, owner: "RendererActor", description: "Renderer frame-budget occupancy: avgFrameTimeUs * 100 / LedConfig::FRAME_TIME_US, clamped to 100. Not whole-device CPU utilisation and not audio benchmark load." }
+      frameBudgetPercent: { type: float, owner: "RendererActor", alias_of: cpuPercent, description: "Clear-name alias for renderer frame-budget occupancy. Added for WB-1; cpuPercent remains for compatibility." }
       ledDitheringEnabled: bool
       freeHeap: uint32
       uptime: uint32

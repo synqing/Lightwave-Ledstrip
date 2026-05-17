@@ -455,7 +455,7 @@ void printVpStackSnapshot(const RendererActor::VpStackSnapshot& snap) {
                   gamma.lut128, gamma.lut192, gamma.lut255);
 
     Serial.println("frame:");
-    Serial.printf("  target_fps=%u frames=%lu drops=%lu fps=%u avg_us=%lu min_us=%lu max_us=%lu cpu=%u%%\n",
+    Serial.printf("  target_fps=%u frames=%lu over_budget=%lu fps=%u avg_us=%lu min_us=%lu max_us=%lu frame_budget=%u%%\n",
                   LedConfig::TARGET_FPS,
                   static_cast<unsigned long>(snap.renderStats.framesRendered),
                   static_cast<unsigned long>(snap.renderStats.frameDrops),

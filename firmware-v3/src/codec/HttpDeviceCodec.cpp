@@ -31,6 +31,7 @@ void HttpDeviceCodec::encodeStatusExtended(const HttpDeviceStatusExtendedData& d
     obj["cpuFreq"] = data.cpuFreq;
     obj["fps"] = data.fps;
     obj["cpuPercent"] = data.cpuPercent;
+    obj["frameBudgetPercent"] = data.cpuPercent;
     obj["framesRendered"] = data.framesRendered;
     
     JsonObject network = obj["network"].to<JsonObject>();

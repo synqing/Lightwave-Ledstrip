@@ -61,10 +61,12 @@ void test_device_status_extended_encoding_allowlist() {
     HttpDeviceCodec::encodeStatusExtended(data, obj);
 
     const char* allowedKeys[] = {
-        "uptime", "freeHeap", "heapSize", "cpuFreq", "fps", "cpuPercent",
+        "uptime", "freeHeap", "heapSize", "cpuFreq", "fps", "cpuPercent", "frameBudgetPercent",
         "framesRendered", "network", "wsClients"
     };
     TEST_ASSERT_TRUE(validateKeysAgainstAllowList(obj, allowedKeys, sizeof(allowedKeys) / sizeof(allowedKeys[0])));
+    TEST_ASSERT_EQUAL(55, obj["cpuPercent"].as<int>());
+    TEST_ASSERT_EQUAL(55, obj["frameBudgetPercent"].as<int>());
     TEST_ASSERT_TRUE(obj.containsKey("network"));
 
     JsonObject network = obj["network"].as<JsonObject>();

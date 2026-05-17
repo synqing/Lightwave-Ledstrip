@@ -45,6 +45,7 @@ void DeviceHandlers::handleStatus(AsyncWebServerRequest* request,
         const RenderStats& stats = renderer->getStats();
         data["fps"] = stats.currentFPS;
         data["cpuPercent"] = stats.cpuPercent;
+        data["frameBudgetPercent"] = stats.cpuPercent;
         data["framesRendered"] = stats.framesRendered;
 
         // Audio sync mode (local ES backend vs external Trinity sync)

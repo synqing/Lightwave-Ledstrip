@@ -14,6 +14,7 @@
 #include "NetworkHandlers.h"
 #include "../../WiFiManager.h"
 #include "../../RequestValidator.h"
+#include "../../NetworkProvisionGate.h"
 #include "../../ApiResponse.h"
 #include <WiFi.h>
 #include <ArduinoJson.h>
@@ -172,22 +173,19 @@ void NetworkHandlers::handleConnect(AsyncWebServerRequest* request, uint8_t* dat
 
 void NetworkHandlers::handleProvision(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
 #ifdef WIFI_AP_ONLY
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::OPERATION_FAILED,
-                      "Provisioning unavailable in WIFI_AP_ONLY build");
-    return;
+    const NetworkProvisionGate provisionGate =
+        evaluateNetworkProvisionGate(true, false, false);
+#elif !defined(LW_STA_VALIDATION_BUILD)
+    const NetworkProvisionGate provisionGate =
+        evaluateNetworkProvisionGate(false, false, false);
+#else
+    const NetworkProvisionGate provisionGate =
+        evaluateNetworkProvisionGate(false, true, WiFi.getMode() == WIFI_MODE_AP);
 #endif
-#ifndef LW_STA_VALIDATION_BUILD
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::OPERATION_FAILED,
-                      "Provisioning unavailable outside LW_STA_VALIDATION_BUILD");
-    return;
-#endif
-
-    if (WiFi.getMode() != WIFI_MODE_AP) {
+    if (provisionGate != NetworkProvisionGate::Allowed) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::OPERATION_FAILED,
-                          "Provisioning is only available from AP mode");
+                          networkProvisionGateMessage(provisionGate));
         return;
     }
 
@@ -203,7 +201,7 @@ void NetworkHandlers::handleProvision(AsyncWebServerRequest* request, uint8_t* d
     const char* ssid = doc["ssid"].as<const char*>();
     const char* password = doc["password"] | "";
     size_t passLen = strlen(password);
-    if (passLen > 0 && passLen < 8) {
+    if (!isNetworkProvisionPasswordLengthAllowed(passLen)) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
                           ErrorCodes::OUT_OF_RANGE, "Password must be at least 8 characters");
         return;

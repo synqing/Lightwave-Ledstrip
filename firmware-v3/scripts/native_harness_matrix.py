@@ -23,6 +23,7 @@ MATRIX: tuple[HarnessStep, ...] = (
     HarnessStep("codec aggregate", (("pio", "test", "-e", "native_codec_test_ws"),)),
     HarnessStep("colour correction engine", (("pio", "test", "-e", "native_test_color_correction_engine"),)),
     HarnessStep("control bus bench toggles", (("pio", "test", "-e", "native_test_control_bus_bench_toggles"),)),
+    HarnessStep("network provision contract", (("pio", "test", "-e", "native_test_network_provision_contract"),)),
     HarnessStep("fade override bench helper", (("pio", "test", "-e", "native_test_fade_override"),)),
     HarnessStep("snapshot buffer diagnostics", (("pio", "test", "-e", "native_test_snapshot_buffer_diagnostics"),)),
     HarnessStep("synq-matrix director policy", (("pio", "test", "-e", "native_test_synq_matrix_director"),)),

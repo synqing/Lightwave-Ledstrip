@@ -719,6 +719,48 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
         handledMulti = true;
     }
 
+#if FEATURE_TRANSITIONS
+    // Direct transition trigger for hardware testing:
+    //   tx <type> <effectId>
+    //   <type>     = 0..11 (see ! for the list)
+    //   <effectId> = decimal or 0x-prefixed hex
+    // Example:  tx 8 0x1A03   → NUCLEAR (2500ms) to LGP Bass Quake
+    //           tx 0 256       → FADE (800ms) to Fire (0x0100)
+    if (inputLower.startsWith("tx ")) {
+        const char* args = input.c_str() + 3;
+        char* end1 = nullptr;
+        const long ttype = strtol(args, &end1, 10);
+        if (end1 == args || ttype < 0 || ttype >= static_cast<long>(TransitionType::TYPE_COUNT)) {
+            Serial.printf("tx: bad type (0..%d). Type '!' to list.\n",
+                          static_cast<int>(TransitionType::TYPE_COUNT) - 1);
+            handledMulti = true;
+            return;
+        }
+        while (*end1 == ' ') ++end1;
+        char* end2 = nullptr;
+        const long effectId = strtol(end1, &end2, 0);  // base 0 = auto (hex/dec)
+        if (end2 == end1 || effectId <= 0 || effectId > 0xFFFF) {
+            Serial.println("tx: bad effectId (use decimal or 0xNNNN).");
+            handledMulti = true;
+            return;
+        }
+        if (renderer && !renderer->isEffectRegistered(static_cast<EffectId>(effectId))) {
+            Serial.printf("tx: effect 0x%04X not registered.\n", static_cast<unsigned>(effectId));
+            handledMulti = true;
+            return;
+        }
+        const TransitionType tt = static_cast<TransitionType>(ttype);
+        Serial.printf("tx: firing %s (%dms) -> 0x%04X (%s)\n",
+                      getTransitionName(tt),
+                      getDefaultDuration(tt),
+                      static_cast<unsigned>(effectId),
+                      renderer ? renderer->getEffectName(static_cast<EffectId>(effectId)) : "?");
+        actors.startTransition(static_cast<EffectId>(effectId), static_cast<uint8_t>(ttype));
+        handledMulti = true;
+        return;
+    }
+#endif
+
 #if FEATURE_AUDIO_SYNC
     // Observability: single key "x" (or "bands") — must be top-level so
     // "x" and "bands" are not gated by peekChar == 'a'

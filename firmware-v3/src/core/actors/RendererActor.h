@@ -1026,6 +1026,7 @@ public:
     const char* m_synqMatrixDirectorTargetFamily = "none";
     const char* m_synqMatrixDirectorTargetLanguage = "none";
     const char* m_synqMatrixDirectorTransitionReason = "none";
+    uint8_t m_synqMatrixDirectorTargetPalette = 0xFF;
 
     /**
      * MusicalGrid PLL - owned by renderer for 120 FPS Tick()

@@ -37,18 +37,24 @@ struct DirectorPolicy {
     const char* visualLanguage;
     SynqMatrixSwitchReason reason;
     float minConfidence;
+    // PaletteShift target. 0xFF = leave palette unchanged.
+    // Per-state choices chosen from the FastLED-standard palette band that
+    // is guaranteed to exist in every K1 build (0..7). K1 ships 75 palettes
+    // so these are conservative seeds; Captain may retune by state without
+    // touching the wiring.
+    uint8_t targetPaletteIndex;
 };
 
 static constexpr DirectorPolicy kMatrix[] = {
-    {SynqMatrixState::Unknown, EID_SB_K1_WAVEFORM, "baseline", "k1_waveform_restore_baseline", SynqMatrixSwitchReason::None, 1.0f},
-    {SynqMatrixState::Silence, EID_MODAL_RESONANCE, "interference", "modal_low_density_hold", SynqMatrixSwitchReason::AmbientPosture, 1.0f},
-    {SynqMatrixState::Ambient, EID_MODAL_RESONANCE, "interference", "calm_modal_resonance", SynqMatrixSwitchReason::AmbientPosture, 0.30f},
-    {SynqMatrixState::Steady, EID_LGP_HOLOGRAPHIC, "interference", "flagship_holographic_depth", SynqMatrixSwitchReason::SteadyReadability, 0.32f},
-    {SynqMatrixState::Build, EID_LGP_WAVE_COLLISION, "interference", "colliding_wave_pressure", SynqMatrixSwitchReason::BuildPressure, 0.45f},
-    {SynqMatrixState::Drop, EID_LGP_PHOTONIC_CRYSTAL, "advanced_optical", "photonic_drop_texture", SynqMatrixSwitchReason::DropImpact, 0.60f},
-    {SynqMatrixState::Breakdown, EID_LGP_CHROMATIC_LENS, "advanced_optical", "chromatic_space_release", SynqMatrixSwitchReason::BreakdownRelease, 0.35f},
-    {SynqMatrixState::Dense, EID_LGP_KDV_SOLITON_PAIR, "mathematical", "dense_soliton_pair", SynqMatrixSwitchReason::DenseLegibility, 0.55f},
-    {SynqMatrixState::Transition, EID_LGP_CHROMATIC_PULSE, "advanced_optical", "chromatic_transition_pulse", SynqMatrixSwitchReason::TransitionBridge, 0.45f},
+    {SynqMatrixState::Unknown, EID_SB_K1_WAVEFORM, "baseline", "k1_waveform_restore_baseline", SynqMatrixSwitchReason::None, 1.0f, 0xFF},
+    {SynqMatrixState::Silence, EID_MODAL_RESONANCE, "interference", "modal_low_density_hold", SynqMatrixSwitchReason::AmbientPosture, 1.0f, 0xFF},
+    {SynqMatrixState::Ambient, EID_MODAL_RESONANCE, "interference", "calm_modal_resonance", SynqMatrixSwitchReason::AmbientPosture, 0.30f, 4},   // calm / cool
+    {SynqMatrixState::Steady, EID_LGP_HOLOGRAPHIC, "interference", "flagship_holographic_depth", SynqMatrixSwitchReason::SteadyReadability, 0.32f, 2}, // mid
+    {SynqMatrixState::Build, EID_LGP_WAVE_COLLISION, "interference", "colliding_wave_pressure", SynqMatrixSwitchReason::BuildPressure, 0.45f, 7},     // heat — building
+    {SynqMatrixState::Drop, EID_LGP_PHOTONIC_CRYSTAL, "advanced_optical", "photonic_drop_texture", SynqMatrixSwitchReason::DropImpact, 0.60f, 7},     // heat — Captain's Reactive Heatmap
+    {SynqMatrixState::Breakdown, EID_LGP_CHROMATIC_LENS, "advanced_optical", "chromatic_space_release", SynqMatrixSwitchReason::BreakdownRelease, 0.35f, 5}, // cool release
+    {SynqMatrixState::Dense, EID_LGP_KDV_SOLITON_PAIR, "mathematical", "dense_soliton_pair", SynqMatrixSwitchReason::DenseLegibility, 0.55f, 3},      // saturated
+    {SynqMatrixState::Transition, EID_LGP_CHROMATIC_PULSE, "advanced_optical", "chromatic_transition_pulse", SynqMatrixSwitchReason::TransitionBridge, 0.45f, 6}, // party / transitional
 };
 
 static constexpr uint8_t kPolicyCount = sizeof(kMatrix) / sizeof(kMatrix[0]);
@@ -791,6 +797,7 @@ bool SynqMatrix::tick(const audio::ControlBusFrame& frame,
     request.targetFamily = policy.family;
     request.targetVisualLanguage = policy.visualLanguage;
     request.reason = synqMatrixSwitchReasonName(policy.reason);
+    request.targetPaletteIndex = policy.targetPaletteIndex;
     m_dwellRemainingMs.store(0, std::memory_order_release);
     m_cooldownRemainingMs.store(0, std::memory_order_release);
     m_actionPlan.store(static_cast<uint8_t>(SynqMatrixActionPlan::EffectSwitch), std::memory_order_release);

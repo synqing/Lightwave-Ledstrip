@@ -1614,6 +1614,7 @@ void RendererActor::queueSynqMatrixTransition(
     m_synqMatrixDirectorTargetFamily = request.targetFamily;
     m_synqMatrixDirectorTargetLanguage = request.targetVisualLanguage;
     m_synqMatrixDirectorTransitionReason = request.reason;
+    m_synqMatrixDirectorTargetPalette = request.targetPaletteIndex;
 }
 
 bool RendererActor::processSynqMatrixTransition(uint32_t nowMs)
@@ -1627,6 +1628,7 @@ bool RendererActor::processSynqMatrixTransition(uint32_t nowMs)
     const char* targetFamily = m_synqMatrixDirectorTargetFamily;
     const char* targetLanguage = m_synqMatrixDirectorTargetLanguage;
     const char* reason = m_synqMatrixDirectorTransitionReason;
+    const uint8_t targetPalette = m_synqMatrixDirectorTargetPalette;
     m_synqMatrixDirectorTransitionQueued = false;
 
     auto& director = synqmatrix::SynqMatrix::instance();
@@ -1667,6 +1669,16 @@ bool RendererActor::processSynqMatrixTransition(uint32_t nowMs)
                                         m_leds,
                                         m_leds,
                                         transitionType);
+
+    // PaletteShift: bundled with EffectSwitch on the same state-change
+    // trigger. Skip if sentinel (0xFF) or already on target palette.
+    if (targetPalette != 0xFF && targetPalette != m_paletteIndex) {
+        const uint8_t prevPalette = m_paletteIndex;
+        handleSetPalette(targetPalette);
+        LW_LOGI("Director palette: %u (%s) -> %u (%s)",
+                prevPalette, getPaletteName(prevPalette),
+                m_paletteIndex, getPaletteName(m_paletteIndex));
+    }
 
     const uint32_t appliedAtMs = millis();
     director.notifySwitchApplied(previousEffect,

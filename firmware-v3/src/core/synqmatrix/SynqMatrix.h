@@ -249,6 +249,9 @@ struct SynqMatrixSwitchRequest {
     const char* targetFamily = "none";
     const char* targetVisualLanguage = "none";
     const char* reason = "none";
+    // PaletteShift: when requested fires, also rotate to this palette index.
+    // 0xFF = leave palette unchanged.
+    uint8_t targetPaletteIndex = 0xFF;
 };
 
 struct SynqMatrixPolicySnapshot {

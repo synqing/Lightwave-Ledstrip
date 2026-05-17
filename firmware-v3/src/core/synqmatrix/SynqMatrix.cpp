@@ -43,18 +43,25 @@ struct DirectorPolicy {
     // so these are conservative seeds; Captain may retune by state without
     // touching the wiring.
     uint8_t targetPaletteIndex;
+    // ColourModifierShift target hue offset (0..255 = full hue wheel).
+    // applyColourModifier=false leaves hue unchanged. Per-state values
+    // create visible colour variation across the 9 states so the difference
+    // between Ambient / Build / Drop / Breakdown is legible by eye even on
+    // the same palette. Captain may retune without touching wiring.
+    bool applyColourModifier;
+    uint8_t targetColourModifier;
 };
 
 static constexpr DirectorPolicy kMatrix[] = {
-    {SynqMatrixState::Unknown, EID_SB_K1_WAVEFORM, "baseline", "k1_waveform_restore_baseline", SynqMatrixSwitchReason::None, 1.0f, 0xFF},
-    {SynqMatrixState::Silence, EID_MODAL_RESONANCE, "interference", "modal_low_density_hold", SynqMatrixSwitchReason::AmbientPosture, 1.0f, 0xFF},
-    {SynqMatrixState::Ambient, EID_MODAL_RESONANCE, "interference", "calm_modal_resonance", SynqMatrixSwitchReason::AmbientPosture, 0.30f, 4},   // calm / cool
-    {SynqMatrixState::Steady, EID_LGP_HOLOGRAPHIC, "interference", "flagship_holographic_depth", SynqMatrixSwitchReason::SteadyReadability, 0.32f, 2}, // mid
-    {SynqMatrixState::Build, EID_LGP_WAVE_COLLISION, "interference", "colliding_wave_pressure", SynqMatrixSwitchReason::BuildPressure, 0.45f, 7},     // heat — building
-    {SynqMatrixState::Drop, EID_LGP_PHOTONIC_CRYSTAL, "advanced_optical", "photonic_drop_texture", SynqMatrixSwitchReason::DropImpact, 0.60f, 7},     // heat — Captain's Reactive Heatmap
-    {SynqMatrixState::Breakdown, EID_LGP_CHROMATIC_LENS, "advanced_optical", "chromatic_space_release", SynqMatrixSwitchReason::BreakdownRelease, 0.35f, 5}, // cool release
-    {SynqMatrixState::Dense, EID_LGP_KDV_SOLITON_PAIR, "mathematical", "dense_soliton_pair", SynqMatrixSwitchReason::DenseLegibility, 0.55f, 3},      // saturated
-    {SynqMatrixState::Transition, EID_LGP_CHROMATIC_PULSE, "advanced_optical", "chromatic_transition_pulse", SynqMatrixSwitchReason::TransitionBridge, 0.45f, 6}, // party / transitional
+    {SynqMatrixState::Unknown,    EID_SB_K1_WAVEFORM,      "baseline",         "k1_waveform_restore_baseline", SynqMatrixSwitchReason::None,              1.0f,  0xFF, false,   0},
+    {SynqMatrixState::Silence,    EID_MODAL_RESONANCE,     "interference",     "modal_low_density_hold",       SynqMatrixSwitchReason::AmbientPosture,    1.0f,  0xFF, false,   0},
+    {SynqMatrixState::Ambient,    EID_MODAL_RESONANCE,     "interference",     "calm_modal_resonance",         SynqMatrixSwitchReason::AmbientPosture,    0.30f, 4,    true,  160},  // cool blue
+    {SynqMatrixState::Steady,     EID_LGP_HOLOGRAPHIC,     "interference",     "flagship_holographic_depth",   SynqMatrixSwitchReason::SteadyReadability, 0.32f, 2,    true,   96},  // cool teal
+    {SynqMatrixState::Build,      EID_LGP_WAVE_COLLISION,  "interference",     "colliding_wave_pressure",      SynqMatrixSwitchReason::BuildPressure,     0.45f, 7,    true,   32},  // warm orange — pressure
+    {SynqMatrixState::Drop,       EID_LGP_PHOTONIC_CRYSTAL,"advanced_optical", "photonic_drop_texture",        SynqMatrixSwitchReason::DropImpact,        0.60f, 7,    true,    0},  // red — peak heat
+    {SynqMatrixState::Breakdown,  EID_LGP_CHROMATIC_LENS,  "advanced_optical", "chromatic_space_release",      SynqMatrixSwitchReason::BreakdownRelease,  0.35f, 5,    true,  192},  // cool magenta release
+    {SynqMatrixState::Dense,      EID_LGP_KDV_SOLITON_PAIR,"mathematical",     "dense_soliton_pair",           SynqMatrixSwitchReason::DenseLegibility,   0.55f, 3,    true,  224},  // saturated purple
+    {SynqMatrixState::Transition, EID_LGP_CHROMATIC_PULSE, "advanced_optical", "chromatic_transition_pulse",   SynqMatrixSwitchReason::TransitionBridge,  0.45f, 6,    true,   48},  // warm yellow bridge
 };
 
 static constexpr uint8_t kPolicyCount = sizeof(kMatrix) / sizeof(kMatrix[0]);
@@ -798,6 +805,8 @@ bool SynqMatrix::tick(const audio::ControlBusFrame& frame,
     request.targetVisualLanguage = policy.visualLanguage;
     request.reason = synqMatrixSwitchReasonName(policy.reason);
     request.targetPaletteIndex = policy.targetPaletteIndex;
+    request.applyColourModifier = policy.applyColourModifier;
+    request.targetColourModifier = policy.targetColourModifier;
     m_dwellRemainingMs.store(0, std::memory_order_release);
     m_cooldownRemainingMs.store(0, std::memory_order_release);
     m_actionPlan.store(static_cast<uint8_t>(SynqMatrixActionPlan::EffectSwitch), std::memory_order_release);

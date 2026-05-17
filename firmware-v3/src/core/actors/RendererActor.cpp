@@ -1615,6 +1615,8 @@ void RendererActor::queueSynqMatrixTransition(
     m_synqMatrixDirectorTargetLanguage = request.targetVisualLanguage;
     m_synqMatrixDirectorTransitionReason = request.reason;
     m_synqMatrixDirectorTargetPalette = request.targetPaletteIndex;
+    m_synqMatrixDirectorApplyColourModifier = request.applyColourModifier;
+    m_synqMatrixDirectorTargetColourModifier = request.targetColourModifier;
 }
 
 bool RendererActor::processSynqMatrixTransition(uint32_t nowMs)
@@ -1629,6 +1631,8 @@ bool RendererActor::processSynqMatrixTransition(uint32_t nowMs)
     const char* targetLanguage = m_synqMatrixDirectorTargetLanguage;
     const char* reason = m_synqMatrixDirectorTransitionReason;
     const uint8_t targetPalette = m_synqMatrixDirectorTargetPalette;
+    const bool applyColourModifier = m_synqMatrixDirectorApplyColourModifier;
+    const uint8_t targetColourModifier = m_synqMatrixDirectorTargetColourModifier;
     m_synqMatrixDirectorTransitionQueued = false;
 
     auto& director = synqmatrix::SynqMatrix::instance();
@@ -1678,6 +1682,16 @@ bool RendererActor::processSynqMatrixTransition(uint32_t nowMs)
         LW_LOGI("Director palette: %u (%s) -> %u (%s)",
                 prevPalette, getPaletteName(prevPalette),
                 m_paletteIndex, getPaletteName(m_paletteIndex));
+    }
+
+    // ColourModifierShift: bundled with EffectSwitch on the same state-change
+    // trigger. handleSetHue re-arms the auto-rotate pause window so the
+    // Director's chosen hue sticks for the documented window before
+    // auto-rotation resumes from the Director's hue value.
+    if (applyColourModifier && targetColourModifier != m_hue) {
+        const uint8_t prevHue = m_hue;
+        handleSetHue(targetColourModifier);
+        LW_LOGI("Director hue: %u -> %u", prevHue, m_hue);
     }
 
     const uint32_t appliedAtMs = millis();

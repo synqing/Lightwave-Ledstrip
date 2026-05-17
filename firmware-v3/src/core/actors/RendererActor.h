@@ -1027,6 +1027,8 @@ public:
     const char* m_synqMatrixDirectorTargetLanguage = "none";
     const char* m_synqMatrixDirectorTransitionReason = "none";
     uint8_t m_synqMatrixDirectorTargetPalette = 0xFF;
+    bool m_synqMatrixDirectorApplyColourModifier = false;
+    uint8_t m_synqMatrixDirectorTargetColourModifier = 0;
 
     /**
      * MusicalGrid PLL - owned by renderer for 120 FPS Tick()

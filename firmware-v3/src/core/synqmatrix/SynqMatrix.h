@@ -252,6 +252,12 @@ struct SynqMatrixSwitchRequest {
     // PaletteShift: when requested fires, also rotate to this palette index.
     // 0xFF = leave palette unchanged.
     uint8_t targetPaletteIndex = 0xFF;
+    // ColourModifierShift: when requested fires, also apply this global hue
+    // offset (0..255 = full hue wheel). applyColourModifier=false leaves
+    // hue unchanged. Cannot use a sentinel value because every uint8_t is a
+    // valid hue, so a separate flag is required.
+    bool applyColourModifier = false;
+    uint8_t targetColourModifier = 0;
 };
 
 struct SynqMatrixPolicySnapshot {

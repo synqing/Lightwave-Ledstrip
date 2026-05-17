@@ -1675,6 +1675,10 @@ bool RendererActor::processSynqMatrixTransition(uint32_t nowMs)
                                         m_leds,
                                         m_leds,
                                         transitionType);
+    LW_LOGI("Director transition engine: type=%d active=%d remaining=%ums",
+            static_cast<int>(transitionType),
+            m_transitionEngine->isActive() ? 1 : 0,
+            (unsigned)m_transitionEngine->getRemainingMs());
 
     // PaletteShift: bundled with EffectSwitch on the same state-change
     // trigger. Skip if sentinel (0xFF) or already on target palette.

@@ -2170,8 +2170,8 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
     // WiFi commands: wifi, wifi connect SSID PASS, wifi ap, wifi scan
     // Uses original `input` (not inputLower) to preserve SSID case.
     //
-    // Production K1 builds are AP-only. STA mode (`wifi connect`) is only for
-    // validation builds and must use pure STA, not concurrent AP+STA.
+    // K1 runs AP-only OR STA-only (never concurrent). `wifi connect` switches
+    // to STA, tearing AP down first. `wifi ap` returns to AP, tearing STA down.
     // -----------------------------------------------------------------
 #if FEATURE_WEB_SERVER
     else if (inputLower.startsWith("wifi")) {

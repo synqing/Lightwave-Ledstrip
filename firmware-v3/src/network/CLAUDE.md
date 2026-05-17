@@ -1,15 +1,15 @@
 # Network Subsystem
 
-## CRITICAL: K1 WiFi Architecture — AP-ONLY
+## K1 WiFi Architecture — AP-only OR STA-only (exclusive, never concurrent)
 
-**K1 is an Access Point. It does NOT connect to external WiFi routers. This is a HARD architectural constraint.**
+K1 supports **both AP-only and STA-only** modes at runtime. The mode is selected by the persisted NVS boot preference (`wifi mode ap|sta` serial command) or by `wifi connect <ssid>` to flip into STA. Both modes are first-class — STA is hardware-verified working on K1v2 (F-5 Task 4, 2026-05-16).
 
-- K1 boots `WIFI_MODE_AP`. Tab5 and iOS connect TO K1 at 192.168.4.1.
-- STA authentication FAILS at the ESP-IDF 802.11 driver level (AUTH_EXPIRE reason 2, AUTH_FAIL reason 202). This has been reproduced across multiple routers and 6+ firmware mitigation attempts — NONE worked. The failure is caused by ESP32 AP+STA concurrent mode resource contention.
-- Resolved architecturally Feb 2026. Re-confirmed March 2026.
-- **DO NOT**: add STA connection logic, change WiFi mode to APSTA, add router connection features, or modify AP configuration without explicit user approval.
-- The serial `wifi connect` escape hatch exists but is KNOWN UNRELIABLE.
-- See `WiFiManager.h` header block for the canonical warning.
+- AP and STA are **exclusive**, never concurrent. ESP32-S3 + ESP-IDF 4.4.7 cannot reliably run AP+STA at the same time (4-way handshake / scan contention). The WiFiManager state machine always tears one mode down before bringing the other up.
+- AP mode: device serves `LightwaveOS-AP` at `192.168.4.1`. Tab5 and iOS connect to it. Captive-portal probes auto-open the provisioning sheet on join.
+- STA mode: device joins an external router and is reachable at `lightwaveos.local`. AP is torn down for the duration.
+- Boot path: `WiFiManager::begin()` reads `WiFiCredentialsStorage::getBootModePreference()` and starts either AP or STA. Default = AP.
+- Runtime switch: `wifi connect <ssid> <pass>` (serial) or `POST /api/v1/network/connect` clears the AP-only lock and switches to STA. `wifi mode ap` returns to AP.
+- The earlier "STA fails at AUTH_EXPIRE driver level" doctrine was incorrect — it was a 2026-02 over-correction from a single Era-5 concurrent-AP+STA incident. STA is fine in exclusive mode.
 
 ---
 

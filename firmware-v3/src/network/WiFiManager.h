@@ -559,7 +559,7 @@ private:
     // ========================================================================
 
     bool m_apEnabled = false;
-    volatile bool m_forceApOnly = true;    ///< Boot AP-only; STA activated ONLY via serial `wifi connect`
+    volatile bool m_forceApOnly = true;    ///< Runtime AP-only lock (cleared by `wifi connect` / STA boot preference). AP and STA are exclusive — never concurrent.
     String m_apSSID = config::NetworkConfig::AP_SSID;
     String m_apPassword = config::NetworkConfig::AP_PASSWORD;
     uint8_t m_apChannel = 1;

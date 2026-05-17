@@ -2,11 +2,8 @@
  * @file NetworkHandlers.cpp
  * @brief Network management HTTP handlers implementation
  *
- * ╔══════════════════════════════════════════════════════════════════════╗
- * ║  PRODUCTION K1 BUILDS ARE AP-ONLY VIA WIFI_AP_ONLY.                ║
- * ║  STA validation builds use pure STA only, never concurrent AP+STA.  ║
- * ║  See WiFiManager.h and BACKLOG.md F-5.                             ║
- * ╚══════════════════════════════════════════════════════════════════════╝
+ * K1 runs in AP-only OR STA-only mode (never concurrent). The provision
+ * endpoint is gated on the device currently serving as an Access Point.
  *
  * LightwaveOS v2 - Network Subsystem
  */
@@ -79,12 +76,6 @@ void NetworkHandlers::handleStatus(AsyncWebServerRequest* request) {
 }
 
 void NetworkHandlers::handleScan(AsyncWebServerRequest* request) {
-#ifdef WIFI_AP_ONLY
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::OPERATION_FAILED,
-                      "WiFi scan unavailable in WIFI_AP_ONLY build");
-    return;
-#endif
     WiFiManager& wm = WIFI_MANAGER;
 
     // Trigger a fresh scan
@@ -156,11 +147,12 @@ void NetworkHandlers::handleConnect(AsyncWebServerRequest* request, uint8_t* dat
         return;
     }
 
-    // Initiate explicit pure STA via WiFiManager. Production WIFI_AP_ONLY builds refuse this.
+    // Initiate exclusive-STA connection via WiFiManager. Tears down AP if
+    // currently serving so AP and STA never run concurrently.
     if (!WIFI_MANAGER.connectToNetwork(ssid, password, saveNetwork && passLen > 0)) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::OPERATION_FAILED,
-                          "STA unavailable in this build");
+                          "STA connect failed to initiate");
         return;
     }
 
@@ -172,16 +164,8 @@ void NetworkHandlers::handleConnect(AsyncWebServerRequest* request, uint8_t* dat
 }
 
 void NetworkHandlers::handleProvision(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-#ifdef WIFI_AP_ONLY
     const NetworkProvisionGate provisionGate =
-        evaluateNetworkProvisionGate(true, false, false);
-#elif !defined(LW_STA_VALIDATION_BUILD)
-    const NetworkProvisionGate provisionGate =
-        evaluateNetworkProvisionGate(false, false, false);
-#else
-    const NetworkProvisionGate provisionGate =
-        evaluateNetworkProvisionGate(false, true, WiFi.getMode() == WIFI_MODE_AP);
-#endif
+        evaluateNetworkProvisionGate(WiFi.getMode() == WIFI_MODE_AP);
     if (provisionGate != NetworkProvisionGate::Allowed) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::OPERATION_FAILED,

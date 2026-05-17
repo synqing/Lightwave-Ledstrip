@@ -9,6 +9,7 @@
 
 #include "StaticAssetRoutes.h"
 #include "../ApiResponse.h"
+#include "CaptivePortalProbes.h"
 #include <WiFi.h>
 #include <Arduino.h>
 #include <cstdlib>
@@ -183,9 +184,8 @@ form.addEventListener('submit',async e=>{
 
 void StaticAssetRoutes::registerRoutes(HttpRouteRegistry& registry) {
 
-    // Root -- user-facing launcher page
+    // Root -- AP mode serves the provisioning form, STA mode serves the launcher.
     registry.onGet("/", [](AsyncWebServerRequest* request) {
-#if defined(LW_STA_VALIDATION_BUILD) && !defined(WIFI_AP_ONLY)
         if (WiFi.getMode() == WIFI_MODE_AP) {
             char* buf = getProvisioningBuffer();
             if (!buf) {
@@ -198,7 +198,6 @@ void StaticAssetRoutes::registerRoutes(HttpRouteRegistry& registry) {
             request->send(200, "text/html", buf);
             return;
         }
-#endif
         String ssid = WiFi.SSID();
         if (ssid.isEmpty()) {
             ssid = "WiFi";
@@ -225,6 +224,38 @@ void StaticAssetRoutes::registerRoutes(HttpRouteRegistry& registry) {
         request->send(HttpStatus::NO_CONTENT);
     });
 
+    // Captive-portal detection probes -- active only while the device is
+    // currently serving as an Access Point (runtime check). Mobile and desktop
+    // OS detectors expect canonical "success" responses on these paths;
+    // returning that would suppress the portal sheet. We deliberately return
+    // captive-positive shapes (302 to root or non-canonical HTML with meta
+    // refresh) so iOS / Android / macOS / Firefox / Windows auto-open the
+    // provisioning UI. STA-mode operation returns 404 unchanged.
+    auto registerCaptiveProbe = [&registry](const char* path) {
+        registry.onGet(path, [path](AsyncWebServerRequest* request) {
+            if (WiFi.getMode() == WIFI_MODE_AP) {
+                const auto resp = captive_portal::responseForProbePath(path);
+                if (resp.action == captive_portal::ProbeAction::RedirectToRoot) {
+                    request->redirect(resp.location);
+                    return;
+                }
+                if (resp.action == captive_portal::ProbeAction::BootstrapHtml) {
+                    request->send(200, resp.contentType, resp.body);
+                    return;
+                }
+            }
+            request->send(HttpStatus::NOT_FOUND);
+        });
+    };
+    registerCaptiveProbe("/generate_204");              // Android, Chromium
+    registerCaptiveProbe("/hotspot-detect.html");       // iOS, iPadOS, macOS
+    registerCaptiveProbe("/library/test/success.html"); // macOS alternate
+    registerCaptiveProbe("/connectivity-check.html");   // Generic detector
+    registerCaptiveProbe("/canonical.html");             // Firefox detectportal
+    registerCaptiveProbe("/connecttest.txt");            // Windows 10+ NCSI
+    registerCaptiveProbe("/ncsi.txt");                   // Legacy Windows NCSI
+    registerCaptiveProbe("/redirect");                   // Windows NCSI follow-up
+
     // 404 handler -- CORS OPTIONS passthrough + API error response
     registry.onNotFound([](AsyncWebServerRequest* request) {
         // CORS preflight
@@ -241,13 +272,11 @@ void StaticAssetRoutes::registerRoutes(HttpRouteRegistry& registry) {
             return;
         }
 
-        // Captive portal / browser probe fallback for validation AP mode.
-#if defined(LW_STA_VALIDATION_BUILD) && !defined(WIFI_AP_ONLY)
+        // Captive-portal fallback for any unmatched path while in AP mode.
         if (WiFi.getMode() == WIFI_MODE_AP) {
             request->redirect("/");
             return;
         }
-#endif
         request->send(HttpStatus::NOT_FOUND, "text/plain", "Not found");
     });
 }

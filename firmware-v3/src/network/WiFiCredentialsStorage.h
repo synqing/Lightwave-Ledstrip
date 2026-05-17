@@ -2,11 +2,10 @@
  * @file WiFiCredentialsStorage.h
  * @brief NVS-based storage for WiFi network credentials and boot mode preference
  *
- * ╔══════════════════════════════════════════════════════════════════════╗
- * ║  PRODUCTION K1 BUILDS ARE AP-ONLY VIA WIFI_AP_ONLY.                ║
- * ║  STA validation builds use pure STA only, never concurrent AP+STA.  ║
- * ║  See WiFiManager.h and BACKLOG.md F-5.                             ║
- * ╚══════════════════════════════════════════════════════════════════════╝
+ * K1 supports AP-only OR STA-only at runtime, selected via the persisted boot
+ * mode preference ("mode" key) below. AP and STA are exclusive — never
+ * concurrent (ESP-IDF driver limitation). The WiFiManager state machine tears
+ * one mode down before bringing the other up.
  *
  * Stores multiple WiFi networks (SSID + password pairs) in NVS.
  * Provides methods to save, load, delete, and query saved networks.

@@ -316,8 +316,8 @@ void startActorsAndPlugins(
 
 void initWiFiAP() {
 #if FEATURE_WEB_SERVER
-    // Start WiFiManager. Production builds remain AP-only via WIFI_AP_ONLY;
-    // validation builds may honour the persisted AP-or-STA boot preference.
+    // Start WiFiManager. Boots AP-only OR STA-only based on persisted NVS
+    // preference. AP and STA are exclusive on K1 — never concurrent.
     LW_LOGI("Initializing WiFiManager...");
     WIFI_MANAGER.setCredentials(
         NetworkConfig::WIFI_SSID_VALUE,
@@ -330,7 +330,7 @@ void initWiFiAP() {
     } else {
         LW_LOGI("WiFiManager: STARTED (AP: %s, IP: %s)",
                 NetworkConfig::AP_SSID, WiFi.softAPIP().toString().c_str());
-        LW_LOGI("Use serial 'wifi connect SSID PASS' to enable pure STA mode in validation builds");
+        LW_LOGI("Use serial 'wifi connect SSID PASS' or 'wifi mode sta' to switch to STA. K1 runs AP-only OR STA-only (never concurrent).");
 
         // Initialise WiFi Credential Manager (for saved networks)
         if (!WIFI_CREDENTIALS.begin()) {

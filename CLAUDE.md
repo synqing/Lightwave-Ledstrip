@@ -136,7 +136,7 @@ READBACK:
 |---|---|
 | Any C++ source | clangd FIRST for symbols, grep for text only |
 | Audio / effects | Centre origin 79/80 outward, no heap in render(), 2.0ms ceiling, no rainbows |
-| Network / WiFi | K1 current shipping mode is AP-only via `WIFI_AP_ONLY`. Goal-state is dual-mode AP OR STA, never concurrent AP+STA. Do not enable pure-STA validation, WiFi-mode rewrites, or `WIFI_AP_ONLY` / `m_forceApOnly` default changes without explicit Captain approval. |
+| Network / WiFi | K1 runs in AP-only OR STA-only mode, selected at runtime via NVS boot preference (`wifi mode ap\|sta` serial) or `wifi connect <ssid>`. Both modes are first-class. AP and STA are exclusive — never concurrent (state machine tears one down before bringing the other up). Do not re-introduce compile-time `WIFI_AP_ONLY` locks. |
 | Multi-file exploration | Delegate to subagent, 30K token budget per agent |
 | Documentation | NotebookLM for architecture; targeted `rg`/Read for current files |
 | External library APIs | Current vendor docs or local headers; Context7 only when explicitly available for the task |
@@ -287,7 +287,7 @@ Only after satisfying all four checks: proceed with commit.
 
 ## Hard Constraints
 
-- **K1 WiFi mode.** Current shipping firmware uses `WIFI_AP_ONLY` in canonical ESV11 K1 build environments, and Tab5/iOS connect to K1's AP at `192.168.4.1`. Goal-state is dual-mode AP OR STA, never concurrent AP+STA. Never enable pure-STA validation, WiFi-mode rewrites, or default changes to `WIFI_AP_ONLY` / `m_forceApOnly` without explicit Captain approval.
+- **K1 WiFi mode.** K1 runs in AP-only OR STA-only mode, selected at runtime via NVS boot preference (`wifi mode ap|sta` serial command) or `wifi connect <ssid>`. AP and STA are exclusive — never concurrent (ESP32-S3 + ESP-IDF 4.4.7 cannot reliably run AP+STA together). The WiFiManager state machine always tears one mode down before bringing the other up. Production builds support both modes; do not re-introduce compile-time `WIFI_AP_ONLY` locks.
 - **Audio playback safety**: Never generate, select, or play audio through speakers/headphones unless Captain has explicitly approved that exact source. Approval for one audio file does not authorise other files, synthetic fixtures, white/pink noise, hats, cymbals, speech, generated tones, or any agent-chosen sound. For AFS/runtime audio capture, the approved reference corpus is `/Users/spectrasynq/Workspace_Management/Software/hybrid-beat-tracker/tests/benchmark` unless Captain explicitly names a different source. Before any playback, state the exact file/source, output path/device if known, volume assumption, duration, and stop command. If a capture matrix needs noise or synthetic fixtures, ask first and wait.
 - **Centre origin**: All effects originate from LED 79/80 outward (or inward to 79/80). No linear sweeps. Applies to all render modes including zone-specific renders. Exception: zone ID `0xFF` (global render) where the physical centre is still 79/80.
 - **No rainbows**: No rainbow cycling or full hue-wheel sweeps.

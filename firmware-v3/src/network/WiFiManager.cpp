@@ -68,13 +68,11 @@ bool WiFiManager::begin() {
     // Register WiFi event handler
     WiFi.onEvent(onWiFiEvent);
 
-    // Production boots into AP-only mode. Validation builds may honour the
-    // persisted AP-or-STA preference, but AP and STA remain exclusive.
-#ifdef WIFI_AP_ONLY
-    LW_LOGW("WIFI_AP_ONLY enabled - starting in AP mode only");
-#endif
+    // K1 boots into AP-only OR STA-only mode based on the persisted NVS boot
+    // preference (`wifi mode ap|sta` serial command). AP and STA are always
+    // exclusive on this hardware — the state machine tears one down before
+    // bringing the other up. Concurrent AP+STA is not supported.
     bool bootSta = false;
-#ifndef WIFI_AP_ONLY
     const auto bootMode = m_credentialsStorage.getBootModePreference();
     if (bootMode == WiFiCredentialsStorage::BootModePreference::STA) {
         if (hasAnyStaCandidates()) {
@@ -89,9 +87,6 @@ bool WiFiManager::begin() {
         LW_LOGI("Boot WiFi mode preference: AP");
         m_forceApOnly = true;
     }
-#else
-    m_forceApOnly = true;
-#endif
 
     if (bootSta) {
         WiFi.setAutoReconnect(false);
@@ -273,14 +268,8 @@ void WiFiManager::wifiTask(void* parameter) {
 void WiFiManager::handleStateInit() {
     LW_LOGD("STATE: INIT");
 
-#ifdef WIFI_AP_ONLY
-    LW_LOGI("WIFI_AP_ONLY: forcing AP mode");
-    setState(STATE_WIFI_AP_MODE);
-    return;
-#endif
-
-    // AP-only mode: do not attempt STA connection.
-    // STA is only enabled via serial `wifi connect` which clears m_forceApOnly.
+    // Runtime AP-only lock: do not attempt STA connection. Set when boot
+    // preference is AP, cleared by `wifi connect` or `wifi mode sta`.
     if (m_forceApOnly) {
         LW_LOGI("AP-only mode active, skipping STA");
         setState(STATE_WIFI_AP_MODE);
@@ -601,13 +590,8 @@ void WiFiManager::handleStateAPMode() {
                 WiFi.softAPgetStationNum());
     }
 
-#ifdef WIFI_AP_ONLY
-    // AP-only build: do not attempt STA retries.
-    return;
-#endif
-
     // Runtime AP-only lock: do not attempt STA retries.
-    // Set by requestAPOnly(), cleared by requestSTAEnable().
+    // Set by requestAPOnly() or AP boot preference, cleared by requestSTAEnable().
     if (m_forceApOnly) {
         return;
     }
@@ -978,12 +962,6 @@ bool WiFiManager::hasSavedNetwork(const String& ssid) {
 }
 
 bool WiFiManager::setBootModePreference(WiFiCredentialsStorage::BootModePreference mode) {
-#ifdef WIFI_AP_ONLY
-    if (mode == WiFiCredentialsStorage::BootModePreference::STA) {
-        LW_LOGW("STA boot preference refused: WIFI_AP_ONLY build");
-        return false;
-    }
-#endif
     return m_credentialsStorage.setBootModePreference(mode);
 }
 
@@ -1086,10 +1064,6 @@ void WiFiManager::reconnect() {
 }
 
 void WiFiManager::scanNetworks() {
-#ifdef WIFI_AP_ONLY
-    LW_LOGW("WiFi scan refused: WIFI_AP_ONLY build");
-    return;
-#endif
     if (m_currentState != STATE_WIFI_SCANNING) {
         LW_LOGI("Manual scan requested");
         m_connectWithoutScan = false;
@@ -1275,11 +1249,7 @@ void WiFiManager::onWiFiEvent(WiFiEvent_t event) {
 
 bool WiFiManager::requestSTAEnable(uint32_t timeoutMs, bool autoRevert) {
     (void)timeoutMs; (void)autoRevert;
-#ifdef WIFI_AP_ONLY
-    LW_LOGW("STA enable refused: WIFI_AP_ONLY build");
-    return false;
-#endif
-    LW_LOGI("STA enable requested (pure STA validation path)");
+    LW_LOGI("STA enable requested (exclusive STA mode — AP torn down)");
     m_forceApOnly = false;
     if (m_currentState == STATE_WIFI_AP_MODE || m_currentState == STATE_WIFI_FAILED) {
         WiFi.setAutoReconnect(false);
@@ -1305,11 +1275,7 @@ bool WiFiManager::requestAPOnly() {
 
 bool WiFiManager::connectToNetwork(const String& ssid, const String& password, bool saveNetwork) {
     LW_LOGI("Connect requested: '%s'", ssid.c_str());
-#ifdef WIFI_AP_ONLY
-    LW_LOGW("STA connect refused for '%s': WIFI_AP_ONLY build", ssid.c_str());
-    return false;
-#endif
-    m_forceApOnly = false;  // Clear AP-only lock when explicitly connecting
+    m_forceApOnly = false;  // Clear AP-only lock; switch to exclusive STA mode
     if (saveNetwork) {
         m_credentialsStorage.saveNetwork(ssid, password);
     }

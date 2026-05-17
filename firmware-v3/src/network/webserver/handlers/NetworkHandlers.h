@@ -2,17 +2,15 @@
  * @file NetworkHandlers.h
  * @brief Network management HTTP handlers for LightwaveOS v2
  *
- * ╔══════════════════════════════════════════════════════════════════════╗
- * ║  PRODUCTION K1 BUILDS ARE AP-ONLY VIA WIFI_AP_ONLY.                ║
- * ║  STA validation builds use pure STA only, never concurrent AP+STA.  ║
- * ║  See WiFiManager.h and BACKLOG.md F-5.                             ║
- * ╚══════════════════════════════════════════════════════════════════════╝
+ * K1 runs in AP-only OR STA-only mode (never concurrent). Provision endpoint
+ * is gated on the device currently serving as an Access Point so that a
+ * client joining the K1 AP can hand off STA credentials.
  *
- * Provides REST API endpoints for WiFi network management:
+ * REST API endpoints:
  * - GET  /api/v1/network/status     - Current WiFi state
  * - GET  /api/v1/network/scan       - Scan for networks
- * - POST /api/v1/network/connect    - Connect to network
- * - POST /api/v1/network/provision  - Validation-build captive provisioning
+ * - POST /api/v1/network/connect    - Connect to a STA network
+ * - POST /api/v1/network/provision  - Captive-portal provisioning (AP-mode only)
  * - POST /api/v1/network/disconnect - Disconnect from WiFi
  * - GET  /api/v1/network/saved      - List saved networks (no passwords)
  * - POST /api/v1/network/saved      - Add saved network
@@ -120,8 +118,9 @@ public:
     /**
      * @brief Handle POST /api/v1/network/provision
      *
-     * Captive-portal onboarding path for validation builds. Saves credentials,
-     * persists STA as the next boot mode, and restarts so boot enters pure STA.
+     * Captive-portal onboarding path served while the device is in AP mode.
+     * Saves credentials, persists STA as the next boot mode, and restarts so
+     * boot enters exclusive STA mode (AP torn down).
      */
     static void handleProvision(AsyncWebServerRequest* request, uint8_t* data, size_t len);
 

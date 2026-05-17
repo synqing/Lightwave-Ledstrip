@@ -2,14 +2,11 @@
  * @file WebServer.cpp
  * @brief Web Server implementation for LightwaveOS v2
  *
- * ╔══════════════════════════════════════════════════════════════════════╗
- * ║  PRODUCTION K1 BUILDS ARE AP-ONLY VIA WIFI_AP_ONLY.                ║
- * ║  STA validation builds use AP OR pure STA, never concurrent AP+STA. ║
- * ║  See WiFiManager.h and BACKLOG.md F-5.                             ║
- * ╚══════════════════════════════════════════════════════════════════════╝
- *
- * Implements REST API and WebSocket server integrated with Actor System.
- * All state changes are routed through m_orchestrator for thread safety.
+ * K1 runs in AP-only OR STA-only mode (never concurrent — ESP-IDF driver
+ * limitation). Captive DNS + portal handlers are active only while the device
+ * is currently serving as an Access Point (runtime check). Implements REST
+ * API and WebSocket server integrated with Actor System. All state changes
+ * are routed through m_orchestrator for thread safety.
  */
 
 #include "WebServer.h"
@@ -122,7 +119,7 @@
 #endif
 
 #include "../config/runtime_state.h"
-#if defined(LW_STA_VALIDATION_BUILD) && !defined(WIFI_AP_ONLY)
+#if !defined(NATIVE_BUILD)
 #include <DNSServer.h>
 #endif
 
@@ -207,7 +204,7 @@ WebServer::WebServer(NodeOrchestrator& orchestrator, RendererNode* renderer)
     , m_lastLargestInternalHeap(0)
     , m_shedActivatedAtMs(0)
     , m_shedClearedAtMs(0)
-#if defined(LW_STA_VALIDATION_BUILD) && !defined(WIFI_AP_ONLY)
+#if !defined(NATIVE_BUILD)
     , m_dnsServer(nullptr)
 #endif
     , m_zoneComposer(nullptr)
@@ -264,7 +261,7 @@ WebServer::~WebServer() {
     delete m_logBroadcaster;
     delete m_udpStreamer;
     delete m_ledBroadcaster;
-#if defined(LW_STA_VALIDATION_BUILD) && !defined(WIFI_AP_ONLY)
+#if !defined(NATIVE_BUILD)
     delete m_dnsServer;
 #endif
     delete m_ws;
@@ -309,7 +306,7 @@ bool WebServer::begin() {
     // Create server instances
     m_server = new AsyncWebServer(WebServerConfig::HTTP_PORT);
     m_ws = new AsyncWebSocket("/ws");
-#if defined(LW_STA_VALIDATION_BUILD) && !defined(WIFI_AP_ONLY)
+#if !defined(NATIVE_BUILD)
     m_dnsServer = nullptr;
 #endif
 
@@ -647,7 +644,7 @@ void WebServer::updateLowHeapShedState(uint32_t nowMs) {
 void WebServer::update() {
     if (!m_running) return;
 
-#if defined(LW_STA_VALIDATION_BUILD) && !defined(WIFI_AP_ONLY)
+#if !defined(NATIVE_BUILD)
     if (m_dnsServer) {
         m_dnsServer->processNextRequest();
     }
@@ -1200,7 +1197,7 @@ void WebServer::startMDNS() {
 }
 
 void WebServer::startCaptiveDNS() {
-#if defined(LW_STA_VALIDATION_BUILD) && !defined(WIFI_AP_ONLY)
+#if !defined(NATIVE_BUILD)
     if (!m_apMode || m_dnsServer) {
         return;
     }
@@ -1230,7 +1227,7 @@ void WebServer::startCaptiveDNS() {
 }
 
 void WebServer::stopCaptiveDNS() {
-#if defined(LW_STA_VALIDATION_BUILD) && !defined(WIFI_AP_ONLY)
+#if !defined(NATIVE_BUILD)
     if (!m_dnsServer) {
         return;
     }

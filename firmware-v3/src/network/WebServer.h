@@ -65,7 +65,7 @@
 class AsyncWebServer;
 class AsyncWebSocket;
 class AsyncWebSocketClient;
-#if defined(LW_STA_VALIDATION_BUILD) && !defined(WIFI_AP_ONLY)
+#if !defined(NATIVE_BUILD)
 class DNSServer;
 #endif
 struct CRGB;
@@ -681,7 +681,7 @@ private:
 
     AsyncWebServer* m_server;
     AsyncWebSocket* m_ws;
-#if defined(LW_STA_VALIDATION_BUILD) && !defined(WIFI_AP_ONLY)
+#if !defined(NATIVE_BUILD)
     DNSServer* m_dnsServer;
 #endif
     webserver::RateLimiter m_rateLimiter;

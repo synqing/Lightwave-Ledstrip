@@ -6,22 +6,15 @@
 namespace lightwaveos {
 namespace network {
 
+// K1 supports AP-only OR STA-only modes (never concurrent). Provisioning
+// hands off STA credentials from a client joining the K1 AP, so it is only
+// meaningful while the device is currently serving as an Access Point.
 enum class NetworkProvisionGate : uint8_t {
     Allowed = 0,
-    WifiApOnlyBuild,
-    NonValidationBuild,
     NotApMode,
 };
 
-constexpr NetworkProvisionGate evaluateNetworkProvisionGate(bool wifiApOnlyBuild,
-                                                            bool staValidationBuild,
-                                                            bool requestFromApMode) {
-    if (wifiApOnlyBuild) {
-        return NetworkProvisionGate::WifiApOnlyBuild;
-    }
-    if (!staValidationBuild) {
-        return NetworkProvisionGate::NonValidationBuild;
-    }
+constexpr NetworkProvisionGate evaluateNetworkProvisionGate(bool requestFromApMode) {
     if (!requestFromApMode) {
         return NetworkProvisionGate::NotApMode;
     }
@@ -36,10 +29,6 @@ constexpr const char* networkProvisionGateMessage(NetworkProvisionGate gate) {
     switch (gate) {
         case NetworkProvisionGate::Allowed:
             return "";
-        case NetworkProvisionGate::WifiApOnlyBuild:
-            return "Provisioning unavailable in WIFI_AP_ONLY build";
-        case NetworkProvisionGate::NonValidationBuild:
-            return "Provisioning unavailable outside LW_STA_VALIDATION_BUILD";
         case NetworkProvisionGate::NotApMode:
             return "Provisioning is only available from AP mode";
     }

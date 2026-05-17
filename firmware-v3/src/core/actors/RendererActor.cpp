@@ -2197,6 +2197,26 @@ void RendererActor::renderFrame()
         return;
     }
 
+    // Director ownership pre-render clamp: when SynqMatrix is enabled and in
+    // Director mode, ZoneComposer must be disabled before render dispatch.
+    // Without this, the ZoneComposer-enabled branch below returns early and
+    // SynqMatrix::tick() never runs — Director can never queue a switch to
+    // disable zones via the transition-bundled clamp. This clamp catches the
+    // mid-stream case (user/REST/WS/serial enables zones while Director is
+    // active) by re-asserting Director's ownership of unified rendering
+    // exactly once per render frame, then falling through to the unified
+    // render path. The transition-bundled clamp at processSynqMatrixTransition
+    // remains as belt-and-braces for the per-state policy assignment path.
+#if FEATURE_AUDIO_SYNC
+    if (m_zoneComposer != nullptr && m_zoneComposer->isEnabled()) {
+        const auto cfg = synqmatrix::SynqMatrix::instance().getConfig();
+        if (cfg.enabled && cfg.mode == synqmatrix::SynqMatrixMode::Director) {
+            m_zoneComposer->setEnabled(false);
+            LW_LOGI("Director zonecomposer: enabled -> disabled (director pre-render clamp)");
+        }
+    }
+#endif
+
     // Check if zone composer is enabled
     if (m_zoneComposer != nullptr && m_zoneComposer->isEnabled()) {
         TRACE_SCOPE("zone_compose");

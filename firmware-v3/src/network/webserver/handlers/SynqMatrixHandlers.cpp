@@ -7,6 +7,7 @@
 
 #include "../../ApiResponse.h"
 #include "../../../core/synqmatrix/SynqMatrix.h"
+#include "../../../core/synqmatrix/SynqMatrixRestorePoint.h"
 
 #include <ArduinoJson.h>
 #include <cstring>
@@ -17,14 +18,6 @@ namespace webserver {
 namespace handlers {
 
 namespace {
-
-synqmatrix::SynqMatrixRuntimeState g_restorePoint;
-bool g_restorePointValid = false;
-
-void captureRestorePoint() {
-    g_restorePoint = synqmatrix::SynqMatrix::instance().exportRuntimeState();
-    g_restorePointValid = true;
-}
 
 void encodeConfig(JsonObject& data, const synqmatrix::SynqMatrixConfig& config) {
     data["enabled"] = config.enabled;
@@ -256,7 +249,7 @@ void SynqMatrixHandlers::handleSetConfig(AsyncWebServerRequest* request, uint8_t
 
     const char* action = doc["action"] | "";
     if (strcmp(action, "reset") == 0 || strcmp(action, "wipe") == 0) {
-        captureRestorePoint();
+        synqmatrix::captureSynqMatrixRestorePoint(synqmatrix::SynqMatrixRestoreScope::Rest);
         synqmatrix::SynqMatrix::instance().reset();
         const auto status = synqmatrix::SynqMatrix::instance().getStatus();
         sendSuccessResponse(request, [&status](JsonObject& response) {
@@ -267,12 +260,12 @@ void SynqMatrixHandlers::handleSetConfig(AsyncWebServerRequest* request, uint8_t
         return;
     }
     if (strcmp(action, "restore") == 0) {
-        if (!g_restorePointValid) {
+        if (!synqmatrix::hasSynqMatrixRestorePoint(synqmatrix::SynqMatrixRestoreScope::Rest)) {
             sendErrorResponse(request, HttpStatus::CONFLICT, ErrorCodes::INVALID_ACTION,
                               "No SynqMatrix restore point captured by REST config");
             return;
         }
-        synqmatrix::SynqMatrix::instance().restoreRuntimeState(g_restorePoint);
+        synqmatrix::restoreSynqMatrixRestorePoint(synqmatrix::SynqMatrixRestoreScope::Rest);
         const auto status = synqmatrix::SynqMatrix::instance().getStatus();
         sendSuccessResponse(request, [&status](JsonObject& response) {
             response["restored"] = true;
@@ -282,7 +275,7 @@ void SynqMatrixHandlers::handleSetConfig(AsyncWebServerRequest* request, uint8_t
         return;
     }
     if (strcmp(action, "countersReset") == 0 || strcmp(action, "counters_reset") == 0) {
-        captureRestorePoint();
+        synqmatrix::captureSynqMatrixRestorePoint(synqmatrix::SynqMatrixRestoreScope::Rest);
         synqmatrix::SynqMatrix::instance().resetCounters();
         const auto status = synqmatrix::SynqMatrix::instance().getStatus();
         sendSuccessResponse(request, [&status](JsonObject& response) {
@@ -308,7 +301,7 @@ void SynqMatrixHandlers::handleSetConfig(AsyncWebServerRequest* request, uint8_t
         return;
     }
 
-    captureRestorePoint();
+    synqmatrix::captureSynqMatrixRestorePoint(synqmatrix::SynqMatrixRestoreScope::Rest);
     synqmatrix::SynqMatrix::instance().setConfig(config);
     sendSuccessResponse(request, [&config](JsonObject& response) {
         encodeConfig(response, config);
@@ -396,7 +389,7 @@ void SynqMatrixHandlers::handleSetAllowlist(AsyncWebServerRequest* request, uint
         return;
     }
 
-    captureRestorePoint();
+    synqmatrix::captureSynqMatrixRestorePoint(synqmatrix::SynqMatrixRestoreScope::Rest);
     synqmatrix::SynqMatrix::instance().setPolicyAllowed(state, doc["enabled"].as<bool>());
     const auto allowlist = synqmatrix::SynqMatrix::instance().getAllowlistSnapshot();
     sendSuccessResponse(request, [&allowlist](JsonObject& response) {
@@ -405,7 +398,7 @@ void SynqMatrixHandlers::handleSetAllowlist(AsyncWebServerRequest* request, uint
 }
 
 void SynqMatrixHandlers::handleResetAllowlist(AsyncWebServerRequest* request) {
-    captureRestorePoint();
+    synqmatrix::captureSynqMatrixRestorePoint(synqmatrix::SynqMatrixRestoreScope::Rest);
     synqmatrix::SynqMatrix::instance().resetPolicyAllowlist();
     const auto allowlist = synqmatrix::SynqMatrix::instance().getAllowlistSnapshot();
     sendSuccessResponse(request, [&allowlist](JsonObject& response) {

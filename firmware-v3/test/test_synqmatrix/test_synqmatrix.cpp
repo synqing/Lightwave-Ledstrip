@@ -6,6 +6,7 @@
 
 #include "../../src/audio/contracts/ControlBus.h"
 #include "../../src/core/synqmatrix/SynqMatrix.h"
+#include "../../src/core/synqmatrix/SynqMatrixRestorePoint.h"
 
 using lightwaveos::audio::ControlBusFrame;
 using lightwaveos::audio::TimebaseTelemetryTracker;
@@ -28,9 +29,15 @@ using lightwaveos::synqmatrix::SynqMatrixSwitchRequest;
 using lightwaveos::synqmatrix::SynqMatrixActionPlan;
 using lightwaveos::synqmatrix::SynqMatrixBoundaryGate;
 using lightwaveos::synqmatrix::SynqMatrixIntent;
+using lightwaveos::synqmatrix::SynqMatrixRestoreScope;
 using lightwaveos::synqmatrix::kSynqMatrixMaxPolicySnapshotCount;
+using lightwaveos::synqmatrix::captureSynqMatrixRestorePoint;
+using lightwaveos::synqmatrix::clearAllSynqMatrixRestorePoints;
+using lightwaveos::synqmatrix::clearSynqMatrixRestorePoint;
+using lightwaveos::synqmatrix::hasSynqMatrixRestorePoint;
 using lightwaveos::synqmatrix::parseSynqMatrixMode;
 using lightwaveos::synqmatrix::parseSynqMatrixProfile;
+using lightwaveos::synqmatrix::restoreSynqMatrixRestorePoint;
 using lightwaveos::synqmatrix::synqMatrixClassificationReasonName;
 using lightwaveos::synqmatrix::synqMatrixLastActionName;
 using lightwaveos::synqmatrix::synqMatrixModeName;
@@ -1131,6 +1138,36 @@ void test_synq_matrix_mutable_allowlist_disables_state_policy() {
     TEST_ASSERT_TRUE(director.isPolicyAllowed(SynqMatrixState::Drop));
 }
 
+void test_synq_matrix_shared_restore_point_captures_and_restores_single_runtime_state() {
+    SynqMatrix& director = SynqMatrix::instance();
+    director.reset();
+    clearAllSynqMatrixRestorePoints();
+    TEST_ASSERT_FALSE(hasSynqMatrixRestorePoint(SynqMatrixRestoreScope::SerialJson));
+    TEST_ASSERT_FALSE(restoreSynqMatrixRestorePoint(SynqMatrixRestoreScope::SerialJson));
+
+    const auto capturedConfig = makeConfig(SynqMatrixMode::Director, true, SynqMatrixProfile::High);
+    restoreReadyDirector(director, capturedConfig, SynqMatrixState::Drop);
+    captureSynqMatrixRestorePoint(SynqMatrixRestoreScope::SerialJson);
+    TEST_ASSERT_TRUE(hasSynqMatrixRestorePoint(SynqMatrixRestoreScope::SerialJson));
+    TEST_ASSERT_FALSE(hasSynqMatrixRestorePoint(SynqMatrixRestoreScope::WebSocket));
+
+    restoreReadyDirector(director, makeConfig(SynqMatrixMode::Off, false, SynqMatrixProfile::Subtle),
+                         SynqMatrixState::Silence);
+    TEST_ASSERT_FALSE(restoreSynqMatrixRestorePoint(SynqMatrixRestoreScope::WebSocket));
+    TEST_ASSERT_TRUE(restoreSynqMatrixRestorePoint(SynqMatrixRestoreScope::SerialJson));
+
+    const auto restoredConfig = director.getConfig();
+    const auto restoredStatus = director.getStatus();
+    TEST_ASSERT_TRUE(restoredConfig.enabled);
+    TEST_ASSERT_EQUAL(SynqMatrixMode::Director, restoredConfig.mode);
+    TEST_ASSERT_EQUAL(SynqMatrixProfile::High, restoredConfig.profile);
+    TEST_ASSERT_EQUAL(SynqMatrixState::Drop, restoredStatus.currentState);
+
+    clearSynqMatrixRestorePoint(SynqMatrixRestoreScope::SerialJson);
+    TEST_ASSERT_FALSE(hasSynqMatrixRestorePoint(SynqMatrixRestoreScope::SerialJson));
+    director.reset();
+}
+
 void setUp(void) {}
 void tearDown(void) {}
 
@@ -1169,6 +1206,7 @@ int main() {
     RUN_TEST(test_synq_matrix_assist_handles_build_drop_without_effect_switch);
     RUN_TEST(test_synq_matrix_health_gate_uses_current_health_not_stale_counters);
     RUN_TEST(test_synq_matrix_mutable_allowlist_disables_state_policy);
+    RUN_TEST(test_synq_matrix_shared_restore_point_captures_and_restores_single_runtime_state);
     return UNITY_END();
 }
 

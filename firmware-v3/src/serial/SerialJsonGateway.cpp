@@ -25,6 +25,7 @@
 #include "../effects/enhancement/ColorCorrectionEngine.h"
 #include "../core/narrative/NarrativeEngine.h"
 #include "../core/synqmatrix/SynqMatrix.h"
+#include "../core/synqmatrix/SynqMatrixRestorePoint.h"
 #include "../core/shows/BuiltinShows.h"
 #include "../core/shows/Prim8Adapter.h"
 #include "../core/shows/ShowBundleParser.h"
@@ -115,14 +116,6 @@ static void appendColorCorrectionConfig(JsonObject data,
     data["vClampEnabled"] = cfg.vClampEnabled;
     data["maxBrightness"] = cfg.maxBrightness;
     data["saturationBoostAmount"] = cfg.saturationBoostAmount;
-}
-
-static lightwaveos::synqmatrix::SynqMatrixRuntimeState g_synqMatrixRestorePoint;
-static bool g_synqMatrixRestorePointValid = false;
-
-static void captureSynqMatrixRestorePoint() {
-    g_synqMatrixRestorePoint = lightwaveos::synqmatrix::SynqMatrix::instance().exportRuntimeState();
-    g_synqMatrixRestorePointValid = true;
 }
 
 static void appendSynqMatrixConfig(JsonObject data,
@@ -874,7 +867,8 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
             serialJsonError(reqId, error ? error : "invalid SynqMatrix config");
             return;
         }
-        captureSynqMatrixRestorePoint();
+        lightwaveos::synqmatrix::captureSynqMatrixRestorePoint(
+            lightwaveos::synqmatrix::SynqMatrixRestoreScope::SerialJson);
         lightwaveos::synqmatrix::SynqMatrix::instance().setConfig(config);
 
         JsonDocument respDoc;
@@ -892,7 +886,8 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
     }
     else if (strcmp(type, "synqMatrix.reset") == 0 ||
              strcmp(type, "songAware.reset") == 0) {
-        captureSynqMatrixRestorePoint();
+        lightwaveos::synqmatrix::captureSynqMatrixRestorePoint(
+            lightwaveos::synqmatrix::SynqMatrixRestoreScope::SerialJson);
         lightwaveos::synqmatrix::SynqMatrix::instance().reset();
         const auto status = lightwaveos::synqmatrix::SynqMatrix::instance().getStatus();
         JsonDocument respDoc;
@@ -904,11 +899,13 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
     }
     else if (strcmp(type, "synqMatrix.restore") == 0 ||
              strcmp(type, "songAware.restore") == 0) {
-        if (!g_synqMatrixRestorePointValid) {
+        if (!lightwaveos::synqmatrix::hasSynqMatrixRestorePoint(
+                lightwaveos::synqmatrix::SynqMatrixRestoreScope::SerialJson)) {
             serialJsonError(reqId, "no restore point captured in this serial JSON session");
             return;
         }
-        lightwaveos::synqmatrix::SynqMatrix::instance().restoreRuntimeState(g_synqMatrixRestorePoint);
+        lightwaveos::synqmatrix::restoreSynqMatrixRestorePoint(
+            lightwaveos::synqmatrix::SynqMatrixRestoreScope::SerialJson);
         const auto status = lightwaveos::synqmatrix::SynqMatrix::instance().getStatus();
         JsonDocument respDoc;
         JsonObject data = respDoc.to<JsonObject>();
@@ -966,7 +963,8 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
             serialJsonError(reqId, "invalid SynqMatrix state");
             return;
         }
-        captureSynqMatrixRestorePoint();
+        lightwaveos::synqmatrix::captureSynqMatrixRestorePoint(
+            lightwaveos::synqmatrix::SynqMatrixRestoreScope::SerialJson);
         lightwaveos::synqmatrix::SynqMatrix::instance().setPolicyAllowed(
             state,
             doc["enabled"].as<bool>());
@@ -980,7 +978,8 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
              strcmp(type, "songAware.allowlist.reset") == 0) {
         const char* envelope =
             (strcmp(type, "synqMatrix.allowlist.reset") == 0) ? "synqMatrix.allowlist" : "songAware.allowlist";
-        captureSynqMatrixRestorePoint();
+        lightwaveos::synqmatrix::captureSynqMatrixRestorePoint(
+            lightwaveos::synqmatrix::SynqMatrixRestoreScope::SerialJson);
         lightwaveos::synqmatrix::SynqMatrix::instance().resetPolicyAllowlist();
         const auto allowlist = lightwaveos::synqmatrix::SynqMatrix::instance().getAllowlistSnapshot();
         JsonDocument respDoc;
@@ -1004,7 +1003,8 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
             (strcmp(type, "synqMatrix.counters.reset") == 0) ||
             (strcmp(type, "synqMatrix.countersReset") == 0);
         const char* envelope = canonical ? "synqMatrix.counters.reset" : "songAware.counters.reset";
-        captureSynqMatrixRestorePoint();
+        lightwaveos::synqmatrix::captureSynqMatrixRestorePoint(
+            lightwaveos::synqmatrix::SynqMatrixRestoreScope::SerialJson);
         lightwaveos::synqmatrix::SynqMatrix::instance().resetCounters();
         const auto status = lightwaveos::synqmatrix::SynqMatrix::instance().getStatus();
         JsonDocument respDoc;

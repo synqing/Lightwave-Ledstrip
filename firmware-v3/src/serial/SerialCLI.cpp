@@ -25,6 +25,7 @@
 #include "core/narrative/NarrativeEngine.h"
 #include "core/persistence/ZoneConfigManager.h"
 #include "core/synqmatrix/SynqMatrix.h"
+#include "core/synqmatrix/SynqMatrixRestorePoint.h"
 #include "core/shows/DynamicShowStore.h"
 
 #include "effects/enhancement/EdgeMixer.h"
@@ -89,9 +90,6 @@ namespace lightwaveos {
 namespace serial {
 
 namespace {
-
-lightwaveos::synqmatrix::SynqMatrixRuntimeState g_synqMatrixRestorePoint;
-bool g_synqMatrixRestorePointValid = false;
 
 const char* boolName(bool value) {
     return value ? "true" : "false";
@@ -176,11 +174,6 @@ void printSynqMatrixCompactStatus() {
                   lightwaveos::synqmatrix::synqMatrixSuppressedReasonName(st.suppressedReason),
                   lightwaveos::synqmatrix::synqMatrixBoundaryGateName(st.boundaryGate),
                   lightwaveos::synqmatrix::synqMatrixActionPlanName(st.actionPlan));
-}
-
-void captureSynqMatrixRestorePoint() {
-    g_synqMatrixRestorePoint = lightwaveos::synqmatrix::SynqMatrix::instance().exportRuntimeState();
-    g_synqMatrixRestorePointValid = true;
 }
 
 void printSynqMatrixPolicySnapshot(const lightwaveos::synqmatrix::SynqMatrixPolicySnapshot& policy) {
@@ -315,7 +308,8 @@ void restoreSynqMatrixSafeBaseline(ActorSystem& actors) {
 }
 
 void cycleSynqMatrixMode() {
-    captureSynqMatrixRestorePoint();
+    lightwaveos::synqmatrix::captureSynqMatrixRestorePoint(
+        lightwaveos::synqmatrix::SynqMatrixRestoreScope::SerialCli);
     auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
     if (!cfg.enabled || cfg.mode == lightwaveos::synqmatrix::SynqMatrixMode::Off) {
         cfg.enabled = true;
@@ -335,7 +329,8 @@ void cycleSynqMatrixMode() {
 }
 
 void cycleSynqMatrixProfile() {
-    captureSynqMatrixRestorePoint();
+    lightwaveos::synqmatrix::captureSynqMatrixRestorePoint(
+        lightwaveos::synqmatrix::SynqMatrixRestoreScope::SerialCli);
     auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
     switch (cfg.profile) {
         case lightwaveos::synqmatrix::SynqMatrixProfile::Subtle:
@@ -738,7 +733,8 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
     else
     if (inputLower == "synqmatrix on" || inputLower == "sa on") {
         handledMulti = true;
-        captureSynqMatrixRestorePoint();
+        lightwaveos::synqmatrix::captureSynqMatrixRestorePoint(
+            lightwaveos::synqmatrix::SynqMatrixRestoreScope::SerialCli);
         auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
         cfg.enabled = true;
         cfg.mode = lightwaveos::synqmatrix::SynqMatrixMode::Assist;
@@ -752,7 +748,8 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
     else
     if (inputLower == "synqmatrix off" || inputLower == "sa off") {
         handledMulti = true;
-        captureSynqMatrixRestorePoint();
+        lightwaveos::synqmatrix::captureSynqMatrixRestorePoint(
+            lightwaveos::synqmatrix::SynqMatrixRestoreScope::SerialCli);
         auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
         cfg.enabled = false;
         cfg.mode = lightwaveos::synqmatrix::SynqMatrixMode::Off;
@@ -776,7 +773,8 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
         if (!ok) {
             Serial.println("SynqMatrix mode invalid. Use: off|assist|director");
         } else {
-            captureSynqMatrixRestorePoint();
+            lightwaveos::synqmatrix::captureSynqMatrixRestorePoint(
+                lightwaveos::synqmatrix::SynqMatrixRestoreScope::SerialCli);
             auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
             if (profileOk && (modeText == "subtle" || modeText == "balanced" || modeText == "high" ||
                               modeText == "high_energy")) {
@@ -811,7 +809,8 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
         if (!ok) {
             Serial.println("SynqMatrix profile invalid. Use: subtle|balanced|high");
         } else {
-            captureSynqMatrixRestorePoint();
+            lightwaveos::synqmatrix::captureSynqMatrixRestorePoint(
+                lightwaveos::synqmatrix::SynqMatrixRestoreScope::SerialCli);
             auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
             cfg.profile = profile;
             lightwaveos::synqmatrix::SynqMatrix::instance().setConfig(cfg);
@@ -826,7 +825,8 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
         if (!cfg.enabled || cfg.mode != lightwaveos::synqmatrix::SynqMatrixMode::Director) {
             Serial.println("SynqMatrix switching rejected: Director mode is required");
         } else {
-            captureSynqMatrixRestorePoint();
+            lightwaveos::synqmatrix::captureSynqMatrixRestorePoint(
+                lightwaveos::synqmatrix::SynqMatrixRestoreScope::SerialCli);
             cfg.familyMorphing = false;
             cfg.constrainedSwitching = true;
             cfg.switchingEnabled = true;
@@ -839,7 +839,8 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
     if (inputLower == "synqmatrix switch off" || inputLower == "sa switch off" ||
         inputLower == "synqmatrix switching off" || inputLower == "sa switching off") {
         handledMulti = true;
-        captureSynqMatrixRestorePoint();
+        lightwaveos::synqmatrix::captureSynqMatrixRestorePoint(
+            lightwaveos::synqmatrix::SynqMatrixRestoreScope::SerialCli);
         auto cfg = lightwaveos::synqmatrix::SynqMatrix::instance().getConfig();
         cfg.constrainedSwitching = false;
         cfg.switchingEnabled = false;
@@ -851,7 +852,8 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
     if (inputLower == "synqmatrix wipe" || inputLower == "sa wipe" ||
         inputLower == "synqmatrix reset" || inputLower == "sa reset") {
         handledMulti = true;
-        captureSynqMatrixRestorePoint();
+        lightwaveos::synqmatrix::captureSynqMatrixRestorePoint(
+            lightwaveos::synqmatrix::SynqMatrixRestoreScope::SerialCli);
         lightwaveos::synqmatrix::SynqMatrix::instance().reset();
         if (inputLower.endsWith("reset")) {
             Serial.println("SynqMatrix: 'reset' is deprecated; use 'wipe'");
@@ -915,7 +917,8 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
             if (!stateOk || (!enable && !disable)) {
                 Serial.println("SynqMatrix allow invalid. Use: sa allow <state> on|off");
             } else {
-                captureSynqMatrixRestorePoint();
+                lightwaveos::synqmatrix::captureSynqMatrixRestorePoint(
+                    lightwaveos::synqmatrix::SynqMatrixRestoreScope::SerialCli);
                 lightwaveos::synqmatrix::SynqMatrix::instance().setPolicyAllowed(state, enable);
                 printSynqMatrixAllowlist();
             }
@@ -924,7 +927,8 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
     else
     if (inputLower == "synqmatrix allow reset" || inputLower == "sa allow reset") {
         handledMulti = true;
-        captureSynqMatrixRestorePoint();
+        lightwaveos::synqmatrix::captureSynqMatrixRestorePoint(
+            lightwaveos::synqmatrix::SynqMatrixRestoreScope::SerialCli);
         lightwaveos::synqmatrix::SynqMatrix::instance().resetPolicyAllowlist();
         printSynqMatrixAllowlist();
     }
@@ -937,7 +941,8 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
     else
     if (inputLower == "synqmatrix counters reset" || inputLower == "sa counters reset") {
         handledMulti = true;
-        captureSynqMatrixRestorePoint();
+        lightwaveos::synqmatrix::captureSynqMatrixRestorePoint(
+            lightwaveos::synqmatrix::SynqMatrixRestoreScope::SerialCli);
         lightwaveos::synqmatrix::SynqMatrix::instance().resetCounters();
         Serial.println("SynqMatrix counters: RESET");
         printSynqMatrixHealth();

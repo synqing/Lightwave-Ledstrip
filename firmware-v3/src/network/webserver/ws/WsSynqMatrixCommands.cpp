@@ -14,6 +14,7 @@
 #include "../WebServerContext.h"
 #include "../../ApiResponse.h"
 #include "../../../core/synqmatrix/SynqMatrix.h"
+#include "../../../core/synqmatrix/SynqMatrixRestorePoint.h"
 
 #include <ArduinoJson.h>
 #include <ESPAsyncWebServer.h>
@@ -25,14 +26,6 @@ namespace webserver {
 namespace ws {
 
 namespace {
-
-synqmatrix::SynqMatrixRuntimeState g_restorePoint;
-bool g_restorePointValid = false;
-
-void captureRestorePoint() {
-    g_restorePoint = synqmatrix::SynqMatrix::instance().exportRuntimeState();
-    g_restorePointValid = true;
-}
 
 String buildSynqMatrixWsError(const char* envelopeType,
                               const char* errorCode,
@@ -280,7 +273,7 @@ void handleSynqMatrixConfigSetImpl(AsyncWebSocketClient* client, JsonDocument& d
         return;
     }
 
-    captureRestorePoint();
+    synqmatrix::captureSynqMatrixRestorePoint(synqmatrix::SynqMatrixRestoreScope::WebSocket);
     synqmatrix::SynqMatrix::instance().setConfig(config);
     client->text(buildWsResponse(envelopeType, requestId, [&config](JsonObject& data) {
         encodeConfig(data, config);
@@ -297,7 +290,7 @@ void handleSynqMatrixStatusImpl(AsyncWebSocketClient* client, JsonDocument& doc,
 
 void handleSynqMatrixResetImpl(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&, const char* envelopeType) {
     const char* requestId = doc["requestId"] | "";
-    captureRestorePoint();
+    synqmatrix::captureSynqMatrixRestorePoint(synqmatrix::SynqMatrixRestoreScope::WebSocket);
     synqmatrix::SynqMatrix::instance().reset();
     const auto status = synqmatrix::SynqMatrix::instance().getStatus();
     client->text(buildWsResponse(envelopeType, requestId, [&status](JsonObject& data) {
@@ -309,14 +302,14 @@ void handleSynqMatrixResetImpl(AsyncWebSocketClient* client, JsonDocument& doc, 
 
 void handleSynqMatrixRestoreImpl(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&, const char* envelopeType) {
     const char* requestId = doc["requestId"] | "";
-    if (!g_restorePointValid) {
+    if (!synqmatrix::hasSynqMatrixRestorePoint(synqmatrix::SynqMatrixRestoreScope::WebSocket)) {
         client->text(buildSynqMatrixWsError(envelopeType,
                                             ErrorCodes::INVALID_ACTION,
                                             "No SynqMatrix restore point captured by WebSocket",
                                             requestId));
         return;
     }
-    synqmatrix::SynqMatrix::instance().restoreRuntimeState(g_restorePoint);
+    synqmatrix::restoreSynqMatrixRestorePoint(synqmatrix::SynqMatrixRestoreScope::WebSocket);
     const auto status = synqmatrix::SynqMatrix::instance().getStatus();
     client->text(buildWsResponse(envelopeType, requestId, [&status](JsonObject& data) {
         data["restored"] = true;
@@ -377,7 +370,7 @@ void handleSynqMatrixAllowlistSetImpl(AsyncWebSocketClient* client, JsonDocument
                                             requestId));
         return;
     }
-    captureRestorePoint();
+    synqmatrix::captureSynqMatrixRestorePoint(synqmatrix::SynqMatrixRestoreScope::WebSocket);
     synqmatrix::SynqMatrix::instance().setPolicyAllowed(state, doc["enabled"].as<bool>());
     const auto allowlist = synqmatrix::SynqMatrix::instance().getAllowlistSnapshot();
     client->text(buildWsResponse(envelopeType, requestId, [&allowlist](JsonObject& data) {
@@ -387,7 +380,7 @@ void handleSynqMatrixAllowlistSetImpl(AsyncWebSocketClient* client, JsonDocument
 
 void handleSynqMatrixAllowlistResetImpl(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&, const char* envelopeType) {
     const char* requestId = doc["requestId"] | "";
-    captureRestorePoint();
+    synqmatrix::captureSynqMatrixRestorePoint(synqmatrix::SynqMatrixRestoreScope::WebSocket);
     synqmatrix::SynqMatrix::instance().resetPolicyAllowlist();
     const auto allowlist = synqmatrix::SynqMatrix::instance().getAllowlistSnapshot();
     client->text(buildWsResponse(envelopeType, requestId, [&allowlist](JsonObject& data) {
@@ -405,7 +398,7 @@ void handleSynqMatrixHealthImpl(AsyncWebSocketClient* client, JsonDocument& doc,
 
 void handleSynqMatrixCountersResetImpl(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&, const char* envelopeType) {
     const char* requestId = doc["requestId"] | "";
-    captureRestorePoint();
+    synqmatrix::captureSynqMatrixRestorePoint(synqmatrix::SynqMatrixRestoreScope::WebSocket);
     synqmatrix::SynqMatrix::instance().resetCounters();
     const auto status = synqmatrix::SynqMatrix::instance().getStatus();
     client->text(buildWsResponse(envelopeType, requestId, [&status](JsonObject& data) {

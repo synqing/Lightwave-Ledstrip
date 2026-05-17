@@ -57,6 +57,12 @@ struct DirectorPolicy {
     // 0xFF = leave EdgeMixer mode unchanged. Per-state assignment
     // differentiates strip 2 colour treatment for richer K1 LGP depth.
     uint8_t edgeMixerMode;
+    // ZoneComposer safety clamp: 0 = disable, 1 = enable, 0xFF = unchanged.
+    // All non-Unknown states set 0 to enforce Director-unified rendering
+    // because ZoneComposer presets contain non-Tier-1 effects. Full
+    // ZoneComposerAdjust with per-state presets is a future scope that
+    // requires a Captain-approved zone-effect allowlist.
+    uint8_t zoneEnabled;
 };
 
 // Per-state default policy. Each effectId MUST be a member of Captain's
@@ -67,15 +73,15 @@ struct DirectorPolicy {
 // Palette + hue per-state remain intact — they describe the state's vibe and
 // are applied regardless of which registry effect the selector picks.
 static constexpr DirectorPolicy kMatrix[] = {
-    {SynqMatrixState::Unknown,    EID_SB_K1_WAVEFORM,                  "baseline",         "k1_waveform_boot_baseline",     SynqMatrixSwitchReason::None,              1.0f,  0xFF, false,   0,  0xFF},  // EdgeMixer untouched on boot
-    {SynqMatrixState::Silence,    EID_BLOOM_PARITY,                    "atmosphere",       "silence_bloom_parity_hold",     SynqMatrixSwitchReason::AmbientPosture,    1.0f,  0xFF, false,   0,  0},    // MIRROR — quiet baseline
-    {SynqMatrixState::Ambient,    EID_SB_K1_BLOOM,                     "atmosphere",       "ambient_k1_bloom",              SynqMatrixSwitchReason::AmbientPosture,    0.30f, 4,    true,  160, 1},    // ANALOGOUS — subtle hue shift
-    {SynqMatrixState::Steady,     EID_SB_SPECTRAL_ENVELOPE,            "groove",           "steady_spectral_envelope",      SynqMatrixSwitchReason::SteadyReadability, 0.32f, 2,    true,   96, 4},    // SATURATION_VEIL — steady groove
-    {SynqMatrixState::Build,      EID_SB_K1_WAVEFORM_HYBRID,           "tension",          "build_waveform_hybrid",         SynqMatrixSwitchReason::BuildPressure,     0.45f, 7,    true,   32, 7},    // STM_DUAL — spectral-temporal pressure
-    {SynqMatrixState::Drop,       EID_RIPPLE_ES_TUNED,                 "impact",           "drop_ripple_es_tuned",          SynqMatrixSwitchReason::DropImpact,        0.60f, 7,    true,    0, 2},    // COMPLEMENTARY — peak contrast
-    {SynqMatrixState::Breakdown,  EID_SB_K1_BLOOM_V2_COLOR_HISTORY,    "atmosphere",       "breakdown_colour_history",      SynqMatrixSwitchReason::BreakdownRelease,  0.35f, 5,    true,  192, 4},    // SATURATION_VEIL — releasing
-    {SynqMatrixState::Dense,      EID_LGP_BASS_QUAKE,                  "tension",          "dense_bass_quake",              SynqMatrixSwitchReason::DenseLegibility,   0.55f, 3,    true,  224, 5},    // TRIADIC — rich 3-way colour
-    {SynqMatrixState::Transition, EID_LGP_TIME_REVERSAL_MIRROR_MOD1,   "impact",           "transition_time_reversal_mirror",SynqMatrixSwitchReason::TransitionBridge, 0.45f, 6,    true,   48, 3},    // SPLIT_COMPLEMENTARY — in-between
+    {SynqMatrixState::Unknown,    EID_SB_K1_WAVEFORM,                  "baseline",         "k1_waveform_boot_baseline",     SynqMatrixSwitchReason::None,              1.0f,  0xFF, false,   0,  0xFF, 0xFF},  // EdgeMixer + Zones untouched on boot
+    {SynqMatrixState::Silence,    EID_BLOOM_PARITY,                    "atmosphere",       "silence_bloom_parity_hold",     SynqMatrixSwitchReason::AmbientPosture,    1.0f,  0xFF, false,   0,  0,    0},    // MIRROR + zones disabled
+    {SynqMatrixState::Ambient,    EID_SB_K1_BLOOM,                     "atmosphere",       "ambient_k1_bloom",              SynqMatrixSwitchReason::AmbientPosture,    0.30f, 4,    true,  160, 1,    0},    // ANALOGOUS + zones disabled
+    {SynqMatrixState::Steady,     EID_SB_SPECTRAL_ENVELOPE,            "groove",           "steady_spectral_envelope",      SynqMatrixSwitchReason::SteadyReadability, 0.32f, 2,    true,   96, 4,    0},    // SATURATION_VEIL + zones disabled
+    {SynqMatrixState::Build,      EID_SB_K1_WAVEFORM_HYBRID,           "tension",          "build_waveform_hybrid",         SynqMatrixSwitchReason::BuildPressure,     0.45f, 7,    true,   32, 7,    0},    // STM_DUAL + zones disabled
+    {SynqMatrixState::Drop,       EID_RIPPLE_ES_TUNED,                 "impact",           "drop_ripple_es_tuned",          SynqMatrixSwitchReason::DropImpact,        0.60f, 7,    true,    0, 2,    0},    // COMPLEMENTARY + zones disabled
+    {SynqMatrixState::Breakdown,  EID_SB_K1_BLOOM_V2_COLOR_HISTORY,    "atmosphere",       "breakdown_colour_history",      SynqMatrixSwitchReason::BreakdownRelease,  0.35f, 5,    true,  192, 4,    0},    // SATURATION_VEIL + zones disabled
+    {SynqMatrixState::Dense,      EID_LGP_BASS_QUAKE,                  "tension",          "dense_bass_quake",              SynqMatrixSwitchReason::DenseLegibility,   0.55f, 3,    true,  224, 5,    0},    // TRIADIC + zones disabled
+    {SynqMatrixState::Transition, EID_LGP_TIME_REVERSAL_MIRROR_MOD1,   "impact",           "transition_time_reversal_mirror",SynqMatrixSwitchReason::TransitionBridge, 0.45f, 6,    true,   48, 3,    0},    // SPLIT_COMPLEMENTARY + zones disabled
 };
 
 // Director Effect Registry — Captain's locked Tier 1 allowlist (2026-05-17).
@@ -953,6 +959,7 @@ bool SynqMatrix::tick(const audio::ControlBusFrame& frame,
     request.applyColourModifier = policy.applyColourModifier;
     request.targetColourModifier = policy.targetColourModifier;
     request.edgeMixerMode = policy.edgeMixerMode;
+    request.zoneEnabled = policy.zoneEnabled;
     // Director Effect Registry: per-effect speed cap (0xFF = no cap). Applied
     // by RendererActor after the effect switch lands, clamping m_speed down
     // (never raising) if the user's current speed exceeds the cap.

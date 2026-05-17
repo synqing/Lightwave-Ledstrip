@@ -1619,6 +1619,7 @@ void RendererActor::queueSynqMatrixTransition(
     m_synqMatrixDirectorTargetColourModifier = request.targetColourModifier;
     m_synqMatrixDirectorSpeedCap = request.speedCap;
     m_synqMatrixDirectorEdgeMixerMode = request.edgeMixerMode;
+    m_synqMatrixDirectorZoneEnabled = request.zoneEnabled;
 }
 
 bool RendererActor::processSynqMatrixTransition(uint32_t nowMs)
@@ -1637,6 +1638,7 @@ bool RendererActor::processSynqMatrixTransition(uint32_t nowMs)
     const uint8_t targetColourModifier = m_synqMatrixDirectorTargetColourModifier;
     const uint8_t speedCap = m_synqMatrixDirectorSpeedCap;
     const uint8_t edgeMixerMode = m_synqMatrixDirectorEdgeMixerMode;
+    const uint8_t zoneEnabled = m_synqMatrixDirectorZoneEnabled;
     m_synqMatrixDirectorTransitionQueued = false;
 
     auto& director = synqmatrix::SynqMatrix::instance();
@@ -1728,6 +1730,25 @@ bool RendererActor::processSynqMatrixTransition(uint32_t nowMs)
                     enhancement::EdgeMixer::modeName(static_cast<enhancement::EdgeMixerMode>(currentMode)),
                     edgeMixerMode,
                     enhancement::EdgeMixer::modeName(newMode));
+        }
+    }
+
+    // ZoneComposer safety clamp: bundled with EffectSwitch on the same
+    // state-change trigger. Directs zone state per Director policy. All
+    // non-Unknown states set zoneEnabled=0 to enforce Director-unified
+    // rendering — ZoneComposer presets contain non-Tier-1 effects and
+    // would violate the registry default-deny if loaded. Full per-state
+    // zone presets require a Captain-approved zone-effect allowlist (not
+    // implemented here). Direct setEnabled() is thread-safe (atomic with
+    // Core 0/1 release-acquire pairing).
+    if (zoneEnabled != 0xFF && m_zoneComposer != nullptr) {
+        const bool desired = (zoneEnabled != 0);
+        const bool current = m_zoneComposer->isEnabled();
+        if (desired != current) {
+            m_zoneComposer->setEnabled(desired);
+            LW_LOGI("Director zonecomposer: %s -> %s",
+                    current ? "enabled" : "disabled",
+                    desired ? "enabled" : "disabled");
         }
     }
 

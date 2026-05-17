@@ -629,7 +629,13 @@ bool SynqMatrix::tick(const audio::ControlBusFrame& frame,
         return false;
     }
 
-    const float confidence = clamp01(frame.audioConfidence);
+    // frame.audioConfidence is the VoiceMusicClassifier output and is
+    // effectively binary (0 or 1). features.tempoConfidence is a continuous
+    // beat-tracker signal that lifts whenever the tempo is locked, even when
+    // the music/voice classifier flips. Take the max so the floor opens
+    // whenever EITHER signal indicates real music.
+    const float audioConf = clamp01(frame.audioConfidence);
+    const float confidence = (audioConf > features.tempoConfidence) ? audioConf : features.tempoConfidence;
     const float confidenceFloor = unscaleFloat(m_confidenceFloorQ1000.load(std::memory_order_acquire));
     m_confidenceQ1000.store(scaleFloat(confidence), std::memory_order_release);
     if (updateConfidenceOperatingPhase(confidence, audioAvailable, nowMs)) {
@@ -769,7 +775,12 @@ bool SynqMatrix::tick(const audio::ControlBusFrame& frame,
         return false;
     }
 
-    if (!features.boundaryReady) {
+    // Boundary gate: prefer beat/downbeat alignment, but allow a phase
+    // fallback when the tempo is solidly locked (tempoConfidence >= 0.40) so
+    // a missing grid tick does not pin Director to "deferred" forever. The
+    // existing dwell (8s) + cooldown (20s) + rate-limit (2/60s) windows
+    // prevent thrashing if a switch fires mid-beat.
+    if (!features.boundaryReady && features.tempoConfidence < 0.40f) {
         setSuppressed(SynqMatrixSuppressedReason::BoundaryDeferred, SynqMatrixOwner::Director);
         m_lastAction.store(static_cast<uint8_t>(SynqMatrixLastAction::SwitchSuppressed), std::memory_order_release);
         return false;
@@ -1106,8 +1117,14 @@ SynqMatrixState SynqMatrix::classifyState(const audio::ControlBusFrame& frame,
     const SynqMatrixState stable =
         static_cast<SynqMatrixState>(m_currentState.load(std::memory_order_acquire));
     const float silenceEnter = (stable == SynqMatrixState::Silence) ? 0.10f : 0.06f;
-    if (!audioAvailable || frame.isSilent || frame.silentScale < 0.08f ||
-        confidence < 0.05f ||
+    // Silence classification: feature-based only. Do NOT consult
+    // frame.isSilent / frame.silentScale — those are AudioActor's
+    // output-brightness gates, not classification signals. They trip on quiet
+    // rooms with music playing and would pin the classifier to Silence
+    // permanently. Trust audioAvailable, music-classifier confidence, and the
+    // feature triple (energy / flux / beatStrength) which all derive from
+    // band data the renderer-side effects use.
+    if (!audioAvailable || confidence < 0.05f ||
         (features.energy < (features.adaptiveFloor + silenceEnter) &&
          features.flux < 0.05f && features.beatStrength < 0.20f)) {
         state = SynqMatrixState::Silence;

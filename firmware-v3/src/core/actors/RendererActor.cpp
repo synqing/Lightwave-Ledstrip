@@ -1750,22 +1750,22 @@ bool RendererActor::processSynqMatrixTransition(uint32_t nowMs)
         }
     }
 
-    // ZoneComposer safety clamp: bundled with EffectSwitch on the same
-    // state-change trigger. Directs zone state per Director policy. All
-    // non-Unknown states set zoneEnabled=0 to enforce Director-unified
-    // rendering — ZoneComposer presets contain non-Tier-1 effects and
-    // would violate the registry default-deny if loaded. Full per-state
-    // zone presets require a Captain-approved zone-effect allowlist (not
-    // implemented here). Direct setEnabled() is thread-safe (atomic with
-    // Core 0/1 release-acquire pairing).
+    // ZoneComposer is a capture/control surface, not Director-owned state.
+    // Historical Director policies still carry zoneEnabled=0 for unified
+    // rendering, but applying that here disables the exact ZoneComposer +
+    // Director path needed for recording. Treat the policy as a release-time
+    // cleanup only: active Director ownership leaves ZoneComposer unchanged.
     if (zoneEnabled != 0xFF && m_zoneComposer != nullptr) {
-        const bool desired = (zoneEnabled != 0);
-        const bool current = m_zoneComposer->isEnabled();
-        if (desired != current) {
-            m_zoneComposer->setEnabled(desired);
-            LW_LOGI("Director zonecomposer: %s -> %s",
-                    current ? "enabled" : "disabled",
-                    desired ? "enabled" : "disabled");
+        const synqmatrix::SynqMatrixOwner activeOwner = director.getOwner();
+        if (activeOwner == synqmatrix::SynqMatrixOwner::None) {
+            const bool desired = (zoneEnabled != 0);
+            const bool current = m_zoneComposer->isEnabled();
+            if (desired != current) {
+                m_zoneComposer->setEnabled(desired);
+                LW_LOGI("Director zonecomposer: %s -> %s",
+                        current ? "enabled" : "disabled",
+                        desired ? "enabled" : "disabled");
+            }
         }
     }
 
@@ -2216,18 +2216,16 @@ void RendererActor::renderFrame()
 
 #if FEATURE_AUDIO_SYNC
     // Authority structure: user (Manual) > preset (Show) > director.
-    // Director clamps ZoneComposer off so its single-effect render path can
-    // drive the full strip, but only when the user has NOT manually asserted
-    // Zone Composer state. Manual ownership wins over Director per Lane C
-    // precedence (claude-mem #50861) and Director V1 spec (#50970). One atomic
-    // load + one branch — sub-microsecond cost on the render hot path.
+    // Director must coexist with ZoneComposer for capture. Do not clamp zones
+    // while Director owns the session; only clean up after an explicit release
+    // leaves SynqMatrix in Director mode with no owner.
     {
         const synqmatrix::SynqMatrixOwner activeOwner =
             synqmatrix::SynqMatrix::instance().getOwner();
         const synqmatrix::SynqMatrixMode activeMode =
             synqmatrix::SynqMatrix::instance().getMode();
         if (activeMode == synqmatrix::SynqMatrixMode::Director
-            && activeOwner != synqmatrix::SynqMatrixOwner::Manual
+            && activeOwner == synqmatrix::SynqMatrixOwner::None
             && m_zoneComposer != nullptr
             && m_zoneComposer->isEnabled()) {
             m_zoneComposer->setEnabled(false);

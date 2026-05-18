@@ -277,12 +277,10 @@ struct SynqMatrixSwitchRequest {
     // EdgeMixerMode enum). 0xFF = leave EdgeMixer unchanged. Applied at the
     // same state-change trigger as EffectSwitch + PaletteShift + ColourModifierShift.
     uint8_t edgeMixerMode = 0xFF;
-    // ZoneComposer safety clamp: 0 = disable zones, 1 = enable zones,
-    // 0xFF = leave unchanged. Director sets 0 on every non-Unknown state
-    // to guarantee its Tier 1 effect renders unified across the strip
-    // (zones use loadPreset which contains non-Tier-1 effects). Full
-    // ZoneComposerAdjust with per-state presets requires a Captain-
-    // approved zone-effect allowlist (future scope).
+    // Historical ZoneComposer policy: 0 = disable zones, 1 = enable zones,
+    // 0xFF = leave unchanged. RendererActor ignores this while Director owns
+    // the session so ZoneComposer can stay active for capture; the policy is
+    // only release-time cleanup until a richer ZoneComposerAdjust lands.
     uint8_t zoneEnabled = 0xFF;
 };
 

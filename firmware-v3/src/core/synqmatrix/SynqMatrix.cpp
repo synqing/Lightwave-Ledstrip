@@ -60,11 +60,10 @@ struct DirectorPolicy {
     // 0xFF = leave EdgeMixer mode unchanged. Per-state assignment
     // differentiates strip 2 colour treatment for richer K1 LGP depth.
     uint8_t edgeMixerMode;
-    // ZoneComposer safety clamp: 0 = disable, 1 = enable, 0xFF = unchanged.
-    // All non-Unknown states set 0 to enforce Director-unified rendering
-    // because ZoneComposer presets contain non-Tier-1 effects. Full
-    // ZoneComposerAdjust with per-state presets is a future scope that
-    // requires a Captain-approved zone-effect allowlist.
+    // Historical ZoneComposer policy: 0 = disable, 1 = enable, 0xFF = unchanged.
+    // RendererActor treats this as release-time cleanup only; active Director
+    // ownership leaves ZoneComposer enabled so Director can support multi-zone
+    // content capture.
     uint8_t zoneEnabled;
 };
 

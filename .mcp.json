@@ -11,6 +11,10 @@
         "CLANGD_PATH": "/opt/homebrew/opt/llvm/bin/clangd",
         "LOG_LEVEL": "WARN"
       }
+    },
+    "espressif-docs": {
+      "type": "http",
+      "url": "https://mcp.espressif.com/docs"
     }
   }
 }

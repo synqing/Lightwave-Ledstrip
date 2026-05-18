@@ -42,13 +42,15 @@ endpoints:
   # ── Device ─────────────────────────────────────────────────────────────
   /api/v1/device/status:
     method: GET
-    description: "Device status (uptime, heap, FPS, network, effect state)"
+    description: "Device status (uptime, heap, FPS, network, effect state, SynqMatrix authority)"
     response_fields:
       fps: { type: uint16, owner: "RendererActor", description: "Renderer FPS derived from rolling average frame time." }
       cpuPercent: { type: uint8, owner: "RendererActor", description: "Renderer frame-budget occupancy: avgFrameTimeUs * 100 / LedConfig::FRAME_TIME_US, clamped to 100. Not whole-device CPU utilisation and not the audio benchmark load metric." }
       frameBudgetPercent: { type: uint8, owner: "RendererActor", alias_of: cpuPercent, description: "Clear-name alias for renderer frame-budget occupancy. Added for WB-1; cpuPercent remains for compatibility." }
       framesRendered: { type: uint32, owner: "RendererActor", description: "Rendered frame counter since renderer start." }
       ledTransport: { type: object, owner: "LedDriver", fields: [frameCount, showSkips, lastShowUs, avgShowUs, maxShowUs, lastFastLedShowCallUs, avgFastLedShowCallUs, lastRmtFenceUs, avgRmtFenceUs, lastLatchWaitUs, avgLatchWaitUs, failures, rmtErrors, underruns], description: "Additive WB-2 LED transport timing and counter object. Source-only evidence; physical TX-start/TX-complete boundaries still require hardware instrumentation." }
+      synqMatrixMode: { type: string, enum: [off, assist, director], owner: "SynqMatrix", description: "Current SynqMatrix mode singleton state." }
+      synqMatrixOwner: { type: string, enum: [none, director, manual, show], owner: "SynqMatrix", description: "Authority owner. Precedence: user (manual) > preset (show) > director. Any user action that mutates Zone Composer state sets owner=manual; Director's render-frame clamp defers when owner=manual." }
     consumers: [ios]
 
   /api/v1/device/info:
@@ -838,7 +840,44 @@ endpoints:
 
   /api/v1/zones/reorder:
     method: POST
-    description: "Reorder zones"
+    description: "Reorder zones with CENTER ORIGIN constraint (stub — returns 501 NOT_IMPLEMENTED until Phase 6 advanced layering ships)"
+
+  # ── Zone Audio Configuration (stubs — returns 501 NOT_IMPLEMENTED until D-4/A3 Phase 1 ships) ──
+  /api/v1/zones/{zoneId}/audio:
+    method: GET
+    description: "Get zone audio-reactive configuration. Stub — returns 501 NOT_IMPLEMENTED until zone audio routing ships (D-4/A3 Phase 1)."
+    path_params:
+      zoneId: { type: uint8, min: 1, max: 3 }
+
+  /api/v1/zones/{zoneId}/audio:
+    method: POST
+    description: "Set zone audio-reactive configuration. Stub — returns 501 NOT_IMPLEMENTED until zone audio routing ships (D-4/A3 Phase 1)."
+    path_params:
+      zoneId: { type: uint8, min: 1, max: 3 }
+    request_body:
+      tempoSync: { type: bool, optional: true }
+      beatModulation: { type: bool, optional: true }
+      tempoSpeedScale: { type: float, optional: true, range: "0.0-4.0" }
+      beatDecay: { type: float, optional: true, range: "0.0-1.0" }
+      audioBand: { type: uint8, optional: true, range: "0-7" }
+      beatTriggerEnabled: { type: bool, optional: true }
+      beatTriggerInterval: { type: uint16, optional: true, note: "ms between triggered transitions" }
+
+  # ── Zone Beat Trigger (stubs — returns 501 NOT_IMPLEMENTED until Phase 4 ships) ──
+  /api/v1/zones/{zoneId}/beat-trigger:
+    method: GET
+    description: "Get zone beat-trigger configuration. Stub — returns 501 NOT_IMPLEMENTED until live-performance controls ship (Phase 4)."
+    path_params:
+      zoneId: { type: uint8, min: 1, max: 3 }
+
+  /api/v1/zones/{zoneId}/beat-trigger:
+    method: POST
+    description: "Set zone beat-trigger configuration. Stub — returns 501 NOT_IMPLEMENTED until live-performance controls ship (Phase 4)."
+    path_params:
+      zoneId: { type: uint8, min: 1, max: 3 }
+    request_body:
+      enabled: { type: bool, optional: true }
+      interval: { type: uint16, optional: true, note: "Minimum ms between triggered transitions" }
 
   # ── Presets ────────────────────────────────────────────────────────────
   /api/v1/presets:

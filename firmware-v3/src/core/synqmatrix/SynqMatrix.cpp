@@ -8,6 +8,9 @@
 #include <cmath>
 #include <cstring>
 
+#define LW_LOG_TAG "SynqMatrix"
+#include "../../utils/Log.h"
+
 namespace lightwaveos {
 namespace synqmatrix {
 
@@ -1807,6 +1810,19 @@ const char* synqMatrixOwnerName(SynqMatrixOwner owner) {
         case SynqMatrixOwner::Show: return "show";
         default: return "unknown";
     }
+}
+
+void assertSynqMatrixOwner(SynqMatrixOwner desired, const char* source, const char* command) {
+    auto& sm = SynqMatrix::instance();
+    const SynqMatrixOwner previous = sm.getOwner();
+    if (previous != desired) {
+        LW_LOGI("Owner transition: %s -> %s via %s %s",
+                synqMatrixOwnerName(previous),
+                synqMatrixOwnerName(desired),
+                source ? source : "?",
+                command ? command : "?");
+    }
+    sm.setOwner(desired);
 }
 
 const char* synqMatrixSuppressedReasonName(SynqMatrixSuppressedReason reason) {

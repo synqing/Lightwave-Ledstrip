@@ -10,6 +10,7 @@
 #include "../../ApiResponse.h"
 #include "../../RequestValidator.h"
 #include "../../../codec/WsZonesCodec.h"
+#include "../../../core/synqmatrix/SynqMatrix.h"
 #include "../../../effects/zones/ZoneComposer.h"
 #include "../../../effects/zones/BlendMode.h"
 #include "../../../config/effect_ids.h"
@@ -41,7 +42,15 @@ static void handleZoneEnable(AsyncWebSocketClient* client, JsonDocument& doc, co
     
     const codec::ZoneEnableRequest& req = decodeResult.request;
     ctx.zoneComposer->setEnabled(req.enable);
-    
+
+    // Authority structure: enabling the composer is a user-asserted Manual
+    // claim; disabling it releases the composer back to None so Director can
+    // re-take ownership on the next render frame.
+    lightwaveos::synqmatrix::assertSynqMatrixOwner(
+        req.enable ? lightwaveos::synqmatrix::SynqMatrixOwner::Manual
+                   : lightwaveos::synqmatrix::SynqMatrixOwner::None,
+        "WS", "zone.enable");
+
     // Send immediate zone.enabledChanged event.
     // SSA-D Round 2 (2026-04-18): skip textAll during 600 ms post-connect
     // window. Other clients re-sync via broadcastZoneState() which is itself
@@ -103,6 +112,13 @@ static void handleZoneEnableZone(AsyncWebSocketClient* client, JsonDocument& doc
     bool enabled = doc["enabled"].as<bool>();
 
     ctx.zoneComposer->setZoneEnabled(internalZoneId, enabled);
+
+    // Per-zone enable=true is a user-asserted Manual claim. Per-zone enable=false
+    // does NOT release composer ownership — only zone.enable/zones.enabled does.
+    if (enabled) {
+        lightwaveos::synqmatrix::assertSynqMatrixOwner(
+            lightwaveos::synqmatrix::SynqMatrixOwner::Manual, "WS", "zone.enableZone");
+    }
 
     // Broadcast to all clients.
     // SSA-D Round 2 (2026-04-18): skip textAll during 600 ms post-connect
@@ -168,6 +184,8 @@ static void handleZoneSetEffect(AsyncWebSocketClient* client, JsonDocument& doc,
     }
 
     ctx.zoneComposer->setZoneEffect(zoneId, effectId);
+    lightwaveos::synqmatrix::assertSynqMatrixOwner(
+        lightwaveos::synqmatrix::SynqMatrixOwner::Manual, "WS", "zone.setEffect");
     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
 
     String response = buildWsResponse("zones.effectChanged", requestId, [&ctx, zoneId, effectId](JsonObject& data) {
@@ -212,6 +230,8 @@ static void handleZoneSetBrightness(AsyncWebSocketClient* client, JsonDocument& 
     }
 
     ctx.zoneComposer->setZoneBrightness(zoneId, brightness);
+    lightwaveos::synqmatrix::assertSynqMatrixOwner(
+        lightwaveos::synqmatrix::SynqMatrixOwner::Manual, "WS", "zone.setBrightness");
     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
 
     const char* updatedFields[] = {"brightness"};
@@ -257,6 +277,8 @@ static void handleZoneSetSpeed(AsyncWebSocketClient* client, JsonDocument& doc, 
     }
 
     ctx.zoneComposer->setZoneSpeed(zoneId, speed);
+    lightwaveos::synqmatrix::assertSynqMatrixOwner(
+        lightwaveos::synqmatrix::SynqMatrixOwner::Manual, "WS", "zone.setSpeed");
     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
 
     const char* updatedFields[] = {"speed"};
@@ -303,6 +325,8 @@ static void handleZoneSetPalette(AsyncWebSocketClient* client, JsonDocument& doc
     }
 
     ctx.zoneComposer->setZonePalette(zoneId, paletteId);
+    lightwaveos::synqmatrix::assertSynqMatrixOwner(
+        lightwaveos::synqmatrix::SynqMatrixOwner::Manual, "WS", "zone.setPalette");
     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
 
     String response = buildWsResponse("zone.paletteChanged", requestId, [&ctx, zoneId, paletteId](JsonObject& data) {
@@ -348,6 +372,8 @@ static void handleZoneSetBlend(AsyncWebSocketClient* client, JsonDocument& doc, 
 
     lightwaveos::zones::BlendMode blendMode = static_cast<lightwaveos::zones::BlendMode>(blendModeVal);
     ctx.zoneComposer->setZoneBlendMode(zoneId, blendMode);
+    lightwaveos::synqmatrix::assertSynqMatrixOwner(
+        lightwaveos::synqmatrix::SynqMatrixOwner::Manual, "WS", "zone.setBlend");
     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
 
     String response = buildWsResponse("zone.blendChanged", requestId, [&ctx, zoneId, blendModeVal](JsonObject& data) {
@@ -371,6 +397,8 @@ static void handleZoneLoadPreset(AsyncWebSocketClient* client, JsonDocument& doc
     
     const codec::ZoneLoadPresetRequest& req = decodeResult.request;
     ctx.zoneComposer->loadPreset(req.presetId);
+    lightwaveos::synqmatrix::assertSynqMatrixOwner(
+        lightwaveos::synqmatrix::SynqMatrixOwner::Manual, "WS", "zone.loadPreset");
     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
 }
 
@@ -495,7 +523,12 @@ static void handleZonesUpdate(AsyncWebSocketClient* client, JsonDocument& doc, c
         ctx.zoneComposer->setZoneBlendMode(zoneId, blendMode);
         updatedBlend = true;
     }
-    
+
+    if (updatedEffect || updatedBrightness || updatedSpeed || updatedPalette || updatedBlend) {
+        lightwaveos::synqmatrix::assertSynqMatrixOwner(
+            lightwaveos::synqmatrix::SynqMatrixOwner::Manual, "WS", "zones.update");
+    }
+
     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
     
     const char* updatedFields[5];
@@ -560,6 +593,8 @@ static void handleZonesSetEffect(AsyncWebSocketClient* client, JsonDocument& doc
     }
 
     ctx.zoneComposer->setZoneEffect(zoneId, effectId);
+    lightwaveos::synqmatrix::assertSynqMatrixOwner(
+        lightwaveos::synqmatrix::SynqMatrixOwner::Manual, "WS", "zones.setEffect");
     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
 
     String response = buildWsResponse("zones.effectChanged", requestId, [&ctx, zoneId, effectId](JsonObject& data) {
@@ -625,7 +660,10 @@ static void handleZonesSetLayout(AsyncWebSocketClient* client, JsonDocument& doc
         client->text(buildWsError(ErrorCodes::INVALID_VALUE, "Layout validation failed", requestId));
         return;
     }
-    
+
+    lightwaveos::synqmatrix::assertSynqMatrixOwner(
+        lightwaveos::synqmatrix::SynqMatrixOwner::Manual, "WS", "zones.setLayout");
+
     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
     
     String response = buildWsResponse("zones.layoutChanged", requestId, [zoneCount](JsonObject& data) {

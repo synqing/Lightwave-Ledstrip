@@ -1125,6 +1125,11 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
     else if (strcmp(type, "zone.enable") == 0 || strcmp(type, "zones.enabled") == 0) {
         bool enable = doc["enable"] | doc["enabled"] | false;
         zoneComposer.setEnabled(enable);
+        // Authority: enabling = user-asserted Manual; disabling releases to None.
+        lightwaveos::synqmatrix::assertSynqMatrixOwner(
+            enable ? lightwaveos::synqmatrix::SynqMatrixOwner::Manual
+                   : lightwaveos::synqmatrix::SynqMatrixOwner::None,
+            "Serial", "zone.enable");
         char buf[48];
         snprintf(buf, sizeof(buf), "{\"enabled\":%s}", enable ? "true" : "false");
         serialJsonResponse(type, reqId, buf);
@@ -1147,6 +1152,8 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
         if (renderer && !renderer->isEffectRegistered(effectId)) { serialJsonError(reqId, "effectId not registered"); return; }
 
         zoneComposer.setZoneEffect(zoneId, effectId);
+        lightwaveos::synqmatrix::assertSynqMatrixOwner(
+            lightwaveos::synqmatrix::SynqMatrixOwner::Manual, "Serial", "zone.setEffect");
         char buf[96];
         snprintf(buf, sizeof(buf), "{\"zoneId\":%u,\"effectId\":%u}", (unsigned)wireZoneId, (unsigned)effectId);
         serialJsonResponse(type, reqId, buf);
@@ -1166,6 +1173,8 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
         if (zoneId >= zoneComposer.getZoneCount()) { serialJsonError(reqId, "zoneId out of range"); return; }
 
         zoneComposer.setZoneBrightness(zoneId, brightness);
+        lightwaveos::synqmatrix::assertSynqMatrixOwner(
+            lightwaveos::synqmatrix::SynqMatrixOwner::Manual, "Serial", "zone.setBrightness");
         char buf[96];
         snprintf(buf, sizeof(buf), "{\"zoneId\":%u,\"brightness\":%u}", (unsigned)wireZoneId, (unsigned)brightness);
         serialJsonResponse(type, reqId, buf);
@@ -1185,6 +1194,8 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
         if (zoneId >= zoneComposer.getZoneCount()) { serialJsonError(reqId, "zoneId out of range"); return; }
 
         zoneComposer.setZoneSpeed(zoneId, speed);
+        lightwaveos::synqmatrix::assertSynqMatrixOwner(
+            lightwaveos::synqmatrix::SynqMatrixOwner::Manual, "Serial", "zone.setSpeed");
         char buf[96];
         snprintf(buf, sizeof(buf), "{\"zoneId\":%u,\"speed\":%u}", (unsigned)wireZoneId, (unsigned)speed);
         serialJsonResponse(type, reqId, buf);
@@ -1204,6 +1215,8 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
         if (zoneId >= zoneComposer.getZoneCount()) { serialJsonError(reqId, "zoneId out of range"); return; }
 
         zoneComposer.setZonePalette(zoneId, paletteId);
+        lightwaveos::synqmatrix::assertSynqMatrixOwner(
+            lightwaveos::synqmatrix::SynqMatrixOwner::Manual, "Serial", "zone.setPalette");
         char buf[96];
         snprintf(buf, sizeof(buf), "{\"zoneId\":%u,\"paletteId\":%u}", (unsigned)wireZoneId, (unsigned)paletteId);
         serialJsonResponse(type, reqId, buf);
@@ -1224,6 +1237,8 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
 
         lightwaveos::zones::BlendMode blendMode = static_cast<lightwaveos::zones::BlendMode>(blendModeVal);
         zoneComposer.setZoneBlendMode(zoneId, blendMode);
+        lightwaveos::synqmatrix::assertSynqMatrixOwner(
+            lightwaveos::synqmatrix::SynqMatrixOwner::Manual, "Serial", "zone.setBlend");
         char buf[96];
         snprintf(buf, sizeof(buf), "{\"zoneId\":%u,\"blendMode\":%u}", (unsigned)wireZoneId, (unsigned)blendModeVal);
         serialJsonResponse(type, reqId, buf);
@@ -1260,6 +1275,9 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
             zoneComposer.setZoneBlendMode(zoneId, static_cast<lightwaveos::zones::BlendMode>(bm));
         }
 
+        lightwaveos::synqmatrix::assertSynqMatrixOwner(
+            lightwaveos::synqmatrix::SynqMatrixOwner::Manual, "Serial", "zones.update");
+
         char buf[48];
         snprintf(buf, sizeof(buf), "{\"zoneId\":%u,\"updated\":true}", (unsigned)wireZoneId);
         serialJsonResponse(type, reqId, buf);
@@ -1271,6 +1289,8 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
         if (!doc["presetId"].is<int>()) { serialJsonError(reqId, "missing presetId"); return; }
         uint8_t presetId = doc["presetId"];
         zoneComposer.loadPreset(presetId);
+        lightwaveos::synqmatrix::assertSynqMatrixOwner(
+            lightwaveos::synqmatrix::SynqMatrixOwner::Manual, "Serial", "zone.loadPreset");
         char buf[48];
         snprintf(buf, sizeof(buf), "{\"presetId\":%u}", (unsigned)presetId);
         serialJsonResponse(type, reqId, buf);

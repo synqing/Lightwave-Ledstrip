@@ -7,6 +7,7 @@
 #include "../../../config/version.h"
 #include "core/actors/ActorSystem.h"
 #include "core/actors/RendererActor.h"
+#include "core/synqmatrix/SynqMatrix.h"
 #include <WiFi.h>
 
 using namespace lightwaveos::actors;
@@ -77,6 +78,15 @@ void DeviceHandlers::handleStatus(AsyncWebServerRequest* request,
         }
 
         data["wsClients"] = wsClientCount;
+
+        // SynqMatrix authority readback — same triple as the WS status broadcast.
+        // The REST status route does not carry m_zoneComposer; zonesEnabled is
+        // reported via the dedicated /api/v1/zones path family, but mode/owner
+        // are runtime singletons safe to read from any context.
+        data["synqMatrixMode"] = lightwaveos::synqmatrix::synqMatrixModeName(
+            lightwaveos::synqmatrix::SynqMatrix::instance().getMode());
+        data["synqMatrixOwner"] = lightwaveos::synqmatrix::synqMatrixOwnerName(
+            lightwaveos::synqmatrix::SynqMatrix::instance().getOwner());
     });
 }
 

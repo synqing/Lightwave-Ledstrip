@@ -1642,6 +1642,23 @@ bool RendererActor::processSynqMatrixTransition(uint32_t nowMs)
     m_synqMatrixDirectorTransitionQueued = false;
 
     auto& director = synqmatrix::SynqMatrix::instance();
+
+    // Authority structure: user (Manual) > preset (Show) > director.
+    // If the user has manually asserted Zone Composer state mid-flight,
+    // the transition the Director queued is stale — refuse it so we do
+    // not stomp Manual ownership during the bundled clamp window. The
+    // owner read is one atomic load.
+    {
+        const synqmatrix::SynqMatrixOwner activeOwner = director.getOwner();
+        if (activeOwner == synqmatrix::SynqMatrixOwner::Manual) {
+            LW_LOGI("SynqMatrix Director transition clamp: skipped (owner=manual, target=0x%04X, reason=%s)",
+                    static_cast<unsigned>(targetEffect), reason);
+            director.notifySwitchRejected(targetEffect, nowMs,
+                                          synqmatrix::SynqMatrixSuppressedReason::ManualOwner);
+            return false;
+        }
+    }
+
     if (isTransitionActive()) {
         director.notifySwitchRejected(targetEffect, nowMs, synqmatrix::SynqMatrixSuppressedReason::TransitionActive);
         return false;
@@ -2197,22 +2214,25 @@ void RendererActor::renderFrame()
         return;
     }
 
-    // Director ownership pre-render clamp: when SynqMatrix is enabled and in
-    // Director mode, ZoneComposer must be disabled before render dispatch.
-    // Without this, the ZoneComposer-enabled branch below returns early and
-    // SynqMatrix::tick() never runs — Director can never queue a switch to
-    // disable zones via the transition-bundled clamp. This clamp catches the
-    // mid-stream case (user/REST/WS/serial enables zones while Director is
-    // active) by re-asserting Director's ownership of unified rendering
-    // exactly once per render frame, then falling through to the unified
-    // render path. The transition-bundled clamp at processSynqMatrixTransition
-    // remains as belt-and-braces for the per-state policy assignment path.
 #if FEATURE_AUDIO_SYNC
-    if (m_zoneComposer != nullptr && m_zoneComposer->isEnabled()) {
-        const auto cfg = synqmatrix::SynqMatrix::instance().getConfig();
-        if (cfg.enabled && cfg.mode == synqmatrix::SynqMatrixMode::Director) {
+    // Authority structure: user (Manual) > preset (Show) > director.
+    // Director clamps ZoneComposer off so its single-effect render path can
+    // drive the full strip, but only when the user has NOT manually asserted
+    // Zone Composer state. Manual ownership wins over Director per Lane C
+    // precedence (claude-mem #50861) and Director V1 spec (#50970). One atomic
+    // load + one branch — sub-microsecond cost on the render hot path.
+    {
+        const synqmatrix::SynqMatrixOwner activeOwner =
+            synqmatrix::SynqMatrix::instance().getOwner();
+        const synqmatrix::SynqMatrixMode activeMode =
+            synqmatrix::SynqMatrix::instance().getMode();
+        if (activeMode == synqmatrix::SynqMatrixMode::Director
+            && activeOwner != synqmatrix::SynqMatrixOwner::Manual
+            && m_zoneComposer != nullptr
+            && m_zoneComposer->isEnabled()) {
             m_zoneComposer->setEnabled(false);
-            LW_LOGI("Director zonecomposer: enabled -> disabled (director pre-render clamp)");
+            LW_LOGI("SynqMatrix Director zonecomposer clamp: enabled -> disabled (owner=%s, mode=director)",
+                    synqmatrix::synqMatrixOwnerName(activeOwner));
         }
     }
 #endif

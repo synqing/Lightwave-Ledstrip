@@ -31,6 +31,7 @@
 #include "handlers/ModifierHandlers.h"
 #include "handlers/ColorCorrectionHandlers.h"
 #include "handlers/SynqMatrixHandlers.h"
+#include "../../core/synqmatrix/SynqMatrix.h"
 #include "../../effects/enhancement/EdgeMixer.h"
 #include "../../core/actors/ActorSystem.h"
 #include "handlers/StimulusHandlers.h"
@@ -1172,6 +1173,14 @@ void V1ApiRoutes::registerRoutes(
 
             bool enabled = doc["enabled"];
             ctx.zoneComposer->setEnabled(enabled);
+
+            // Authority structure: enabling the composer is a user-asserted
+            // Manual claim; disabling it releases ownership back to None so
+            // Director can re-take on the next render frame.
+            lightwaveos::synqmatrix::assertSynqMatrixOwner(
+                enabled ? lightwaveos::synqmatrix::SynqMatrixOwner::Manual
+                        : lightwaveos::synqmatrix::SynqMatrixOwner::None,
+                "REST", "zones/enabled");
 
             // Send WebSocket event
             JsonDocument eventDoc;

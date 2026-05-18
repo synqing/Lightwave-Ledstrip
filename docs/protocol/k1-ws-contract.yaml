@@ -2511,6 +2511,9 @@ broadcasts:
       ledDitheringEnabled: bool
       freeHeap: uint32
       uptime: uint32
+      zonesEnabled: { type: bool, note: "true iff ZoneComposer is currently rendering. Reflects user-asserted Manual ownership." }
+      synqMatrixMode: { type: string, enum: [off, assist, director], note: "Current SynqMatrix mode. 'director' means the algorithm authors single-effect renders unless owner == manual." }
+      synqMatrixOwner: { type: string, enum: [none, director, manual, show], note: "Authority owner. user (manual) > preset (show) > director. Clients render UI state from this field." }
       edgeMixerMode: uint8
       edgeMixerModeName: string
       edgeMixerSpread: uint8

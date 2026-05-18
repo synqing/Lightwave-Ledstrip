@@ -363,6 +363,25 @@ public:
     void markShowControl(uint32_t nowMs);
     bool isShowOwnerActive(uint32_t nowMs) const;
 
+    // Authority structure: user (Manual) > preset (Show) > director.
+    // The render-path Director clamp on ZoneComposer defers when getOwner()
+    // returns Manual. Owner writes use release ordering; reads use acquire,
+    // matching the pattern used elsewhere in this class. Both calls are
+    // O(1) lock-free atomics on Xtensa LX7 — safe to call from any context,
+    // including Core 1 render hot paths.
+    SynqMatrixOwner getOwner() const noexcept {
+        return static_cast<SynqMatrixOwner>(m_owner.load(std::memory_order_acquire));
+    }
+    void setOwner(SynqMatrixOwner owner) noexcept {
+        m_owner.store(static_cast<uint8_t>(owner), std::memory_order_release);
+    }
+
+    // Hot-path mode read — used by the render-path Director clamp. One atomic
+    // load, no struct copy. Mirrors getOwner()'s acquire ordering.
+    SynqMatrixMode getMode() const noexcept {
+        return static_cast<SynqMatrixMode>(m_mode.load(std::memory_order_acquire));
+    }
+
 #if FEATURE_AUDIO_SYNC
     bool tick(const audio::ControlBusFrame& frame,
                           const audio::MusicalGridSnapshot& grid,
@@ -575,6 +594,14 @@ const char* synqMatrixClassificationReasonName(SynqMatrixClassificationReason re
 SynqMatrixMode parseSynqMatrixMode(const char* value, bool* ok = nullptr);
 SynqMatrixProfile parseSynqMatrixProfile(const char* value, bool* ok = nullptr);
 SynqMatrixState parseSynqMatrixState(const char* value, bool* ok = nullptr);
+
+// Convenience: assert ownership, logging on transition only (no log spam if
+// owner is already the requested value). `source` is a free-form tag such as
+// "REST", "WS", or "Serial"; `command` names the operation (e.g. "zone.setEffect").
+// Both strings must be string-literal lifetime — they are passed through to the
+// ESP log without copying. Used by every zone-mutating handler to enforce the
+// user (Manual) > preset (Show) > director authority structure.
+void assertSynqMatrixOwner(SynqMatrixOwner desired, const char* source, const char* command);
 
 } // namespace synqmatrix
 } // namespace lightwaveos

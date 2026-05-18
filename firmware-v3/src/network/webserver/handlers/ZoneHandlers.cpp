@@ -2,6 +2,7 @@
 #include "../../RequestValidator.h"
 #include "../../../config/effect_ids.h"
 #include "../../../core/actors/ActorSystem.h"
+#include "../../../core/synqmatrix/SynqMatrix.h"
 #include "../../../palettes/Palettes_Master.h"
 #include "../../../effects/zones/BlendMode.h"
 
@@ -174,6 +175,9 @@ void ZoneHandlers::handleLayout(AsyncWebServerRequest* request, uint8_t* data, s
         respData["zoneCount"] = zoneCount;
     });
 
+    lightwaveos::synqmatrix::assertSynqMatrixOwner(
+        lightwaveos::synqmatrix::SynqMatrixOwner::Manual, "REST", "zones/layout");
+
     if (broadcastZoneState) broadcastZoneState();
 }
 
@@ -262,6 +266,8 @@ void ZoneHandlers::handleSetEffect(AsyncWebServerRequest* request, uint8_t* data
     }
 
     composer->setZoneEffect(zoneId, effectId);
+    lightwaveos::synqmatrix::assertSynqMatrixOwner(
+        lightwaveos::synqmatrix::SynqMatrixOwner::Manual, "REST", "zones/{id}/effect");
 
     sendSuccessResponse(request, [zoneId, effectId, &cachedState](JsonObject& respData) {
         respData["zoneId"] = static_cast<uint8_t>(zoneId + 1);
@@ -294,6 +300,8 @@ void ZoneHandlers::handleSetBrightness(AsyncWebServerRequest* request, uint8_t* 
 
     uint8_t brightness = doc["brightness"];
     composer->setZoneBrightness(zoneId, brightness);
+    lightwaveos::synqmatrix::assertSynqMatrixOwner(
+        lightwaveos::synqmatrix::SynqMatrixOwner::Manual, "REST", "zones/{id}/brightness");
 
     sendSuccessResponse(request, [zoneId, brightness](JsonObject& respData) {
         respData["zoneId"] = static_cast<uint8_t>(zoneId + 1);
@@ -323,6 +331,8 @@ void ZoneHandlers::handleSetSpeed(AsyncWebServerRequest* request, uint8_t* data,
     // Schema validates speed is 1-100
     uint8_t speed = doc["speed"];
     composer->setZoneSpeed(zoneId, speed);
+    lightwaveos::synqmatrix::assertSynqMatrixOwner(
+        lightwaveos::synqmatrix::SynqMatrixOwner::Manual, "REST", "zones/{id}/speed");
 
     sendSuccessResponse(request, [zoneId, speed](JsonObject& respData) {
         respData["zoneId"] = static_cast<uint8_t>(zoneId + 1);
@@ -359,6 +369,8 @@ void ZoneHandlers::handleSetPalette(AsyncWebServerRequest* request, uint8_t* dat
     // Validate palette ID before access (defensive check)
     uint8_t safe_palette = lightwaveos::palettes::validatePaletteId(paletteId);
     composer->setZonePalette(zoneId, safe_palette);
+    lightwaveos::synqmatrix::assertSynqMatrixOwner(
+        lightwaveos::synqmatrix::SynqMatrixOwner::Manual, "REST", "zones/{id}/palette");
 
     sendSuccessResponse(request, [zoneId, safe_palette](JsonObject& respData) {
         respData["zoneId"] = static_cast<uint8_t>(zoneId + 1);
@@ -390,6 +402,8 @@ void ZoneHandlers::handleSetBlend(AsyncWebServerRequest* request, uint8_t* data,
     uint8_t blendModeVal = doc["blendMode"];
     lightwaveos::zones::BlendMode blendMode = static_cast<lightwaveos::zones::BlendMode>(blendModeVal);
     composer->setZoneBlendMode(zoneId, blendMode);
+    lightwaveos::synqmatrix::assertSynqMatrixOwner(
+        lightwaveos::synqmatrix::SynqMatrixOwner::Manual, "REST", "zones/{id}/blend");
 
     sendSuccessResponse(request, [zoneId, blendModeVal, blendMode](JsonObject& respData) {
         respData["zoneId"] = static_cast<uint8_t>(zoneId + 1);
@@ -419,6 +433,12 @@ void ZoneHandlers::handleSetEnabled(AsyncWebServerRequest* request, uint8_t* dat
 
     bool enabled = doc["enabled"];
     composer->setZoneEnabled(zoneId, enabled);
+    // Per-zone enable=true is user-asserted Manual. Per-zone enable=false
+    // does NOT release composer ownership — only /zones/enabled does.
+    if (enabled) {
+        lightwaveos::synqmatrix::assertSynqMatrixOwner(
+            lightwaveos::synqmatrix::SynqMatrixOwner::Manual, "REST", "zones/{id}/enabled");
+    }
 
     sendSuccessResponse(request, [zoneId, enabled](JsonObject& respData) {
         respData["zoneId"] = static_cast<uint8_t>(zoneId + 1);

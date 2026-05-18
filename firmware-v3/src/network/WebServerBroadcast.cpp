@@ -26,6 +26,7 @@
 #include "webserver/LogStreamBroadcaster.h"
 #include "../core/actors/NodeOrchestrator.h"
 #include "../core/actors/RendererNode.h"
+#include "../core/synqmatrix/SynqMatrix.h"
 #include "../effects/zones/ZoneComposer.h"
 #include "../effects/enhancement/EdgeMixer.h"
 #include "../effects/zones/ZoneDefinition.h"
@@ -176,6 +177,15 @@ void WebServer::doBroadcastStatus() {
     doc["freeHeapInternal"] = static_cast<uint32_t>(getFreeInternalHeap());
     doc["freePsram"] = ESP.getFreePsram();
     doc["uptime"] = millis() / 1000;
+
+    // SynqMatrix authority readback: user (Manual) > preset (Show) > director.
+    // Clients use these fields to render the correct UI state without polling
+    // /api/v1/synqmatrix/status separately.
+    doc["zonesEnabled"] = (m_zoneComposer != nullptr) && m_zoneComposer->isEnabled();
+    doc["synqMatrixMode"] = lightwaveos::synqmatrix::synqMatrixModeName(
+        lightwaveos::synqmatrix::SynqMatrix::instance().getMode());
+    doc["synqMatrixOwner"] = lightwaveos::synqmatrix::synqMatrixOwnerName(
+        lightwaveos::synqmatrix::SynqMatrix::instance().getOwner());
 
     // Edge mixer state (from cache)
     doc["edgeMixerMode"] = cached.edgeMixerMode;

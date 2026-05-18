@@ -411,10 +411,10 @@ void V1ApiRoutes::registerRoutes(
     // SynqMatrix Director on-demand engage/release. Live owner-state only; does
     // not persist (use /boot for persistence). Authority structure: any user
     // input via markManualControl preempts the Director engage.
+    // engage/release carry NO body — handle in the on-request callback, not
+    // the body-chunk callback (the latter never fires for Content-Length: 0).
     registry.onPost("/api/v1/synqmatrix/engage",
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t*, size_t, size_t, size_t) {
+        [checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
             handlers::SynqMatrixHandlers::handleEngage(request);
@@ -422,9 +422,7 @@ void V1ApiRoutes::registerRoutes(
         }
     );
     registry.onPost("/api/v1/synqmatrix/release",
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t*, size_t, size_t, size_t) {
+        [checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
             handlers::SynqMatrixHandlers::handleRelease(request);

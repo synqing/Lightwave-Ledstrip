@@ -50,7 +50,7 @@ endpoints:
       framesRendered: { type: uint32, owner: "RendererActor", description: "Rendered frame counter since renderer start." }
       ledTransport: { type: object, owner: "LedDriver", fields: [frameCount, showSkips, lastShowUs, avgShowUs, maxShowUs, lastFastLedShowCallUs, avgFastLedShowCallUs, lastRmtFenceUs, avgRmtFenceUs, lastLatchWaitUs, avgLatchWaitUs, failures, rmtErrors, underruns], description: "Additive WB-2 LED transport timing and counter object. Source-only evidence; physical TX-start/TX-complete boundaries still require hardware instrumentation." }
       synqMatrixMode: { type: string, enum: [off, assist, director], owner: "SynqMatrix", description: "Current SynqMatrix mode singleton state." }
-      synqMatrixOwner: { type: string, enum: [none, director, manual, show], owner: "SynqMatrix", description: "Authority owner. Precedence: user (manual) > preset (show) > director. Any user action that mutates Zone Composer state sets owner=manual; Director's render-frame clamp defers when owner=manual." }
+      synqMatrixOwner: { type: string, enum: [none, director, manual, show], owner: "SynqMatrix", description: "Authority owner. Precedence: show > manual > director. ANY user-initiated state mutation (effects, parameters, palettes, edge mixer, transitions, Zone Composer, brightness, speed) asserts owner=manual unconditionally via the renderer's markManualControl path. The Director's autonomous owner-claims are gated and defer to manual/show — the Director continues to tick (telemetry) but does not over-write the owner until the user explicitly engages it via POST /api/v1/synqmatrix/engage. NVS boot preference at /api/v1/synqmatrix/boot controls whether the Director boots engaged (default: off)." }
     consumers: [ios]
 
   /api/v1/device/info:
@@ -479,6 +479,55 @@ endpoints:
   /api/v1/synqmatrix/allowlist/reset:
     method: POST
     description: "Reset the runtime allowlist so all policy rows are enabled."
+    consumers: [ios, tab5, lab]
+
+  # ── SynqMatrix Director boot preference + on-demand engage/release ─────
+  # Authority structure (precedence): show > manual > director. Any user
+  # initiated state mutation (effects, parameters, palettes, edge mixer,
+  # transitions) asserts manual ownership unconditionally via the renderer.
+  # The Director's autonomous owner-claims are gated and defer to manual/show.
+  # /boot persists across reboots in NVS namespace lw_sm; default is off.
+  # /engage and /release are runtime-only (do NOT persist) — pair with /boot
+  # for "engage now and on every boot from here on out" semantics.
+  /api/v1/synqmatrix/boot:
+    method: GET
+    description: "Get the NVS-persisted Director boot preference (on|off, default off)."
+    response:
+      mode: { type: string, enum: [off, on] }
+    consumers: [ios, tab5, lab]
+
+  /api/v1/synqmatrix/boot:
+    method: POST
+    description: "Set the NVS-persisted Director boot preference. Takes effect on next boot."
+    body:
+      mode: { type: string, required: true, enum: [off, on] }
+    response:
+      mode: { type: string, enum: [off, on] }
+    consumers: [ios, tab5, lab]
+
+  /api/v1/synqmatrix/boot:
+    method: PATCH
+    description: "Alias for POST /api/v1/synqmatrix/boot. Same body, same response."
+    body:
+      mode: { type: string, required: true, enum: [off, on] }
+    response:
+      mode: { type: string, enum: [off, on] }
+    consumers: [ios, tab5, lab]
+
+  /api/v1/synqmatrix/engage:
+    method: POST
+    description: "Engage the Director now (mode=director, owner=director, switching enabled). Live state only — not persisted. Authority structure still applies: subsequent user input pre-empts via manualControl."
+    response:
+      engaged: { type: bool, value: true }
+      status: "synqMatrixStatus object (same shape as /api/v1/synqmatrix/status)"
+    consumers: [ios, tab5, lab]
+
+  /api/v1/synqmatrix/release:
+    method: POST
+    description: "Release the Director (owner=none, switching disabled). The director ticks continue for telemetry; autonomous switches defer until re-engaged."
+    response:
+      engaged: { type: bool, value: false }
+      status: "synqMatrixStatus object (same shape as /api/v1/synqmatrix/status)"
     consumers: [ios, tab5, lab]
 
   # ── Factory Presets ────────────────────────────────────────────────────

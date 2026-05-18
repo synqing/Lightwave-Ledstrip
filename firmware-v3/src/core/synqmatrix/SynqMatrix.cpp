@@ -712,10 +712,18 @@ void SynqMatrix::resetPolicyAllowlist() {
 
 void SynqMatrix::markManualControl(uint32_t nowMs) {
     m_manualSuppressUntilMs.store(nowMs + kManualSuppressMs, std::memory_order_release);
+    // Authority structure: user actions assert Manual ownership unconditionally.
+    // The Director's autonomous owner-claims are gated against Manual/Show, so
+    // this assertion is the canonical entry point for "user touched something."
+    assertSynqMatrixOwner(SynqMatrixOwner::Manual, "renderer", "manualControl");
 }
 
 void SynqMatrix::markShowControl(uint32_t nowMs) {
     m_showSuppressUntilMs.store(nowMs + kShowSuppressMs, std::memory_order_release);
+    // Show preset takes precedence over Director (and over Manual when the show
+    // is active). Unconditional Show assertion mirrors markManualControl's
+    // unconditional Manual assertion; Director sees Show and defers.
+    assertSynqMatrixOwner(SynqMatrixOwner::Show, "renderer", "showControl");
 }
 
 bool SynqMatrix::isShowOwnerActive(uint32_t nowMs) const {
@@ -973,7 +981,16 @@ bool SynqMatrix::tick(const audio::ControlBusFrame& frame,
     m_dwellRemainingMs.store(0, std::memory_order_release);
     m_cooldownRemainingMs.store(0, std::memory_order_release);
     m_actionPlan.store(static_cast<uint8_t>(SynqMatrixActionPlan::EffectSwitch), std::memory_order_release);
-    m_owner.store(static_cast<uint8_t>(SynqMatrixOwner::Director), std::memory_order_release);
+    {
+        // Authority structure: user (Manual) > preset (Show) > director. Director
+        // does not over-write the owner if the user or an active show currently
+        // holds it. The switch request is still emitted so RendererActor can
+        // apply it under the active owner's discretion.
+        const auto currentOwner = static_cast<SynqMatrixOwner>(m_owner.load(std::memory_order_acquire));
+        if (currentOwner != SynqMatrixOwner::Manual && currentOwner != SynqMatrixOwner::Show) {
+            m_owner.store(static_cast<uint8_t>(SynqMatrixOwner::Director), std::memory_order_release);
+        }
+    }
     m_suppressedReason.store(static_cast<uint8_t>(SynqMatrixSuppressedReason::None), std::memory_order_release);
     return true;
 }
@@ -1006,7 +1023,16 @@ void SynqMatrix::notifySwitchApplied(uint16_t previousEffectId,
         }
     }
 
-    m_owner.store(static_cast<uint8_t>(SynqMatrixOwner::Director), std::memory_order_release);
+    {
+        // Authority structure: user (Manual) > preset (Show) > director. Re-assert
+        // Director ownership after the switch lands only if the user or show have
+        // not taken over during the dispatch window. Counters and telemetry above
+        // are unconditional so the switch is still recorded for audit.
+        const auto currentOwner = static_cast<SynqMatrixOwner>(m_owner.load(std::memory_order_acquire));
+        if (currentOwner != SynqMatrixOwner::Manual && currentOwner != SynqMatrixOwner::Show) {
+            m_owner.store(static_cast<uint8_t>(SynqMatrixOwner::Director), std::memory_order_release);
+        }
+    }
     m_suppressedReason.store(static_cast<uint8_t>(SynqMatrixSuppressedReason::None), std::memory_order_release);
     m_lastAction.store(static_cast<uint8_t>(SynqMatrixLastAction::EffectSwitch), std::memory_order_release);
     m_actionPlan.store(static_cast<uint8_t>(SynqMatrixActionPlan::EffectSwitch), std::memory_order_release);
@@ -1618,6 +1644,19 @@ void SynqMatrix::setSuppressed(SynqMatrixSuppressedReason reason, SynqMatrixOwne
     const uint8_t previous = m_suppressedReason.load(std::memory_order_acquire);
     m_previousSuppressedReason.store(previous, std::memory_order_release);
     m_suppressedReason.store(static_cast<uint8_t>(reason), std::memory_order_release);
+
+    // Authority structure: user (Manual) > preset (Show) > director.
+    // Director's autonomous owner-claims are gated — they defer to Manual/Show.
+    // None/Manual/Show writes are accurate reflections (handlers report what the
+    // truth is) and are not gated.
+    if (owner == SynqMatrixOwner::Director) {
+        const auto currentOwner = static_cast<SynqMatrixOwner>(m_owner.load(std::memory_order_acquire));
+        if (currentOwner == SynqMatrixOwner::Manual || currentOwner == SynqMatrixOwner::Show) {
+            // Defer to user/show. Suppress-reason still recorded above so callers
+            // (Director tick) can observe why the autonomous switch is gated.
+            return;
+        }
+    }
     m_owner.store(static_cast<uint8_t>(owner), std::memory_order_release);
 }
 

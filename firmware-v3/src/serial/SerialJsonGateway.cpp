@@ -25,6 +25,7 @@
 #include "../effects/enhancement/ColorCorrectionEngine.h"
 #include "../core/narrative/NarrativeEngine.h"
 #include "../core/synqmatrix/SynqMatrix.h"
+#include "../core/synqmatrix/SynqMatrixBootPreference.h"
 #include "../core/synqmatrix/SynqMatrixRestorePoint.h"
 #include "../core/shows/BuiltinShows.h"
 #include "../core/shows/Prim8Adapter.h"
@@ -1015,6 +1016,62 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
         data["parameterUpdates"] = status.parameterUpdates;
         data["automaticEffectSwitches"] = status.automaticEffectSwitches;
         serialJsonDocResponse(envelope, reqId, respDoc);
+    }
+    // ------------------------------------------------------------------
+    // synqMatrix.boot.get / synqMatrix.boot.set — NVS-persisted Director boot mode
+    // ------------------------------------------------------------------
+    else if (strcmp(type, "synqMatrix.boot.get") == 0) {
+        const auto mode = lightwaveos::synqmatrix::getSynqMatrixBootMode();
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        data["mode"] = lightwaveos::synqmatrix::synqMatrixBootModeName(mode);
+        serialJsonDocResponse("synqMatrix.boot", reqId, respDoc);
+    }
+    else if (strcmp(type, "synqMatrix.boot.set") == 0) {
+        const char* modeStr = doc["mode"] | "";
+        if (modeStr[0] == '\0') {
+            serialJsonError(reqId, "missing 'mode' field (expected 'on' or 'off')");
+        } else {
+            bool ok = false;
+            const auto mode = lightwaveos::synqmatrix::parseSynqMatrixBootMode(modeStr, &ok);
+            if (!ok) {
+                serialJsonError(reqId, "invalid mode (expected 'on' or 'off')");
+            } else if (!lightwaveos::synqmatrix::setSynqMatrixBootMode(mode)) {
+                serialJsonError(reqId, "NVS write failed");
+            } else {
+                JsonDocument respDoc;
+                JsonObject data = respDoc.to<JsonObject>();
+                data["mode"] = lightwaveos::synqmatrix::synqMatrixBootModeName(mode);
+                serialJsonDocResponse("synqMatrix.boot", reqId, respDoc);
+            }
+        }
+    }
+    // ------------------------------------------------------------------
+    // synqMatrix.engage / synqMatrix.release — on-demand Director ownership
+    // ------------------------------------------------------------------
+    else if (strcmp(type, "synqMatrix.engage") == 0) {
+        lightwaveos::synqmatrix::captureSynqMatrixRestorePoint(
+            lightwaveos::synqmatrix::SynqMatrixRestoreScope::SerialJson);
+        lightwaveos::synqmatrix::engageSynqMatrixDirector();
+        const auto status = lightwaveos::synqmatrix::SynqMatrix::instance().getStatus();
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        data["engaged"] = true;
+        JsonObject statusObj = data["status"].to<JsonObject>();
+        appendSynqMatrixStatus(statusObj, status);
+        serialJsonDocResponse("synqMatrix.engage", reqId, respDoc);
+    }
+    else if (strcmp(type, "synqMatrix.release") == 0) {
+        lightwaveos::synqmatrix::captureSynqMatrixRestorePoint(
+            lightwaveos::synqmatrix::SynqMatrixRestoreScope::SerialJson);
+        lightwaveos::synqmatrix::releaseSynqMatrixDirector();
+        const auto status = lightwaveos::synqmatrix::SynqMatrix::instance().getStatus();
+        JsonDocument respDoc;
+        JsonObject data = respDoc.to<JsonObject>();
+        data["engaged"] = false;
+        JsonObject statusObj = data["status"].to<JsonObject>();
+        appendSynqMatrixStatus(statusObj, status);
+        serialJsonDocResponse("synqMatrix.release", reqId, respDoc);
     }
     // ------------------------------------------------------------------
     // colorCorrection.getConfig / colorCorrection.setConfig

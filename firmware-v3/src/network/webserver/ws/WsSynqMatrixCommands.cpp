@@ -14,6 +14,7 @@
 #include "../WebServerContext.h"
 #include "../../ApiResponse.h"
 #include "../../../core/synqmatrix/SynqMatrix.h"
+#include "../../../core/synqmatrix/SynqMatrixBootPreference.h"
 #include "../../../core/synqmatrix/SynqMatrixRestorePoint.h"
 
 #include <ArduinoJson.h>
@@ -410,6 +411,70 @@ void handleSynqMatrixCountersResetImpl(AsyncWebSocketClient* client, JsonDocumen
     }));
 }
 
+// ── Director boot preference + on-demand engage/release ──────────────────
+
+void handleSynqMatrixBootGetImpl(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&, const char* envelopeType) {
+    const char* requestId = doc["requestId"] | "";
+    const auto mode = synqmatrix::getSynqMatrixBootMode();
+    client->text(buildWsResponse(envelopeType, requestId, [mode](JsonObject& data) {
+        data["mode"] = synqmatrix::synqMatrixBootModeName(mode);
+    }));
+}
+
+void handleSynqMatrixBootSetImpl(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&, const char* envelopeType) {
+    const char* requestId = doc["requestId"] | "";
+    if (!doc["mode"].is<const char*>()) {
+        client->text(buildSynqMatrixWsError(envelopeType,
+                                            ErrorCodes::MISSING_FIELD,
+                                            "Missing 'mode' field (expected 'on' or 'off')",
+                                            requestId));
+        return;
+    }
+    bool ok = false;
+    const auto mode = synqmatrix::parseSynqMatrixBootMode(doc["mode"].as<const char*>(), &ok);
+    if (!ok) {
+        client->text(buildSynqMatrixWsError(envelopeType,
+                                            ErrorCodes::INVALID_VALUE,
+                                            "Invalid mode (expected 'on' or 'off')",
+                                            requestId));
+        return;
+    }
+    if (!synqmatrix::setSynqMatrixBootMode(mode)) {
+        client->text(buildSynqMatrixWsError(envelopeType,
+                                            ErrorCodes::INTERNAL_ERROR,
+                                            "NVS write failed",
+                                            requestId));
+        return;
+    }
+    client->text(buildWsResponse(envelopeType, requestId, [mode](JsonObject& data) {
+        data["mode"] = synqmatrix::synqMatrixBootModeName(mode);
+    }));
+}
+
+void handleSynqMatrixEngageImpl(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&, const char* envelopeType) {
+    const char* requestId = doc["requestId"] | "";
+    synqmatrix::captureSynqMatrixRestorePoint(synqmatrix::SynqMatrixRestoreScope::WebSocket);
+    synqmatrix::engageSynqMatrixDirector();
+    const auto status = synqmatrix::SynqMatrix::instance().getStatus();
+    client->text(buildWsResponse(envelopeType, requestId, [&status](JsonObject& data) {
+        data["engaged"] = true;
+        JsonObject statusObj = data["status"].to<JsonObject>();
+        encodeStatus(statusObj, status);
+    }));
+}
+
+void handleSynqMatrixReleaseImpl(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext&, const char* envelopeType) {
+    const char* requestId = doc["requestId"] | "";
+    synqmatrix::captureSynqMatrixRestorePoint(synqmatrix::SynqMatrixRestoreScope::WebSocket);
+    synqmatrix::releaseSynqMatrixDirector();
+    const auto status = synqmatrix::SynqMatrix::instance().getStatus();
+    client->text(buildWsResponse(envelopeType, requestId, [&status](JsonObject& data) {
+        data["engaged"] = false;
+        JsonObject statusObj = data["status"].to<JsonObject>();
+        encodeStatus(statusObj, status);
+    }));
+}
+
 // ── Canonical wrappers (synqMatrix.* envelope) ────────────────────────────
 
 void handleSynqMatrixConfigGetCanonical(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
@@ -447,6 +512,18 @@ void handleSynqMatrixHealthCanonical(AsyncWebSocketClient* client, JsonDocument&
 }
 void handleSynqMatrixCountersResetCanonical(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     handleSynqMatrixCountersResetImpl(client, doc, ctx, "synqMatrix.counters.reset");
+}
+void handleSynqMatrixBootGetCanonical(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    handleSynqMatrixBootGetImpl(client, doc, ctx, "synqMatrix.boot");
+}
+void handleSynqMatrixBootSetCanonical(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    handleSynqMatrixBootSetImpl(client, doc, ctx, "synqMatrix.boot");
+}
+void handleSynqMatrixEngageCanonical(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    handleSynqMatrixEngageImpl(client, doc, ctx, "synqMatrix.engage");
+}
+void handleSynqMatrixReleaseCanonical(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    handleSynqMatrixReleaseImpl(client, doc, ctx, "synqMatrix.release");
 }
 
 // ── Legacy alias wrappers (songAware.* envelope, deprecated) ──────────────
@@ -505,6 +582,11 @@ void registerWsSynqMatrixCommands(const WebServerContext& ctx) {
     WsCommandRouter::registerCommand("synqMatrix.allowlist.reset", handleSynqMatrixAllowlistResetCanonical);
     WsCommandRouter::registerCommand("synqMatrix.health",          handleSynqMatrixHealthCanonical);
     WsCommandRouter::registerCommand("synqMatrix.counters.reset",  handleSynqMatrixCountersResetCanonical);
+    // Director boot preference (NVS-persisted) + on-demand engage/release.
+    WsCommandRouter::registerCommand("synqMatrix.boot.get",        handleSynqMatrixBootGetCanonical);
+    WsCommandRouter::registerCommand("synqMatrix.boot.set",        handleSynqMatrixBootSetCanonical);
+    WsCommandRouter::registerCommand("synqMatrix.engage",          handleSynqMatrixEngageCanonical);
+    WsCommandRouter::registerCommand("synqMatrix.release",         handleSynqMatrixReleaseCanonical);
 
     // Legacy songAware.* aliases — deprecated, removed at SynqMatrix algorithmic-contract release.
     WsCommandRouter::registerCommand("songAware.config.get",      handleSynqMatrixConfigGetLegacyAlias);

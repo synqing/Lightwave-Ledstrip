@@ -9,6 +9,7 @@
 #include "ActorSystem.h"
 #include "RendererActor.h"
 #include "../synqmatrix/SynqMatrix.h"
+#include "../synqmatrix/SynqMatrixBootPreference.h"
 #include "../shows/BuiltinShows.h"
 #include "../narrative/NarrativeEngine.h"
 #include "../../config/effect_ids.h"
@@ -287,6 +288,12 @@ void ShowDirectorActor::onStart() {
     // Subscribe to Trinity semantic segment events (published by RendererActor).
     bus::MessageBus::instance().subscribe(MessageType::TRINITY_SEGMENT, this);
 #endif
+
+    // Apply the persisted SynqMatrix boot preference. Default (Off) leaves the
+    // Director dormant until the user explicitly engages it. The preference is
+    // applied after MessageBus subscriptions are in place so the very first
+    // tick post-engage observes a fully wired actor system.
+    lightwaveos::synqmatrix::applySynqMatrixBootPreference();
 
 #ifndef NATIVE_BUILD
     ESP_LOGI(TAG, "ShowDirectorActor ready");

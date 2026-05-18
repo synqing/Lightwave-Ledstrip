@@ -380,6 +380,58 @@ void V1ApiRoutes::registerRoutes(
         }
     );
 
+    // SynqMatrix Director boot preference (NVS-persisted: on|off, default off).
+    // Independent of /config — /config is runtime-only; /boot survives reboot.
+    registry.onGet("/api/v1/synqmatrix/boot", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::SynqMatrixHandlers::handleGetBoot(request);
+    });
+    registry.onPost("/api/v1/synqmatrix/boot",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::SynqMatrixHandlers::handleSetBoot(request, data, len);
+            broadcastStatus();
+        }
+    );
+    registry.onPatch("/api/v1/synqmatrix/boot",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::SynqMatrixHandlers::handleSetBoot(request, data, len);
+            broadcastStatus();
+        }
+    );
+
+    // SynqMatrix Director on-demand engage/release. Live owner-state only; does
+    // not persist (use /boot for persistence). Authority structure: any user
+    // input via markManualControl preempts the Director engage.
+    registry.onPost("/api/v1/synqmatrix/engage",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t*, size_t, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::SynqMatrixHandlers::handleEngage(request);
+            broadcastStatus();
+        }
+    );
+    registry.onPost("/api/v1/synqmatrix/release",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t*, size_t, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::SynqMatrixHandlers::handleRelease(request);
+            broadcastStatus();
+        }
+    );
+
     // Factory Presets - GET /api/v1/factoryPresets (D4 § 2.8)
     registry.onGet("/api/v1/factoryPresets", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;

@@ -7,6 +7,7 @@
 
 #include "../../ApiResponse.h"
 #include "../../../core/synqmatrix/SynqMatrix.h"
+#include "../../../core/synqmatrix/SynqMatrixBootPreference.h"
 #include "../../../core/synqmatrix/SynqMatrixRestorePoint.h"
 
 #include <ArduinoJson.h>
@@ -403,6 +404,65 @@ void SynqMatrixHandlers::handleResetAllowlist(AsyncWebServerRequest* request) {
     const auto allowlist = synqmatrix::SynqMatrix::instance().getAllowlistSnapshot();
     sendSuccessResponse(request, [&allowlist](JsonObject& response) {
         encodeAllowlist(response, allowlist);
+    });
+}
+
+void SynqMatrixHandlers::handleGetBoot(AsyncWebServerRequest* request) {
+    const auto mode = synqmatrix::getSynqMatrixBootMode();
+    sendSuccessResponse(request, [&mode](JsonObject& response) {
+        response["mode"] = synqmatrix::synqMatrixBootModeName(mode);
+    });
+}
+
+void SynqMatrixHandlers::handleSetBoot(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, data, len);
+    if (err) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST, ErrorCodes::INVALID_JSON, "Invalid JSON");
+        return;
+    }
+    const char* modeStr = doc["mode"] | "";
+    if (modeStr[0] == '\0') {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST, ErrorCodes::MISSING_FIELD,
+                          "Missing 'mode' field (expected 'on' or 'off')");
+        return;
+    }
+    bool ok = false;
+    const auto mode = synqmatrix::parseSynqMatrixBootMode(modeStr, &ok);
+    if (!ok) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST, ErrorCodes::INVALID_VALUE,
+                          "Invalid mode (expected 'on' or 'off')");
+        return;
+    }
+    if (!synqmatrix::setSynqMatrixBootMode(mode)) {
+        sendErrorResponse(request, HttpStatus::INTERNAL_SERVER_ERROR, ErrorCodes::INTERNAL_ERROR,
+                          "NVS write failed");
+        return;
+    }
+    sendSuccessResponse(request, [&mode](JsonObject& response) {
+        response["mode"] = synqmatrix::synqMatrixBootModeName(mode);
+    });
+}
+
+void SynqMatrixHandlers::handleEngage(AsyncWebServerRequest* request) {
+    synqmatrix::captureSynqMatrixRestorePoint(synqmatrix::SynqMatrixRestoreScope::Rest);
+    synqmatrix::engageSynqMatrixDirector();
+    const auto status = synqmatrix::SynqMatrix::instance().getStatus();
+    sendSuccessResponse(request, [&status](JsonObject& response) {
+        response["engaged"] = true;
+        JsonObject statusObj = response["status"].to<JsonObject>();
+        encodeStatus(statusObj, status);
+    });
+}
+
+void SynqMatrixHandlers::handleRelease(AsyncWebServerRequest* request) {
+    synqmatrix::captureSynqMatrixRestorePoint(synqmatrix::SynqMatrixRestoreScope::Rest);
+    synqmatrix::releaseSynqMatrixDirector();
+    const auto status = synqmatrix::SynqMatrix::instance().getStatus();
+    sendSuccessResponse(request, [&status](JsonObject& response) {
+        response["engaged"] = false;
+        JsonObject statusObj = response["status"].to<JsonObject>();
+        encodeStatus(statusObj, status);
     });
 }
 

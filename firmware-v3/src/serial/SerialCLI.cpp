@@ -25,6 +25,7 @@
 #include "core/narrative/NarrativeEngine.h"
 #include "core/persistence/ZoneConfigManager.h"
 #include "core/synqmatrix/SynqMatrix.h"
+#include "core/synqmatrix/SynqMatrixBootPreference.h"
 #include "core/synqmatrix/SynqMatrixRestorePoint.h"
 #include "core/shows/DynamicShowStore.h"
 
@@ -1019,6 +1020,48 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
         lightwaveos::synqmatrix::SynqMatrix::instance().resetCounters();
         Serial.println("SynqMatrix counters: RESET");
         printSynqMatrixHealth();
+    }
+    else
+    if (inputLower == "synqmatrix boot" || inputLower == "sa boot") {
+        // Read current NVS boot preference.
+        handledMulti = true;
+        const auto mode = lightwaveos::synqmatrix::getSynqMatrixBootMode();
+        Serial.printf("SynqMatrix boot preference: %s\n",
+                      lightwaveos::synqmatrix::synqMatrixBootModeName(mode));
+    }
+    else
+    if (inputLower.startsWith("synqmatrix boot ") || inputLower.startsWith("sa boot ")) {
+        handledMulti = true;
+        const int spaceIdx = inputLower.lastIndexOf(' ');
+        const String value = inputLower.substring(spaceIdx + 1);
+        bool ok = false;
+        const auto mode = lightwaveos::synqmatrix::parseSynqMatrixBootMode(value.c_str(), &ok);
+        if (!ok) {
+            Serial.println("SynqMatrix boot invalid. Use: sa boot off|on");
+        } else if (!lightwaveos::synqmatrix::setSynqMatrixBootMode(mode)) {
+            Serial.println("SynqMatrix boot: NVS write failed");
+        } else {
+            Serial.printf("SynqMatrix boot preference: %s\n",
+                          lightwaveos::synqmatrix::synqMatrixBootModeName(mode));
+        }
+    }
+    else
+    if (inputLower == "synqmatrix engage" || inputLower == "sa engage") {
+        handledMulti = true;
+        lightwaveos::synqmatrix::captureSynqMatrixRestorePoint(
+            lightwaveos::synqmatrix::SynqMatrixRestoreScope::SerialCli);
+        lightwaveos::synqmatrix::engageSynqMatrixDirector();
+        Serial.println("SynqMatrix: Director ENGAGED");
+        printSynqMatrixStatus();
+    }
+    else
+    if (inputLower == "synqmatrix release" || inputLower == "sa release") {
+        handledMulti = true;
+        lightwaveos::synqmatrix::captureSynqMatrixRestorePoint(
+            lightwaveos::synqmatrix::SynqMatrixRestoreScope::SerialCli);
+        lightwaveos::synqmatrix::releaseSynqMatrixDirector();
+        Serial.println("SynqMatrix: Director RELEASED");
+        printSynqMatrixStatus();
     }
     else
     if (inputLower.startsWith("dither")) {

@@ -552,6 +552,59 @@ commands:
         health: "synqMatrix.health payload"
     consumers: [tab5, ios, lab]
 
+  # ── Director boot preference + on-demand engage/release ────────────────
+  # Authority structure (precedence): show > manual > director. ANY user
+  # initiated state mutation asserts owner=manual unconditionally via the
+  # renderer's markManualControl path; the Director's autonomous owner-claims
+  # are gated and defer to manual/show. boot.* persists across reboots in NVS
+  # namespace lw_sm; default is off. engage/release are runtime-only.
+  synqMatrix.boot.get:
+    direction: "client -> K1"
+    description: "Get the NVS-persisted Director boot preference (on|off, default off)."
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "synqMatrix.boot"
+      data:
+        mode: { type: string, enum: [off, on] }
+    consumers: [tab5, ios, lab]
+
+  synqMatrix.boot.set:
+    direction: "client -> K1"
+    description: "Set the NVS-persisted Director boot preference. Takes effect on next boot."
+    request:
+      requestId: { type: string, optional: true }
+      mode: { type: string, required: true, enum: [off, on] }
+    response:
+      type: "synqMatrix.boot"
+      data:
+        mode: { type: string, enum: [off, on] }
+    consumers: [tab5, ios, lab]
+
+  synqMatrix.engage:
+    direction: "client -> K1"
+    description: "Engage the Director now (mode=director, owner=director, switching enabled). Live state only — not persisted. Authority structure still applies: subsequent user input pre-empts via manualControl."
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "synqMatrix.engage"
+      data:
+        engaged: { type: bool, value: true }
+        status: "synqMatrix.status payload"
+    consumers: [tab5, ios, lab]
+
+  synqMatrix.release:
+    direction: "client -> K1"
+    description: "Release the Director (owner=none, switching disabled). The director ticks continue for telemetry; autonomous switches defer until re-engaged."
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "synqMatrix.release"
+      data:
+        engaged: { type: bool, value: false }
+        status: "synqMatrix.status payload"
+    consumers: [tab5, ios, lab]
+
   # ── Legacy songAware.* aliases (DEPRECATED 2026-05-13) ─────────────────
   # Each legacy entry routes to the same K1 handler as its synqMatrix.*
   # canonical above and emits the legacy envelope type for one release.
@@ -2513,7 +2566,7 @@ broadcasts:
       uptime: uint32
       zonesEnabled: { type: bool, note: "true iff ZoneComposer is currently rendering. Reflects user-asserted Manual ownership." }
       synqMatrixMode: { type: string, enum: [off, assist, director], note: "Current SynqMatrix mode. 'director' means the algorithm authors single-effect renders unless owner == manual." }
-      synqMatrixOwner: { type: string, enum: [none, director, manual, show], note: "Authority owner. user (manual) > preset (show) > director. Clients render UI state from this field." }
+      synqMatrixOwner: { type: string, enum: [none, director, manual, show], note: "Authority owner. Precedence: show > manual > director. ANY user-initiated state mutation (effects, parameters, palettes, edge mixer, transitions, Zone Composer, brightness, speed) asserts owner=manual unconditionally via the renderer. The Director's autonomous owner-claims are gated and defer to manual/show. Use synqMatrix.boot.set to control whether the Director boots engaged (default off); use synqMatrix.engage/synqMatrix.release for on-demand control." }
       edgeMixerMode: uint8
       edgeMixerModeName: string
       edgeMixerSpread: uint8

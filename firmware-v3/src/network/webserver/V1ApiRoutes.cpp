@@ -1138,10 +1138,18 @@ void V1ApiRoutes::registerRoutes(
         handlers::ZoneHandlers::handleGet(request, ctx.orchestrator, server->getCachedRendererState(), ctx.zoneComposer);
     });
 
-    // Zone regex routes - POST /api/v1/zones/:id/effect
-    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([1-3])\\/effect$",
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
+    // Zone POST routes are a finite 1-3 path set. Register literals instead of
+    // relying on ASYNCWEBSERVER_REGEX so documented REST paths do not fall
+    // through to 404 when regex support is compiled out.
+    auto registerZonePostRoutes = [&registry](const char* suffix, ArBodyHandlerFunction onBody) {
+        for (uint8_t zone = 1; zone <= 3; ++zone) {
+            char path[48];
+            snprintf(path, sizeof(path), "/api/v1/zones/%u/%s", zone, suffix);
+            registry.onPost(path, [](AsyncWebServerRequest* request) {}, nullptr, onBody);
+        }
+    };
+
+    registerZonePostRoutes("effect",
         [ctx, server, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
@@ -1149,10 +1157,7 @@ void V1ApiRoutes::registerRoutes(
         }
     );
 
-    // Zone regex routes - POST /api/v1/zones/:id/brightness
-    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([1-3])\\/brightness$",
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
+    registerZonePostRoutes("brightness",
         [ctx, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
@@ -1160,10 +1165,7 @@ void V1ApiRoutes::registerRoutes(
         }
     );
 
-    // Zone regex routes - POST /api/v1/zones/:id/speed
-    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([1-3])\\/speed$",
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
+    registerZonePostRoutes("speed",
         [ctx, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
@@ -1171,10 +1173,7 @@ void V1ApiRoutes::registerRoutes(
         }
     );
 
-    // Zone regex routes - POST /api/v1/zones/:id/palette
-    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([1-3])\\/palette$",
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
+    registerZonePostRoutes("palette",
         [ctx, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
@@ -1182,10 +1181,7 @@ void V1ApiRoutes::registerRoutes(
         }
     );
 
-    // Zone regex routes - POST /api/v1/zones/:id/blend
-    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([1-3])\\/blend$",
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
+    registerZonePostRoutes("blend",
         [ctx, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
@@ -1193,10 +1189,7 @@ void V1ApiRoutes::registerRoutes(
         }
     );
 
-    // Zone regex routes - POST /api/v1/zones/:id/enabled
-    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([1-3])\\/enabled$",
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
+    registerZonePostRoutes("enabled",
         [ctx, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;

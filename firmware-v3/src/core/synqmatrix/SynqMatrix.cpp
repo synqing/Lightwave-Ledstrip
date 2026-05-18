@@ -1647,17 +1647,30 @@ void SynqMatrix::setSuppressed(SynqMatrixSuppressedReason reason, SynqMatrixOwne
 
     // Authority structure: user (Manual) > preset (Show) > director.
     // Director's autonomous owner-claims are gated — they defer to Manual/Show.
-    // None/Manual/Show writes are accurate reflections (handlers report what the
-    // truth is) and are not gated.
-    if (owner == SynqMatrixOwner::Director) {
-        const auto currentOwner = static_cast<SynqMatrixOwner>(m_owner.load(std::memory_order_acquire));
+    // Director-mode suppression is still Director ownership: it is idle because
+    // of the reason above, not released. Preserve Manual/Show claims so
+    // ZoneComposer capture state is not erased by no-audio/confidence passes.
+    SynqMatrixOwner effectiveOwner = owner;
+    const auto currentOwner = static_cast<SynqMatrixOwner>(m_owner.load(std::memory_order_acquire));
+    if (owner == SynqMatrixOwner::None && reason != SynqMatrixSuppressedReason::Disabled) {
+        if (currentOwner == SynqMatrixOwner::Manual || currentOwner == SynqMatrixOwner::Show) {
+            return;
+        }
+        const bool directorEngaged =
+            m_enabled.load(std::memory_order_acquire) &&
+            static_cast<SynqMatrixMode>(m_mode.load(std::memory_order_acquire)) == SynqMatrixMode::Director;
+        if (directorEngaged) {
+            effectiveOwner = SynqMatrixOwner::Director;
+        }
+    }
+    if (effectiveOwner == SynqMatrixOwner::Director) {
         if (currentOwner == SynqMatrixOwner::Manual || currentOwner == SynqMatrixOwner::Show) {
             // Defer to user/show. Suppress-reason still recorded above so callers
             // (Director tick) can observe why the autonomous switch is gated.
             return;
         }
     }
-    m_owner.store(static_cast<uint8_t>(owner), std::memory_order_release);
+    m_owner.store(static_cast<uint8_t>(effectiveOwner), std::memory_order_release);
 }
 
 void SynqMatrix::updateRemainingGates(uint32_t nowMs) {

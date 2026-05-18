@@ -533,6 +533,31 @@ void test_synq_matrix_manual_and_show_owners_suppress_director_switches() {
     TEST_ASSERT_EQUAL(SynqMatrixSuppressedReason::ManualOwner, status.suppressedReason);
 }
 
+void test_synq_matrix_director_suppression_preserves_owner_for_capture() {
+    SynqMatrix director;
+    restoreReadyDirector(director, makeConfig(), SynqMatrixState::Drop);
+
+    ControlBusFrame frame = frameForState(SynqMatrixState::Drop);
+    frame.audioConfidence = 0.0f;
+    MusicalGridSnapshot grid = readyBoundaryGrid();
+    SynqMatrixSwitchRequest request;
+
+    director.tick(frame, grid, false, 10000, INVALID_EFFECT_ID, SynqMatrixContext{}, request);
+    auto status = director.getStatus();
+    TEST_ASSERT_FALSE(request.requested);
+    TEST_ASSERT_EQUAL(SynqMatrixMode::Director, status.effectiveMode);
+    TEST_ASSERT_EQUAL(SynqMatrixOwner::Director, status.owner);
+    TEST_ASSERT_EQUAL(SynqMatrixSuppressedReason::NoAudio, status.suppressedReason);
+
+    restoreReadyDirector(director, makeConfig(), SynqMatrixState::Drop);
+    director.setOwner(SynqMatrixOwner::Manual);
+    director.tick(frame, grid, false, 20500, INVALID_EFFECT_ID, SynqMatrixContext{}, request);
+    status = director.getStatus();
+    TEST_ASSERT_FALSE(request.requested);
+    TEST_ASSERT_EQUAL(SynqMatrixOwner::Manual, status.owner);
+    TEST_ASSERT_EQUAL(SynqMatrixSuppressedReason::NoAudio, status.suppressedReason);
+}
+
 void test_synq_matrix_health_gate_and_recovery_window_suppress_switches() {
     SynqMatrix director;
     restoreReadyDirector(director, makeConfig(), SynqMatrixState::Drop);
@@ -1185,6 +1210,7 @@ int main() {
     RUN_TEST(test_synq_matrix_rate_limit_blocks_third_switch_inside_window);
     RUN_TEST(test_synq_matrix_anti_thrash_blocks_immediate_aba_switch);
     RUN_TEST(test_synq_matrix_manual_and_show_owners_suppress_director_switches);
+    RUN_TEST(test_synq_matrix_director_suppression_preserves_owner_for_capture);
     RUN_TEST(test_synq_matrix_health_gate_and_recovery_window_suppress_switches);
     RUN_TEST(test_synq_matrix_restore_runtime_state_and_reset_counters);
     RUN_TEST(test_synq_matrix_assist_mode_changes_controls_without_switching);

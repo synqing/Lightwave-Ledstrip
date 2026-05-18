@@ -60,7 +60,7 @@ pio device monitor -b 115200
 - **120 FPS / 2.0 ms ceiling**: Keep per-frame effect code under 2.0 ms.
 - **dt-correct smoothing**: Temporal smoothing must use delta-time, not frame-count assumptions.
 - **Sub-8 ms audio-to-visual latency**: Preserve the end-to-end pipeline latency constraint.
-- **K1 WiFi mode**: Current shipping firmware is AP-only via `WIFI_AP_ONLY`. Goal-state is dual-mode AP OR STA, never concurrent AP+STA. Do not enable pure-STA validation, WiFi-mode rewrites, or `WIFI_AP_ONLY` / `m_forceApOnly` default changes without explicit Captain approval.
+- **K1 WiFi mode**: K1 runs in AP-only OR STA-only mode, selected at runtime via NVS boot preference and serial commands (`wifi ap` or `wifi connect <ssid>` / `wifi connect` for saved credentials). AP and STA are exclusive — never concurrent (ESP32-S3 + ESP-IDF 4.4.7 cannot reliably run AP+STA together). The WiFiManager state machine always tears one mode down before bringing the other up. Production builds support both modes; do not re-introduce compile-time `WIFI_AP_ONLY` locks.
 - **British English** in comments and docs (centre, colour, initialise, behaviour).
 
 ## Workflow Discipline (Agents)

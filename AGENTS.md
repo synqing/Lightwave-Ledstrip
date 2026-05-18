@@ -6,6 +6,12 @@ The Risk-Bounded Degraded Operation gate at the top of `CLAUDE.md` applies to **
 
 ESP32-S3 LED controller for a dual-strip Light Guide Plate. 320 WS2812 LEDs, 100+ effects, audio-reactive, web-controlled.
 
+## Default-to-Action Rail — Mandatory (canonical text in `CLAUDE.md`)
+
+The Default-to-Action Rail in `CLAUDE.md` (positioned between the RBDO Gate and the Work Blocking Protocol) applies to **every agent on this repository** — Codex CLI, Claude Code, sub-agents, any tooling that consumes context here. Defaults: decide, act, report. Escalate only on the five numbered triggers (irreversible, wire-contract breaking, scope expansion → Work Block, hard-rule conflict, mission ambiguity where guessing costs more than asking). Meta-rule: if trigger 5 has fired once this session, the next ambiguity is acted on with a documented assumption, not surfaced. While compute runs (background SSAs, builds, soaks), run parallel useful work — Captain idle-time is the cost function.
+
+**Firing pin** (Captain types this at session start to engage the rail): `Default-to-Action rail engaged. Decide, act, report — escalate only on triggers 1-5.` When you receive this line at session start, the rail is in operational force from your first tool call. `"Should I…?"` without a numbered trigger is the anti-pattern; self-correct.
+
 ## Work Blocking Protocol
 
 All agents must follow `instructions/work-blocking-protocol-v1.md`. When critical work is discovered outside the current mission, surface it, define concrete scope and success/failure conditions with Captain, record it in `BACKLOG.md` under Work Blocks, then return to the original mission unless Captain explicitly re-scopes the session or an RBDO hard stop prevents continuation.

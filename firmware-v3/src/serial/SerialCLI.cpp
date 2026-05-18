@@ -14,6 +14,7 @@
 #include "SerialCLI.h"
 #include "SerialJsonGateway.h"
 #include "CaptureStreamer.h"
+#include "utils/HeapForensics.h"
 
 #include "config/features.h"
 #include "config/Trace.h"
@@ -1776,6 +1777,18 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
                 Serial.println("[DBG] Audio not enabled in this build");
 #endif
             }
+            else if (subcmd == "memory verbose") {
+                // SSA-W4 diagnostic: trigger a full [HEAP-FORENSICS] dump
+                // on demand. Use this to anchor a known-moment snapshot
+                // during a soak (e.g. just before opening the webapp, after
+                // selecting a heavy effect, etc.).
+                Serial.println("\n=== Memory Status (verbose / forensics) ===");
+                lightwaveos::diagnostics::dump(
+                    lightwaveos::diagnostics::HeapDumpReason::OnDemand,
+                    /*shedActive=*/false,
+                    /*shedLatchedMs=*/0);
+                Serial.println();
+            }
             else if (subcmd == "memory") {
                 // One-shot memory print
                 Serial.println("\n=== Memory Status ===");
@@ -1786,6 +1799,32 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
                 Serial.printf("  Free PSRAM: %lu bytes\n", ESP.getFreePsram());
 #endif
                 Serial.println();
+            }
+            else if (subcmd.startsWith("stack ")) {
+                // Generic FreeRTOS task stack high-water-mark probe.
+                // Usage: dbg stack <task_name>  (e.g. async_tcp, tiT, wifi)
+                // Pre-flight measurement before trimming task stack sizes; coexists
+                // with HeapForensics without MabuTrace overhead so it is safe to
+                // run on the canonical _32khz build under realistic load.
+                String taskName = subcmd.substring(6);
+                taskName.trim();
+                if (taskName.length() == 0) {
+                    Serial.println("Usage: dbg stack <task_name>");
+                } else {
+                    TaskHandle_t handle = xTaskGetHandle(taskName.c_str());
+                    if (handle == nullptr) {
+                        Serial.printf("[stack] task '%s' not found\n", taskName.c_str());
+                    } else {
+                        UBaseType_t hwmWords = uxTaskGetStackHighWaterMark(handle);
+                        uint32_t hwmBytes = static_cast<uint32_t>(hwmWords) * sizeof(StackType_t);
+                        const char* resolved = pcTaskGetTaskName(handle);
+                        Serial.printf(
+                            "[stack] task=%s hwm_words=%u hwm_bytes=%u\n",
+                            resolved ? resolved : taskName.c_str(),
+                            static_cast<unsigned>(hwmWords),
+                            static_cast<unsigned>(hwmBytes));
+                    }
+                }
             }
             else if (subcmd.startsWith("interval ")) {
                 // dbg interval status <N> or dbg interval spectrum <N>
@@ -1825,6 +1864,8 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
                 Serial.println("  dbg spectrum  - Print spectrum NOW");
                 Serial.println("  dbg beat      - Print beat tracking NOW");
                 Serial.println("  dbg memory    - Print heap/stack NOW");
+                Serial.println("  dbg memory verbose - Full [HEAP-FORENSICS] dump (SSA-W4 diagnostic)");
+                Serial.println("  dbg stack <name>   - Stack high-water-mark for any FreeRTOS task");
                 Serial.println("  dbg interval status <N>   - Auto status every N sec (0=off)");
                 Serial.println("  dbg interval spectrum <N> - Auto spectrum every N sec (0=off)");
             }

@@ -113,6 +113,7 @@
 #include <Arduino.h>
 #include <esp_wifi.h>
 #include <esp_heap_caps.h>
+#include "../utils/HeapForensics.h"
 
 #if FEATURE_MULTI_DEVICE
 #include "../sync/DeviceUUID.h"
@@ -576,6 +577,11 @@ void WebServer::updateLowHeapShedState(uint32_t nowMs) {
                     (unsigned long)largestInternal,
                     (unsigned long)INTERNAL_HEAP_SHED_BELOW_BYTES,
                     (unsigned long)INTERNAL_HEAP_RESUME_ABOVE_BYTES);
+            // SSA-W4 diagnostic: full heap snapshot on shed-latch edge.
+            lightwaveos::diagnostics::dump(
+                lightwaveos::diagnostics::HeapDumpReason::ShedLatched,
+                /*shedActive=*/true,
+                /*shedLatchedMs=*/0);
             // Cancel any pending broadcasts; when shedding we avoid creating/queuing WS payloads.
             m_broadcastPending = false;
             // 2026-04-18 — DO NOT closeAll() existing clients on latch edge.
@@ -623,10 +629,20 @@ void WebServer::updateLowHeapShedState(uint32_t nowMs) {
                         (unsigned long)shedDurationMs,
                         (unsigned long)freeInternal,
                         (unsigned long)largestInternal);
+                // SSA-W4 diagnostic: full heap snapshot on force-clear path.
+                lightwaveos::diagnostics::dump(
+                    lightwaveos::diagnostics::HeapDumpReason::ShedForceCleared,
+                    /*shedActive=*/false,
+                    /*shedLatchedMs=*/shedDurationMs);
             } else {
                 LW_LOGI("Low-heap shedding DISABLED (internal=%lu, largest=%lu)",
                         (unsigned long)freeInternal,
                         (unsigned long)largestInternal);
+                // SSA-W4 diagnostic: full heap snapshot on clean release.
+                lightwaveos::diagnostics::dump(
+                    lightwaveos::diagnostics::HeapDumpReason::ShedReleased,
+                    /*shedActive=*/false,
+                    /*shedLatchedMs=*/shedDurationMs);
             }
             // Force a one-shot status broadcast after recovery to resynchronise dashboards.
             m_broadcastPending = true;
@@ -737,6 +753,72 @@ void WebServer::update() {
             }
         }
     }
+    // ========================================================================
+    // SSA-W4 heap forensics — boot baseline, first-HTTP-client, periodic.
+    //
+    // Diagnostic only (no production behaviour). Pinned to update() so we
+    // piggyback on an existing periodic tick rather than adding a FreeRTOS
+    // task. ALL gated by millisecond timers. None of these run on the render
+    // hot path.
+    //
+    // Two-cadence design (Phase 0.5, 2026-05-18):
+    //   - 1 Hz scalar tick (dumpScalar, ~3 lines / call) — bisection-grade
+    //     resolution for largest_free_block trajectory under load
+    //   - 60 s verbose tick (dump, ~30-60 lines / call) — full IDF
+    //     heap_caps_print histogram for fragmentation profiling
+    // Edges (boot, shed-latch transitions, UDP ENOMEM, on-demand) always use
+    // the full verbose dump().
+    // ========================================================================
+    {
+        static bool s_heapForensicsBootEmitted = false;
+        static bool s_heapForensicsFirstClientEmitted = false;
+        static uint32_t s_lastHeapForensicsPeriodicMs = 0;
+        static uint32_t s_lastHeapForensicsScalarMs = 0;
+        constexpr uint32_t HEAP_FORENSICS_PERIODIC_MS = 60000U;  // verbose 60 s
+        constexpr uint32_t HEAP_FORENSICS_SCALAR_MS   = 1000U;   // scalar 1 Hz
+
+        const uint32_t shedLatchedMs = m_lowHeapShed
+            ? (nowMs - m_shedActivatedAtMs)
+            : 0U;
+
+        if (!s_heapForensicsBootEmitted) {
+            s_heapForensicsBootEmitted = true;
+            s_lastHeapForensicsPeriodicMs = nowMs;
+            s_lastHeapForensicsScalarMs = nowMs;
+            lightwaveos::diagnostics::dump(
+                lightwaveos::diagnostics::HeapDumpReason::Boot,
+                m_lowHeapShed, shedLatchedMs);
+        }
+
+        // "First HTTP request" proxy: m_lastClientConnectMs is set inside
+        // handleWsConnect on the first inbound WebSocket. The dashboard's
+        // initial page-load issues an HTTP GET followed immediately by a
+        // WS upgrade, so this fires within a few ms of the first actual
+        // HTTP byte. Using m_lastClientConnectMs avoids touching every
+        // route handler.
+        if (!s_heapForensicsFirstClientEmitted && m_lastClientConnectMs != 0) {
+            s_heapForensicsFirstClientEmitted = true;
+            lightwaveos::diagnostics::dump(
+                lightwaveos::diagnostics::HeapDumpReason::FirstHttpRequest,
+                m_lowHeapShed, shedLatchedMs);
+        }
+
+        if ((nowMs - s_lastHeapForensicsPeriodicMs) >= HEAP_FORENSICS_PERIODIC_MS) {
+            s_lastHeapForensicsPeriodicMs = nowMs;
+            lightwaveos::diagnostics::dump(
+                lightwaveos::diagnostics::HeapDumpReason::Periodic,
+                m_lowHeapShed, shedLatchedMs);
+        } else if ((nowMs - s_lastHeapForensicsScalarMs) >= HEAP_FORENSICS_SCALAR_MS) {
+            // 1 Hz scalar tick — only emits Blocks 1-3 (3 serial lines).
+            // Suppressed on the tick when the 60 s verbose dump fires so
+            // we don't emit both back-to-back.
+            s_lastHeapForensicsScalarMs = nowMs;
+            lightwaveos::diagnostics::dumpScalar(
+                lightwaveos::diagnostics::HeapDumpReason::PeriodicScalar,
+                m_lowHeapShed, shedLatchedMs);
+        }
+    }
+
     const bool shedProbeDue = (nowMs - m_lastHeapShedProbeMs) >= INTERNAL_HEAP_SHED_PROBE_INTERVAL_MS;
     if (shedProbeDue) {
         updateLowHeapShedState(nowMs);

@@ -348,6 +348,17 @@ void WebServer::broadcastZoneState() {
 
     if (m_ws->count() == 0 || !m_zoneComposer) return;
 
+    // Heap-shed mitigation 2026-05-18 (Phase 1 Step 1.1, W1 finding #3):
+    // Gate textAll() fanout behind the existing status subscription. Zone
+    // state is part of the dashboard/status surface; clients that opted into
+    // status.subscribe consume it. ledStream/validation/benchmark-only
+    // consumers do not, yet each ungated textAll() retained a
+    // ~1.6 KB shared_ptr<vector<uint8_t>> per non-subscriber client until
+    // ACK. Reusing hasStatusSubscribers() avoids adding a zones.subscribe WS
+    // topic (wire contract unchanged) and mirrors the doBroadcastStatus()
+    // pattern above.
+    if (!hasStatusSubscribers()) return;
+
     if (shouldDeferTextAll()) return;  // SSA-D Round 2 (2026-04-18)
 
     // QUEUE PROTECTION: Throttle zone broadcasts (4 Hz max)

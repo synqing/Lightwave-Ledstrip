@@ -13,6 +13,7 @@
 
 #define LW_LOG_TAG "UdpStream"
 #include "../../utils/Log.h"
+#include "../../utils/HeapForensics.h"
 
 #include <cstring>
 #include <esp_heap_caps.h>
@@ -702,7 +703,22 @@ bool UdpStreamer::sendPacket(const IPAddress& ip, uint16_t port, const uint8_t* 
     size_t written = m_udp.write(buffer, size);
     int endOk = m_udp.endPacket();
     if (written != size) return false;
-    return endOk == 1;
+    if (endOk != 1) {
+        // SSA-W4 diagnostic: `endPacket() could not send data: 12` (ENOMEM)
+        // is the canonical lwIP pbuf-exhaustion signature. Rate-limit dumps
+        // to one per second so a sustained burst does not flood serial.
+        static uint32_t s_lastEnomemDumpMs = 0;
+        const uint32_t nowMs = millis();
+        if (nowMs - s_lastEnomemDumpMs >= 1000U) {
+            s_lastEnomemDumpMs = nowMs;
+            lightwaveos::diagnostics::dump(
+                lightwaveos::diagnostics::HeapDumpReason::UdpEnomem,
+                /*shedActive=*/false,   // UdpStreamer has no view of shed state
+                /*shedLatchedMs=*/0);
+        }
+        return false;
+    }
+    return true;
 }
 
 void UdpStreamer::maybeLogStats(uint32_t nowMs) {

@@ -2592,7 +2592,14 @@ broadcasts:
       zones: "array of zone runtime state objects"
       presets: "array of zone preset objects"
     consumers: [tab5]
-    note: "Tab5 WsMessageRouter handles this via handleZonesList()"
+    note: |
+      Heap-shed mitigation 2026-05-18 (Phase 1 Step 1.1): zones.list is now
+      gated behind status.subscribe (zone state is part of the dashboard
+      surface, mirroring the status broadcast). Clients MUST send
+      status.subscribe to receive these broadcasts. Tab5 already does so;
+      the gate prevents ungated retention of ~1.6 KB shared_ptr per
+      non-subscriber client until ACK. Tab5 WsMessageRouter handles this
+      via handleZonesList().
 
   zone.enabledChanged:
     direction: "K1 -> all clients"

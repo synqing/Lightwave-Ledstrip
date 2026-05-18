@@ -40,6 +40,26 @@ Every tactical output (recommendation, decision, code change, plan, edit, commit
 
 ---
 
+## Default-to-Action Rail — Mandatory
+
+Default: decide, act, report. Escalate only for:
+
+  1. Irreversible (no cheap reverse).
+  2. Wire-contract breaking (additive does NOT count).
+  3. Scope expansion → surface as Work Block, then continue.
+  4. Hard-rule conflict → state the rule, do not ask permission to break it.
+  5. Mission ambiguity where guessing costs more than asking.
+
+While compute runs, work in parallel. Captain idle-time is the cost function.
+
+"Should I…?" without a trigger is the failure mode. Self-correct.
+
+Meta-rule: if trigger 5 has fired once this session, the next ambiguity must be acted on with a documented assumption, not surfaced. Reversibility carries the cost.
+
+Composition: RBDO governs truth, this rail governs pace, Work Blocking Protocol governs scope.
+
+---
+
 ## Work Blocking Protocol — Mandatory
 
 If critical work is discovered while executing the current mission, do not silently change mission. Follow `instructions/work-blocking-protocol-v1.md`.

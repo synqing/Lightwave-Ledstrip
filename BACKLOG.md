@@ -180,6 +180,33 @@ Captain has authorised reversing the "AP-only-EVER, STA never worked" doctrine a
 - **NotebookLM infographic audio-AGC restoration:** unblocked but post-FE-launch. Action when unblocked: unstrike audio-AGC panel in `docs/tooling/notebooklm-bundles/lightwave_ledstrip_infographics/sources/06_PART_OUTLINES.md` with canonical 3-zone semantics (Zone 0 bass 20–250 Hz / chroma 0–3; Zone 1 mid 250 Hz–2 kHz / chroma 4–7; Zone 2 treble 2–20 kHz / chroma 8–11).
 - **Revisit trigger:** none. F-6 is closed without DEGRADED-MODE caveat.
 
+### F-6.1 — Zone AGC output intensity acceptance (QUALITY GATE — opened 2026-05-19)
+F-6 closure proved the 3-zone partition is exercised and materially affects `m_frame.bands[]` (steady-state 45-80% per-band, 2.88× total energy OFF/ON). F-6.1 asks the downstream question: **are the post-AGC normalised bands/chroma visually acceptable for FE launch, or is the AGC over-compressing the bands effects render from?** This is a calibration question, not a correctness question.
+- **Source of risk:** Effects consume `m_frame.bands[]` and `m_frame.chroma[]` (post-partition smoothed outputs), not raw Zone-AGC internals. If Zone AGC compresses too aggressively, effects may receive lower band values than their visual thresholds / gain curves expect, producing dimmer visuals, weaker beat punch, fewer activations, flatter motion, reduced bass impact — "technically stable but emotionally dead" output. Product-critical, not correctness-critical.
+- **Scope:**
+  - Do NOT modify partition logic (closed in F-6).
+  - Do NOT lift REST/WS ESV11 guards (Captain's hard stop).
+  - Do NOT touch effects unless acceptance proves visual under-drive.
+  - Do NOT add broad observability surfaces.
+- **Protocol:**
+  1. Canonical K1v2 ESV11 `_32khz` build.
+  2. Replay the **same fixed 30 s audio segment** for each run (NOT different windows of continuous playback — fixes the cross-window content-shift confound of F-6 BENCH_A_B.md).
+  3. Run gate ON and gate OFF as **separate repeated captures** (not coupled in one log).
+  4. Exclude first 8–10 s after gate transition from ratio calculations (follower convergence transient).
+  5. Capture `adbg spectrum` bands[]; chroma output if available; video of representative FE effects.
+  6. Test 3–4 representative tracks: bass-heavy; vocal/mid-heavy; treble/transient-heavy; normal full-mix reference.
+  7. **One-page result** with median + P95 band sum ON/OFF, obvious clipping/saturation OFF, obvious dimness/deadness ON, visual verdict PASS / TUNE NEEDED.
+- **Acceptance:** PASS if gate ON preserves visible punch while avoiding raw-band domination/saturation. TUNE NEEDED if gate ON is visibly under-driven or activation density drops materially.
+- **If TUNE NEEDED — preferred fix order (do NOT default to partition retune):**
+  - All effects too dim → post-AGC visual gain scalar / transfer curve
+  - Beat pulses too weak → effect threshold / envelope sensitivity
+  - Bass no longer drives enough → per-zone output weighting, NOT reverting zones
+  - Chroma dull but bands fine → chroma gain curve only
+  - Only one effect bad → effect-local calibration
+- **Anti-pattern:** "3.82× feels like too much, so weaken Zone AGC globally." This may reintroduce the original bass-dominance problem the partition was built to solve.
+- **Priority:** quality gate before FE launch (~3 weeks). Single-session work.
+- **Revisit trigger:** any FE-launch visual review flags Zone-1 dimness, beat under-drive, or post-AGC saturation; OR Captain authorises the calibration session directly.
+
 ---
 
 ## Performance

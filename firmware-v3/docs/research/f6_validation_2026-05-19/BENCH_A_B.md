@@ -127,6 +127,69 @@ Per-zone differentials of 68–78% confirm the 3-zone partition is independently
 
 ---
 
+## Methodology caveats (Captain critique 2026-05-19, post-commit)
+
+Captain reviewed this artefact after commit `bb8dea8a` landed and surfaced three methodology gaps. F-6 closure stands; the headline magnitudes are corrected here for honesty and to inform F-6.1 (visual calibration acceptance).
+
+### Caveat 1 — first ON snapshot inflates the ratio
+
+ON snapshot 1 at t=8.1s shows `sum=0.013` (all bands near-zero), already flagged above as follower-not-converged or mic-capture-latency. The 3.82× headline ratio collapsed this anomaly into the mean. Excluding it:
+
+| Stat | With ON#1 | Steady-state (ON#2-4 only) |
+|---|---|---|
+| ON mean total energy | 0.598 | **0.793** |
+| OFF mean total energy | 2.284 | 2.284 (unchanged) |
+| OFF / ON ratio | 3.82× | **2.88×** |
+
+Per-band steady-state recomputation (ON snapshots 4, 5, 6 only; OFF unchanged):
+
+```
+  band  zone     ON_steady   OFF       diff      |pct|
+  b0    z0      0.113       0.207    +0.094     45.4%
+  b1    z0      0.069       0.224    +0.155     69.2%
+  b2    z1      0.124       0.316    +0.192     60.8%
+  b3    z1      0.130       0.421    +0.291     69.1%
+  b4    z1      0.078       0.392    +0.314     80.1%
+  b5    z2      0.141       0.327    +0.186     56.9%
+  b6    z2      0.072       0.239    +0.167     69.9%
+  b7    z2      0.066       0.157    +0.091     58.0%
+```
+
+Steady-state per-zone aggregate:
+- Zone 0 (bands 0-1): ON 0.091, OFF 0.215, differential **+57.7%** (was +68.1%)
+- Zone 1 (bands 2-4): ON 0.111, OFF 0.376, differential **+70.4%** (was +77.9%)
+- Zone 2 (bands 5-7): ON 0.093, OFF 0.241, differential **+61.4%** (was +70.7%)
+
+All bands and all zones still show 45–80% steady-state differential — the partition is unambiguously active. The original numbers overstated the magnitude by ~10 percentage points on average.
+
+### Caveat 2 — ON and OFF windows are different musical sections
+
+The capture was continuous: ON snapshots at ~8–32 s of playback, OFF snapshots at ~43–67 s. Different sections of "Papa's Got A Brand New Bag" have different spectral content. The OFF window may have happened to land on a louder/denser passage of the track. The differential confounds the gate effect with song dynamics.
+
+For F-6's question ("does gate ON/OFF measurably change `m_frame.bands[]` on canonical K1v2 ESV11?") this is acceptable — any consistent differential across 7 of 8 snapshots is sufficient. **For F-6.1's question** ("what is the actual visual-quality impact of the AGC compression?") this is NOT enough — you need ON and OFF samples of the *same* audio segment to cleanly attribute differential to AGC rather than content.
+
+### Caveat 3 — both gates toggled in lockstep
+
+The protocol toggled `audio.zone_agc` and `audio.chroma_zone_agc` together. That's fine for "does production AGC affect FE output?" but it conflates band-domain and chroma-domain compression. For tuning, isolate:
+- `audio.zone_agc` only → measures band compression strength
+- `audio.chroma_zone_agc` only → measures chroma compression strength
+
+### What this changes about F-6
+
+**Nothing.** F-6's four claims still PASS:
+- Production-relevant build compiles ✅
+- Hardware run proves 3-zone path is exercised ✅ (per-band 45-80% steady differential; visible only if partition is iterating)
+- Evidence logs show exercised path + Zone AGC outputs ✅
+- REST/WS endpoints intentionally disabled documented ✅
+
+**What it changes:** future agents reading this artefact must NOT cite "3.82×" as the canonical magnitude. Use the steady-state 2.88× or the per-band/per-zone steady-state numbers above. The headline-vs-steady gap is the textbook outlier-contamination pattern; codified as a permanent operating rule in `feedback_audio_ab_methodology.md`.
+
+### What this opens
+
+F-6.1 — Zone AGC output intensity acceptance — opened in BACKLOG.md per Captain's 2026-05-19 spec. Quality gate (not architecture task). Tunes downstream calibration if visuals are under-driven; do NOT touch the partition.
+
+---
+
 ## Combined verdict (Source + Bench)
 
 Per Captain's D-revised acceptance: *"PASS only if source proof confirms exact 3-zone loop AND bench A/B confirms canonical runtime effect on rendered bands[]."*

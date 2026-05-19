@@ -14,7 +14,7 @@ F-6 (`CONTROLBUS_NUM_ZONES` 4→3, explicit partition tables) shipped in commit 
 |---|---|---|
 | 1 — Source proof | [SOURCE_PROOF.md](SOURCE_PROOF.md) | ✅ PASS — exact 3-zone execution proven at file:line against HEAD `3e0e40d8` |
 | 2 — Consumer enumeration | [CONSUMER_TABLE.md](CONSUMER_TABLE.md) | ✅ PASS — zero FE-active Zone AGC consumers; zero effect-path consumers; FE blast radius is `m_frame.bands[]`/`m_frame.chroma[]` only |
-| 3 — Bench A/B hardware capture | [BENCH_A_B.md](BENCH_A_B.md) | ✅ PASS — per-band ON/OFF differential 58.9–85.1%; per-zone aggregate 68–78%; mean OFF/ON energy ratio 3.82× on canonical K1v2 ESV11 |
+| 3 — Bench A/B hardware capture | [BENCH_A_B.md](BENCH_A_B.md) | ✅ PASS — steady-state per-band ON/OFF differential 45.4–80.1%; steady-state per-zone 57.7%/70.4%/61.4%; steady-state mean OFF/ON energy ratio 2.88× on canonical K1v2 ESV11. Headline 3.82× ratio (inflated by ON#1 convergence transient) corrected in BENCH_A_B.md § Methodology caveats. |
 
 ## What this validates
 
@@ -39,7 +39,9 @@ K1v2 MAC `b4:3a:45:a5:87:f8`, port `usbmodem1301`, commit `3e0e40d8` flashed, mu
 ## Closure pointers
 
 - BACKLOG.md F-6 row → resolved (Task 2/3/4 DONE).
+- BACKLOG.md F-6.1 row → opened per Captain's 2026-05-19 spec (visual calibration acceptance, single-session quality gate, not architecture task).
 - `feedback_serial_bench_uppercase.md` memory written (lowercase `bench` SerialCLI collision with single-char `b` handler — operating quirk discovered 2026-05-19).
+- `feedback_audio_ab_methodology.md` memory written (Captain's 2026-05-19 critique of the F-6 BENCH_A_B.md headline numbers — convergence transient + cross-window content shift + coupled-variable test all inflated the 3.82× headline; steady-state is 2.88×; rule codified for future bench captures).
 - NotebookLM infographic audio-AGC restoration → backlogged (unblocked but post-FE-launch).
 
 ---

@@ -420,19 +420,26 @@ struct LookaheadBuffer {
  * @brief Per-zone automatic gain control state
  *
  * Each zone tracks its own maximum magnitude and uses a smoothed follower
- * for normalization. This prevents loud bass from washing out mid/high content.
+ * for normalisation. This prevents loud bass from washing out mid/high content.
  *
- * Zone boundaries for 8-band system (2 bands per zone):
- *   Zone 0: bands 0-1  (60-120 Hz)   - Sub-bass/Bass
- *   Zone 1: bands 2-3  (250-500 Hz)  - Low-mid
- *   Zone 2: bands 4-5  (1-2 kHz)     - Mid/High-mid
- *   Zone 3: bands 6-7  (4-7.8 kHz)   - Presence/Brilliance
+ * Zone boundaries: source of truth is CONTROLBUS_BAND_ZONE_RANGES at this
+ * header's top (around line 29). The arrays are static_assert'd contiguous
+ * over CONTROLBUS_NUM_BANDS (8) and CONTROLBUS_NUM_CHROMA (12).
  *
- * For future 64-band system (16 bins per zone):
- *   Zone 0: bins 0-15  (110-207 Hz)
- *   Zone 1: bins 16-31 (220-415 Hz)
- *   Zone 2: bins 32-47 (440-830 Hz)
- *   Zone 3: bins 48-63 (880-4186 Hz)
+ * Current 8-band partition (3 zones; see PipelineCore.cpp band edges):
+ *   Zone 0: bands 0-1   (20-250 Hz)    - sub-bass/bass
+ *   Zone 1: bands 2-4   (250 Hz-2 kHz) - low-mid through high-mid
+ *   Zone 2: bands 5-7   (2-20 kHz)     - upper-mid/presence/brilliance
+ *
+ * Current 12-chroma partition (3 zones):
+ *   Zone 0: bins 0-3    (C, C#, D, D#)
+ *   Zone 1: bins 4-7    (E, F, F#, G)
+ *   Zone 2: bins 8-11   (G#, A, A#, B)
+ *
+ * F-6 (commit 08a7c997, hardware-attested 2026-05-19) replaced derived z*2/z*3
+ * arithmetic with the explicit coverage-checked tables above. Any future
+ * partition retune updates the tables and the static_asserts catch coverage
+ * regressions at compile time.
  */
 struct ZoneAGC {
     float max_mag = 0.0f;           ///< Current zone maximum magnitude

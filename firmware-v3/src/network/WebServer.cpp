@@ -773,9 +773,13 @@ void WebServer::update() {
         static bool s_heapForensicsBootEmitted = false;
         static bool s_heapForensicsFirstClientEmitted = false;
         static uint32_t s_lastHeapForensicsPeriodicMs = 0;
+#if LW_HEAP_FORENSICS_SCALAR_1HZ
         static uint32_t s_lastHeapForensicsScalarMs = 0;
+#endif
         constexpr uint32_t HEAP_FORENSICS_PERIODIC_MS = 60000U;  // verbose 60 s
+#if LW_HEAP_FORENSICS_SCALAR_1HZ
         constexpr uint32_t HEAP_FORENSICS_SCALAR_MS   = 1000U;   // scalar 1 Hz
+#endif
 
         const uint32_t shedLatchedMs = m_lowHeapShed
             ? (nowMs - m_shedActivatedAtMs)
@@ -784,7 +788,9 @@ void WebServer::update() {
         if (!s_heapForensicsBootEmitted) {
             s_heapForensicsBootEmitted = true;
             s_lastHeapForensicsPeriodicMs = nowMs;
+#if LW_HEAP_FORENSICS_SCALAR_1HZ
             s_lastHeapForensicsScalarMs = nowMs;
+#endif
             lightwaveos::diagnostics::dump(
                 lightwaveos::diagnostics::HeapDumpReason::Boot,
                 m_lowHeapShed, shedLatchedMs);
@@ -803,12 +809,20 @@ void WebServer::update() {
                 m_lowHeapShed, shedLatchedMs);
         }
 
+        // 1 Hz periodic.scalar emission is OFF by default 2026-05-19 — was a
+        // diagnostic aid during the heap-pressure witchhunt closure and now
+        // floods the serial monitor in steady-state. Re-enable by setting
+        // `-D LW_HEAP_FORENSICS_SCALAR_1HZ=1` on the build env. The 60 s
+        // verbose tick + edge dumps (boot / http.first / shed transitions /
+        // udp.enomem / on-demand `dbg memory verbose`) remain on.
         if ((nowMs - s_lastHeapForensicsPeriodicMs) >= HEAP_FORENSICS_PERIODIC_MS) {
             s_lastHeapForensicsPeriodicMs = nowMs;
             lightwaveos::diagnostics::dump(
                 lightwaveos::diagnostics::HeapDumpReason::Periodic,
                 m_lowHeapShed, shedLatchedMs);
-        } else if ((nowMs - s_lastHeapForensicsScalarMs) >= HEAP_FORENSICS_SCALAR_MS) {
+        }
+#if LW_HEAP_FORENSICS_SCALAR_1HZ
+        else if ((nowMs - s_lastHeapForensicsScalarMs) >= HEAP_FORENSICS_SCALAR_MS) {
             // 1 Hz scalar tick — only emits Blocks 1-3 (3 serial lines).
             // Suppressed on the tick when the 60 s verbose dump fires so
             // we don't emit both back-to-back.
@@ -817,6 +831,7 @@ void WebServer::update() {
                 lightwaveos::diagnostics::HeapDumpReason::PeriodicScalar,
                 m_lowHeapShed, shedLatchedMs);
         }
+#endif
     }
 
     const bool shedProbeDue = (nowMs - m_lastHeapShedProbeMs) >= INTERNAL_HEAP_SHED_PROBE_INTERVAL_MS;

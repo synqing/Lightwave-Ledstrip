@@ -158,8 +158,7 @@ struct DeviceTab: View {
         }
     }
 
-    // K1 V2 is AP-ONLY (hard architectural rule — see firmware
-    // CLAUDE.md). The firmware gates `network.rssi` behind
+    // K1 V2 is AP-only. The firmware gates `network.rssi` behind
     // `WiFi.status() == WL_CONNECTED` which is permanently false on K1,
     // so the legacy "WiFi RSSI" row was always rendering "—". Replaced
     // with the AP-side connected-client count which firmware does

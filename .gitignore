@@ -52,8 +52,15 @@ __pycache__/
 
 # User-specific files (WiFi credentials - never commit!)
 src/config/network_config_private.h
+**/src/config/network_config_private.h
 credentials.h
 wifi_credentials.ini
+**/wifi_credentials.ini
+**/wifi_credentials.local.ini
+**/*credentials.local*
+.env
+.env.*
+!.env.example
 
 # Local tooling caches
 .cache/
@@ -72,16 +79,32 @@ firmware-v3/docs/research/k1_songaware_lane_d_evidence/**/*.mov
 lightwave-ios-v2/build/
 lightwave-ios-v2/docs/Rive/
 
-# Claude / local agent tooling (keep folder structure tracked via .claude/.gitkeep)
-.claude/**
-!.claude/.gitkeep
-# Nested .claude directories in subprojects
-lightwave-ios-v2/.claude/
-tab5-encoder/.claude/
-k1-composer/.claude/
+# Local agent and planning tooling
+.claude/
+**/.claude/
+.planning/
+.mcp.json
+.worktreeinclude
+CLAUDE.md
+AGENTS.md
+BACKLOG.md
+CHANGELOG.md
 
 # Local semantic tooling / MCP manifests (environment-specific)
 .code-context/
+
+# Private test media and third-party corpus payloads
+firmware-v3/test/music_corpus/
+
+# Local smoke-test evidence
+**/.smoke/
+
+# Internal research, audit, prompt, and evidence packets
+**/docs/research/
+**/docs/audit/
+**/docs/evidence/
+**/docs/prompts/
+**/research/
 
 # ==========================================
 # ARCHIVE FOLDERS - Not tracked in git

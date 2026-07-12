@@ -20,7 +20,7 @@ This document complements `EFFECT_DEVELOPMENT_STANDARD.md`. The development stan
 |---|---|
 | Track D Phase 1 reconstruction | `firmware-v3/docs/research/SB_FRAMEWORK_RECONSTRUCTION_2026-04-26.md` |
 | Ratification substrate (SSA returns + Q1–Q8) | `firmware-v3/docs/research/EFFECT_FRAMEWORK_RATIFICATION_2026-04-29.md` |
-| Hard constraints (CLAUDE.md) | `CLAUDE.md` § Hard Constraints |
+| Hard constraints | Project render and effect constraints |
 | Existing dev standard | `firmware-v3/docs/EFFECT_DEVELOPMENT_STANDARD.md` |
 | Existing lint engine | `firmware-v3/tools/check_effect_contracts.py` |
 | Golden-frame regression gate | `firmware-v3/test/test_golden/` |
@@ -65,7 +65,7 @@ All effects originate from LED 79/80 outward. No linear sweeps. Mirror about the
 
 **Enforcement:** **LINT-ENFORCED** — `check_centre_origin_inverted` in `check_effect_contracts.py:536-559`, with allowlist of ~120 legitimately-linear files. Already gated.
 
-**Cross-reference:** CLAUDE.md hard constraint.
+**Cross-reference:** project hard constraint.
 
 ### 6. Palette/hue from chromagram — **MUST**
 
@@ -75,7 +75,7 @@ Audio-reactive colour drives from `chroma[12]` / `note_colors[12]` / dominant-bi
 - Negative: **LINT-ENFORCED** — `check_rainbow_inverted` (`check_effect_contracts.py:562-585`) catches `fill_rainbow`, `CHSV(hue, ...)`, `hue+=`, `hue++`.
 - Positive: **LINT-DEFERRED** — `check_chromagram_positive` detector skeleton awaits Captain Q2 verdict on whether `palette.getColor(gHue+offset)` satisfies (loose) or explicit `getChroma()`/`chromaSmooth` reference is required (strict).
 
-**Cross-reference:** CLAUDE.md hard constraint (no rainbows).
+**Cross-reference:** project hard constraint (no rainbows).
 
 ### 7. SATURATION gates chromatic vs monochromatic — **SHOULD**
 

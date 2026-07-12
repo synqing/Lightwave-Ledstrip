@@ -199,4 +199,4 @@ The Zone Mixer works alongside the Tab5 controller and the iOS app. All three ca
 **Document Changelog**
 | Date | Author | Change |
 |------|--------|--------|
-| 2026-04-01 | captain + agent:claude-opus-4.6 | Created -- comprehensive user guide covering all 20 controls, LED feedback, connection workflow, and troubleshooting |
+| 2026-04-01 | Maintainers | Created -- comprehensive user guide covering all 20 controls, LED feedback, connection workflow, and troubleshooting |

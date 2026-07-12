@@ -435,7 +435,7 @@ bool handled = WsCommandRouter::route(client, doc, ctx);
 
 ## WiFiManager State Machine
 
-**PROTECTED FILE:** WiFiManager contains critical FreeRTOS synchronization. See CLAUDE.md for modification requirements.
+**PROTECTED FILE:** WiFiManager contains critical FreeRTOS synchronization. Review changes carefully.
 
 ### State Diagram
 
@@ -830,7 +830,6 @@ uint8_t effect = renderer->getCurrentEffect();  // BAD!
 | Document | Path | Description |
 |----------|------|-------------|
 | API v1 Reference | `docs/api/api-v1.md` | Complete REST API documentation |
-| CLAUDE.md | `CLAUDE.md` | Protected files and modification rules |
 | WiFi Credentials | `src/config/network_config.h` | Network configuration |
 | Feature Flags | `src/config/features.h` | Compile-time feature toggles |
 

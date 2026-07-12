@@ -58,7 +58,7 @@ import requests
 
 DEFAULT_HOST = "192.168.4.2"  # DHCP-assigned from K1 AP; or use tab5encoder.local
 DEFAULT_PORT = 80
-DEFAULT_TOKEN = "LW-OTA-2024-SecureUpdate"  # network_config.h:136
+DEFAULT_TOKEN = ""
 DEFAULT_FIRMWARE = Path(__file__).resolve().parent.parent / ".pio" / "build" / "tab5" / "firmware.bin"
 
 # P0-04 watchdog is 30 s; add 5 s margin so the test observes the timeout deterministically.
@@ -338,6 +338,10 @@ def main() -> int:
         help="Skip Test 1 (the happy path reboots the device and ends the run)",
     )
     args = p.parse_args()
+
+    if not args.token:
+        print("OTA token is required: pass --token or set a local wrapper.", file=sys.stderr)
+        return 2
 
     if not args.firmware.exists():
         print(f"Firmware not found: {args.firmware}", file=sys.stderr)

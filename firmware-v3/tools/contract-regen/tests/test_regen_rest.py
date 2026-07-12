@@ -4,7 +4,7 @@ Run with:
     python3 -m unittest discover firmware-v3/tools/contract-regen/tests
 
 These tests use only stdlib + PyYAML, in line with the tool itself.
-British English in comments and strings — see CLAUDE.md hard constraints.
+British English in comments and strings.
 """
 
 from __future__ import annotations

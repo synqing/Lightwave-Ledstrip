@@ -12,14 +12,14 @@ LightwaveOS supports Over-The-Air (OTA) firmware updates via HTTP POST to the `/
 |----------|-------|
 | URL | `http://lightwaveos.local/update` or `http://<device-ip>/update` |
 | Method | `POST` |
-| Auth Header | `X-OTA-Token: LW-OTA-2024-SecureUpdate` |
+| Auth Header | `X-OTA-Token: <your-device-token>` |
 | Content Type | `multipart/form-data` or `application/octet-stream` |
 
 ### Recommended Upload Command
 
 ```bash
 curl -X POST \
-  -H "X-OTA-Token: LW-OTA-2024-SecureUpdate" \
+  -H "X-OTA-Token: ${OTA_TOKEN}" \
   -F "update=@.pio/build/esp32dev_audio/firmware.bin;type=application/octet-stream" \
   "http://lightwaveos.local/update"
 ```
@@ -65,7 +65,7 @@ curl -s http://192.168.x.x/api/v1/device/status | python3 -m json.tool
 **Method 1: Multipart Form (Recommended)**
 ```bash
 curl -X POST \
-  -H "X-OTA-Token: LW-OTA-2024-SecureUpdate" \
+  -H "X-OTA-Token: ${OTA_TOKEN}" \
   -F "update=@.pio/build/esp32dev_audio/firmware.bin;type=application/octet-stream" \
   "http://192.168.x.x/update"
 ```
@@ -73,7 +73,7 @@ curl -X POST \
 **Method 2: Raw Binary**
 ```bash
 curl -X POST \
-  -H "X-OTA-Token: LW-OTA-2024-SecureUpdate" \
+  -H "X-OTA-Token: ${OTA_TOKEN}" \
   -H "Content-Type: application/octet-stream" \
   --data-binary @.pio/build/esp32dev_audio/firmware.bin \
   "http://192.168.x.x/update"
@@ -124,7 +124,7 @@ Look for:
 
 **Fix**: Ensure header is exactly:
 ```
-X-OTA-Token: LW-OTA-2024-SecureUpdate
+X-OTA-Token: CHANGE_ME_OTA_TOKEN
 ```
 
 ### Upload Completes But Nothing Changes

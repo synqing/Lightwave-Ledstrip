@@ -1122,7 +1122,7 @@ void RendererActor::onTick()
     m_avgPrePacingWorkUs = smoothTimingUs(m_avgPrePacingWorkUs, m_lastPrePacingWorkUs);
     TRACE_COUNTER("render_frame_work_us", static_cast<int>(rawFrameTimeUs));
     // Surface 1 Tier 1: deadline-miss instant when raw work exceeds the
-    // 2.0 ms render contract ceiling (CLAUDE.md hard constraints).
+    // 2.0 ms render contract ceiling.
     if (rawFrameTimeUs > 2000U) {
         TRACE_INSTANT("render_frame_deadline_miss");
     }

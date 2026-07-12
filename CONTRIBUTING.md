@@ -1,120 +1,31 @@
 # Contributing to LightwaveOS
 
-Guidelines for contributing to the LightwaveOS repository. All contributors -- human and agent -- must follow these rules.
+Guidelines for contributing to the public LightwaveOS repository.
 
----
-
-## License
+## Licence
 
 This project is licensed under the [Apache License 2.0](LICENSE). By contributing, you agree that your contributions will be licensed under the same terms.
 
-## Developer Certificate of Origin (DCO)
+## Developer Certificate of Origin
 
-All commits must be signed off to certify that you have the right to submit them under the project's license. Add a `Signed-off-by` line to your commit messages:
+All commits must be signed off to certify that you have the right to submit them under the project's licence:
 
-```
+```text
 Signed-off-by: Your Name <your.email@example.com>
 ```
 
-You can do this automatically with `git commit -s`. The DCO is a lightweight alternative to a CLA -- it simply confirms you wrote the code (or have the right to submit it) and agree to the project's license terms.
+Use `git commit -s` to add the sign-off automatically.
 
----
+## Public Repository Hygiene
 
-## Repository Root Placement Rules
+Do not commit local credentials, private network names, API tokens, generated build outputs, local agent configuration, private music corpora, or temporary research artefacts. Keep local overrides in ignored files such as `wifi_credentials.ini`, `.env.local`, or `network_config_private.h`.
 
-Only allowlisted entries may exist at the repository root. No exceptions without explicit approval.
+Generated binaries, cache directories, and personal IDE state should remain outside Git. If a fixture or corpus payload is required for tests, document how to obtain or regenerate it without committing private or third-party media.
 
-### Root Allowlist
+## Pull Requests
 
-```
-.git/
-.github/
-.claude/
-.codex/
-.gitignore
-.pre-commit-config.yaml
-AGENTS.md
-CLAUDE.md
-README.md
-CONTRIBUTING.md
-CHANGELOG.md
-LICENSE
-NOTICE
-instructions/
-firmware-v3/
-tab5-encoder/
-lightwave-ios-v2/
-k1-composer/
-```
-
-Anything not on this list must be placed inside a subdirectory. If you believe a new root entry is needed, open a discussion before creating it.
-
-The canonical allowlist is maintained at `instructions/path-allowlist-v1.txt`.
-
----
-
-## Filename Policy
-
-- All files and directories use **lowercase kebab-case** (e.g., `repo-governance-v1.md`, `tab5-encoder/`).
-- **No spaces** in filenames or directory names.
-- **No dots** in directory names (except hidden directories like `.github/`).
-- **Exceptions**: Standard Git governance files use UPPERCASE: `CLAUDE.md`, `AGENTS.md`, `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`.
-
-Full policy: `instructions/naming-policy-v1.md`.
-
----
-
-## Changelog Fragments
-
-Every change made by an agent requires a changelog fragment. Human contributors are strongly encouraged to do the same.
-
-### Fragment Location
-
-```
-instructions/changelog/
-```
-
-### Fragment Naming
-
-```
-<YYYY-MM-DD>--<scope>--<slug>.md
-```
-
-Examples:
-- `2026-02-27--firmware-v3--fix-rmt-spinlock-crash.md`
-- `2026-02-27--repo--add-governance-scaffolding.md`
-- `2026-02-27--k1-composer--update-effect-list.md`
-
-### Fragment Content
-
-Use the template at `instructions/changelog/_fragment-template.md`. Each fragment must include:
-- Date and scope
-- Change type (feature, bugfix, refactor, docs, chore)
-- One-line summary
-- Files changed
-- Validation method
-
-### Release Process
-
-At release time, fragments in `instructions/changelog/` are merged into `CHANGELOG.md` and moved to `instructions/changelog/releases/`. Fragments are never deleted -- they are archived.
-
----
-
-## PR Process
-
-1. Create a feature branch from `main`.
-2. Make your changes, following all placement and naming rules.
-3. Add a changelog fragment for each logical change.
-4. Open a pull request. The PR description should reference the changelog fragment(s).
-5. At release, maintainers merge fragments into `CHANGELOG.md`.
-
----
-
-## Agent Compliance
-
-AI agents operating in this repository must:
-1. Read and follow `instructions/repo-governance-v1.md` before making structural changes.
-2. Never create root-level entries not on the allowlist.
-3. Never delete or move files without explicit user instruction.
-4. Always create a changelog fragment for their changes.
-5. Respect the file preservation rules in `CLAUDE.md`.
+1. Create a branch from `main`.
+2. Keep changes scoped to one logical unit.
+3. Include the build or test command used to verify the change.
+4. Sign off commits with the DCO line above.
+5. Open a pull request with a concise summary and any remaining risks.

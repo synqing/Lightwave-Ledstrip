@@ -32,7 +32,6 @@ targets:
       - path: LightwaveOS
         excludes:
           - "**/.DS_Store"
-          - "**/CLAUDE.md"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.spectrasynq.lightwaveos2

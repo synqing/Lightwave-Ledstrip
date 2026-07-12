@@ -6,7 +6,8 @@
 // ============================================================================
 // WiFi credentials and LightwaveOS server connection settings.
 //
-// IMPORTANT: Edit this file with your actual WiFi credentials before building.
+// Configure local credentials through ignored build flags or
+// wifi_credentials.ini. Do not commit real SSIDs, passwords, or tokens.
 // ============================================================================
 
 // WiFi Access Point Credentials (DISABLED - Tab5 should never create its own AP)
@@ -16,15 +17,16 @@
 
 // WiFi Station Credentials (defaults, overridden by build flags)
 #ifndef WIFI_SSID
-#define WIFI_SSID "VX220-013F"
+#define WIFI_SSID "LightwaveOS-AP"
 #endif
 #ifndef WIFI_PASSWORD
-#define WIFI_PASSWORD "3232AA90E0F24"
+#define WIFI_PASSWORD ""
 #endif
 
 // Secondary WiFi Network (fallback)
 // Tab5 automatically connects to v2 device's AP when primary WiFi unavailable
-// v2 device AP: SSID="LightwaveOS-AP", Password="SpectraSynq", IP=192.168.4.1
+// v2 device AP: SSID="LightwaveOS-AP", password configured on the device,
+// IP=192.168.4.1.
 #ifndef WIFI_SSID2
 #define WIFI_SSID2 "LightwaveOS-AP"
 #endif
@@ -119,7 +121,7 @@ namespace NetworkConfig {
     //   1. Check v2 device serial output for "STA IP: x.x.x.x"
     //   2. Or check your router's admin page for connected devices
     //   3. Or use a network scanner app (Fing, etc.)
-    // This IP is used when mDNS fails on third-party networks (e.g., VX220-013F)
+    // This IP is used when mDNS fails on a configured third-party network.
     constexpr const char* MDNS_FALLBACK_IP_PRIMARY = "192.168.1.101";
 }
 
@@ -131,7 +133,7 @@ namespace NetworkNVS {
 }
 
 // OTA Update Configuration
-// SECURITY: Change this token in production deployments!
+// Override with -DOTA_UPDATE_TOKEN=\"your-device-token\" for real devices.
 #ifndef OTA_UPDATE_TOKEN
-#define OTA_UPDATE_TOKEN "LW-OTA-2024-SecureUpdate"
+#define OTA_UPDATE_TOKEN "CHANGE_ME_OTA_TOKEN"
 #endif

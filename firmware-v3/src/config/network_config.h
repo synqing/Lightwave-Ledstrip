@@ -134,7 +134,7 @@ namespace NetworkConfig {
 #ifdef OTA_TOKEN
     constexpr const char* OTA_UPDATE_TOKEN = OTA_TOKEN;
 #else
-    constexpr const char* OTA_UPDATE_TOKEN = "LW-OTA-2024-SecureUpdate";  // Default (change in production!)
+    constexpr const char* OTA_UPDATE_TOKEN = "CHANGE_ME_OTA_TOKEN";
 #endif
 
     // ========================================================================

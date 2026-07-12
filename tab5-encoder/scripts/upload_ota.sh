@@ -13,7 +13,7 @@ fi
 
 DEVICE_IP="$1"
 FIRMWARE_BIN=".pio/build/tab5/firmware.bin"
-OTA_TOKEN="LW-OTA-2024-SecureUpdate"
+OTA_TOKEN="${OTA_TOKEN:?Set OTA_TOKEN in the environment}"
 OTA_URL="http://${DEVICE_IP}/api/v1/firmware/update"
 
 if [ ! -f "$FIRMWARE_BIN" ]; then
@@ -36,4 +36,3 @@ curl -X POST \
 
 echo ""
 echo "OTA upload complete. Device should reboot automatically."
-

@@ -76,7 +76,6 @@ lightwave-ios-v2/
 ├── docs/
 │   └── DESIGN_SPEC.md                    # Full design specification
 ├── project.yml                           # XcodeGen configuration
-├── CLAUDE.md                             # Project context (this file)
 └── README.md                             # This file
 ```
 

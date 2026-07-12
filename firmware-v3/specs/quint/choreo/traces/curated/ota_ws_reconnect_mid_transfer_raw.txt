@@ -4,7 +4,7 @@
 [237712][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.007 0.005 0.009 0.005 0.004 0.004 0.004 0.005]
 [238672][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.007 0.005 0.006 0.004 0.003 0.002 0.003 0.001]
 [239632][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.007 0.004 0.005 0.002 0.007 0.007 0.002 0.001]
-[240420][1;32m[INFO][0m[WiFi] Connected to 'OPTUS_738CC0N', RSSI: -75 dBm, Channel: 6, Uptime: 228s
+[240420][1;32m[INFO][0m[WiFi] Connected to 'REDACTED_PRIVATE_SSID', RSSI: -75 dBm, Channel: 6, Uptime: 228s
 [240588][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.008 0.012 0.010 0.007 0.006 0.004 0.002 0.001]
 [241547][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.011 0.004 0.009 0.004 0.006 0.006 0.006 0.002]
 [241767][1;32m[INFO][0m[WsGateway] WS: Upgrade request received from 192.168.0.25 (client ID: 2)
@@ -279,7 +279,7 @@ Theoretical estimate: 0.1% (actual: 0.168%)
 [267703][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.006 0.005 0.009 0.006 0.016 0.008 0.002 0.002]
 [268669][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.009 0.007 0.013 0.003 0.004 0.005 0.003 0.004]
 [269625][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.009 0.012 0.011 0.006 0.003 0.012 0.009 0.007]
-[270453][1;32m[INFO][0m[WiFi] Connected to 'OPTUS_738CC0N', RSSI: -77 dBm, Channel: 6, Uptime: 258s
+[270453][1;32m[INFO][0m[WiFi] Connected to 'REDACTED_PRIVATE_SSID', RSSI: -77 dBm, Channel: 6, Uptime: 258s
 [270587][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.009 0.006 0.015 0.004 0.004 0.004 0.003 0.002]
 [271543][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.048 0.025 0.009 0.010 0.005 0.008 0.019 0.002]
 [Status] FPS: 137, CPU: 87%, Effect: Fire

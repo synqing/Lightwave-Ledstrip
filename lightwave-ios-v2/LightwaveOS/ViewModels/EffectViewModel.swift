@@ -200,7 +200,7 @@ class EffectViewModel {
     private var debounceTasks: [String: Task<Void, Never>] = [:]
 
     /// The minimum interval between consecutive POSTs for the same parameter.
-    /// 150 ms is the project-wide slider debounce floor (see CLAUDE.md).
+    /// 150 ms is the project-wide slider debounce floor.
     private static let parameterDebounceInterval: Duration = .milliseconds(150)
 
     /// Fetch the tunable runtime parameters for `effectId` and store them in

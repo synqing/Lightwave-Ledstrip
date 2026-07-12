@@ -545,8 +545,6 @@ Feature flags are defined in `config/features.h` and can be overridden via `plat
 
 ### Architecture
 
-- [CLAUDE.md](../../../CLAUDE.md) - Project overview and constraints
-- [AGENTS.md](../../../AGENTS.md) - Agent coordination patterns
 - [docs/architecture/](../../../docs/architecture/) - System design documents
 
 ### API Reference

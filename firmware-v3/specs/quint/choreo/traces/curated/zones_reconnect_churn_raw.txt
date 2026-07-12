@@ -91,5 +91,5 @@ Theoretical estimate: 0.1% (actual: 0.152%)
 [148375][1;32m[INFO][0m[AudioCapture] [1;33mDMA:[0m hop=4650 R=[F9D40000..F9F18000] >>10=[-101120..-99232]
 [148601][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.004 0.007 0.005 0.004 0.004 0.007 0.010 0.006]
 [149557][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.005 0.007 0.005 0.005 0.003 0.005 0.003 0.001]
-[150324][1;32m[INFO][0m[WiFi] Connected to 'OPTUS_738CC0N', RSSI: -73 dBm, Channel: 6, Uptime: 134s
+[150324][1;32m[INFO][0m[WiFi] Connected to 'REDACTED_PRIVATE_SSID', RSSI: -73 dBm, Channel: 6, Uptime: 134s
 [150519][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.007 0.005 0.002 0.002 0.003 0.004 0.004 0.002]

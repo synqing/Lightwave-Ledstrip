@@ -14,7 +14,7 @@ Modes
   modify the canonical YAML.
 
 Dependencies are stdlib only, plus PyYAML. British English in all comments,
-log strings, and user-facing output — see CLAUDE.md hard constraints.
+log strings, and user-facing output.
 
 Background: see BACKLOG.md § F-1 — the contract YAML is a regeneratable
 artefact, not a hand-curated source of truth.

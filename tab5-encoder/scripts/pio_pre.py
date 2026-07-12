@@ -9,7 +9,8 @@ Import("env")
 
 def _ndjson(hypothesis_id: str, location: str, message: str, data: dict) -> None:
     try:
-        log_path = "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/.cursor/debug.log"
+        log_path = os.environ.get("LIGHTWAVE_DEBUG_LOG", ".cursor/debug.log")
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
         rec = {
             "sessionId": "debug-session",
             "runId": "run2",

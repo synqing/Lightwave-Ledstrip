@@ -9,7 +9,7 @@
 // table with linear interpolation, costing ~1 KB flash and giving max
 // absolute error well below 0.0001 vs std::sin across [0, 2π].
 //
-// Constraints (CLAUDE.md):
+// Constraints:
 //   * No heap allocation — table is constexpr static.
 //   * O(1) lookup, ~10 ns on ESP32-S3 @ 240 MHz.
 //   * Header-only, no link-time deps; safe to include from render path.

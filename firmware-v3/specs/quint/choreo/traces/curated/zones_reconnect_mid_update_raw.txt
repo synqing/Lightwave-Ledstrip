@@ -83,7 +83,7 @@ ed=15658 corrected=11629 avg/frame=0.566 removed=1410.09
 [119466][1;32m[INFO][0m[Audio] Style: 5 conf=0.80 [R=0.30 H=0.50 M=0.00 T=0.51 D=0.80]
 [119466][1;32m[INFO][0m[Audio] [1;35mBeat:[0m BPM=60.0 conf=0.12 phase=0.82 lock=no
 [119678][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.005 0.005 0.005 0.004 0.003 0.005 0.004 0.001]
-[120272][1;32m[INFO][0m[WiFi] Connected to 'OPTUS_738CC0N', RSSI: -76 dBm, Channel: 6, Uptime: 103s
+[120272][1;32m[INFO][0m[WiFi] Connected to 'REDACTED_PRIVATE_SSID', RSSI: -76 dBm, Channel: 6, Uptime: 103s
 [120641][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.005 0.007 0.006 0.004 0.002 0.003 0.005 0.001]
 [121602][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.012 0.006 0.005 0.006 0.005 0.004 0.004 0.003]
 [122562][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.011 0.010 0.010 0.009 0.008 0.005 0.005 0.003]

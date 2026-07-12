@@ -162,13 +162,16 @@ if __name__ == "__main__":
         print("  scenario: ota_rest_happy_path | ota_rest_invalid_token", file=sys.stderr)
         print("  output_dir: directory for JSONL output", file=sys.stderr)
         print("  host: HTTP host (default: lightwaveos.local)", file=sys.stderr)
-        print("  token: OTA token (default: LW-OTA-2024-SecureUpdate)", file=sys.stderr)
+        print("  token: OTA token (required for live capture)", file=sys.stderr)
         sys.exit(1)
     
     scenario = sys.argv[1]
     output_dir = Path(sys.argv[2])
     host = sys.argv[3] if len(sys.argv) > 3 else "lightwaveos.local"
-    token = sys.argv[4] if len(sys.argv) > 4 else "LW-OTA-2024-SecureUpdate"
+    if len(sys.argv) <= 4:
+        print("ERROR: token argument is required for live OTA capture", file=sys.stderr)
+        sys.exit(2)
+    token = sys.argv[4]
     
     output_dir.mkdir(parents=True, exist_ok=True)
     raw_output = output_dir / f"{scenario}_raw.txt"

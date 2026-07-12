@@ -6,7 +6,7 @@
     "core_effects": "firmware/v2/src/effects/CoreEffects.cpp",
     "limits": "firmware/v2/src/config/limits.h",
     "chroma_spec": "firmware/v2/docs/CHROMA_ARGMAX_FIX_SPEC.md",
-    "manifest": ".claude/orchestration/effects-docs/output/manifest.json"
+    "manifest": "firmware-v3/docs/effects-catalog/inventory.json"
   },
   "total_effects": 162,
   "max_effects_limit": 162,

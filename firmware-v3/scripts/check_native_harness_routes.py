@@ -17,7 +17,6 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 SKIP_FILES = {
-    "docs/superpowers/plans/2026-05-05-native-harness-hardening.md",
     "firmware-v3/scripts/check_native_harness_routes.py",
 }
 
@@ -41,9 +40,7 @@ STALE_PATTERNS = (
 
 def is_skipped(path: Path) -> bool:
     rel = path.relative_to(REPO_ROOT).as_posix()
-    if rel in SKIP_FILES:
-        return True
-    return rel.startswith("docs/tooling/notebooklm-bundles/")
+    return rel in SKIP_FILES
 
 
 def iter_text_files() -> list[Path]:

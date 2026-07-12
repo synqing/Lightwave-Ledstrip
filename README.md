@@ -70,7 +70,6 @@ LightwaveOS/
   lightwave-ios-v2/  iOS companion app (SwiftUI, iOS 17+)
   tab5-encoder/      M5Stack Tab5 hardware controller (LVGL 9.3)
   k1-composer/       Web-based effect composer dashboard
-  instructions/      Governance policies and changelog fragments
 ```
 
 ---
@@ -207,7 +206,7 @@ All effects radiate from LEDs 79/80 outward to the edges, creating symmetric int
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for repository structure rules, changelog fragment process, and DCO sign-off requirements.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution hygiene, verification, and DCO sign-off requirements.
 
 ## License
 

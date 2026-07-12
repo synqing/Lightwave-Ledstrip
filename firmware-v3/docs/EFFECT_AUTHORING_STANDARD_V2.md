@@ -7,7 +7,7 @@ abstract: "Effect Authoring Standard v2 for K1 LightwaveOS. Converts the older i
 **Status:** DRAFT - Captain-approved for documentation/tooling package on 2026-05-06. No firmware behaviour changes are made by this document.
 
 **Authority anchors:**
-- `AGENTS.md:31-39` defines the hard effect constraints: centre-origin, no rainbows, no heap in render paths, 120 FPS / 2.0 ms, dt-correct smoothing, sub-8 ms latency, and British English.
+- Project effect constraints define centre-origin, no rainbows, no heap in render paths, 120 FPS / 2.0 ms, dt-correct smoothing, sub-8 ms latency, and British English.
 - `firmware-v3/docs/EFFECT_DEVELOPMENT_STANDARD.md:24-52` defines the current render pipeline and the 2 ms effect slot before colour correction, tone mapping, and LED output.
 - `firmware-v3/docs/EFFECT_FRAMEWORK_STANDARD.md:32-114` records the existing MUST/SHOULD rules for thread separation, smoothing, centre-origin, chroma discipline, silence gating, and dt tau smoothing.
 - `firmware-v3/docs/audio-visual/AUDIO_FEATURE_SURFACE_V2_CONTRACT.md:24-63` ranks raw substrates below effect-facing vectors, semantic scalars, events, envelopes, and validity metadata; new production effects must not directly scan raw `bins256`.
@@ -42,7 +42,7 @@ An effect is not authoring-complete until it has:
 
 Before creating, repairing, or promoting an effect, read:
 
-1. `AGENTS.md` hard constraints.
+1. Project hard constraints.
 2. `firmware-v3/docs/EFFECT_DEVELOPMENT_STANDARD.md`.
 3. `firmware-v3/docs/EFFECT_FRAMEWORK_STANDARD.md`.
 4. `firmware-v3/docs/EFFECTS_BEHAVIORAL_REFERENCE.md` for colour-correction, tone-map, silence-gate, and palette caveats.

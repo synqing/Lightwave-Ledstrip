@@ -27,7 +27,7 @@
 // frame) rather than a sustained blow-up — acceptable degradation given a
 // hard 2.0 ms render ceiling.
 //
-// Constraints (CLAUDE.md):
+// Constraints:
 //   * No heap allocation.
 //   * O(1), branchy but inlinable; ~50 ns on ESP32-S3 @ 240 MHz.
 //   * British English in comments.

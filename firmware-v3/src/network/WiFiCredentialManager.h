@@ -8,7 +8,7 @@
  * ║  Stored credentials exist for the serial `wifi connect` escape     ║
  * ║  hatch ONLY (known unreliable). Do NOT build auto-connect logic,   ║
  * ║  credential provisioning flows, or STA features that depend on     ║
- * ║  these credentials. See WiFiManager.h and CLAUDE.md.               ║
+ * ║  these credentials. See WiFiManager.h for AP-only behaviour.       ║
  * ╚══════════════════════════════════════════════════════════════════════╝
  *
  * Features:

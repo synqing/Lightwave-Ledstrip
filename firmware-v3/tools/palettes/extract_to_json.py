@@ -49,7 +49,7 @@ declarations, so no fixed-256 sampling is required for the current corpus.
 
 If a future palette is added as a fixed 256-entry table, extend `parse_cpp()`
 to detect that form and fall back to the 8-stop sweep at positions
-[0, 36, 72, 108, 144, 180, 216, 255]/255 — see the spec in CLAUDE.md.
+[0, 36, 72, 108, 144, 180, 216, 255]/255.
 
 DETERMINISM
 -----------
@@ -60,7 +60,7 @@ DETERMINISM
 
 RE-RUN
 ------
-    cd /Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip
+    cd Lightwave-Ledstrip
     python3 firmware-v3/tools/palettes/extract_to_json.py
 
 By default writes

@@ -15,7 +15,7 @@
 [16764][1;32m[INFO][0m[WiFi] Event: Got IP - 192.168.0.27
 [16765][0;37m[DEBUG][0m[WiFi] WiFi sleep disabled after GOT_IP (prevents ASSOC_LEAVE)
 [16780][1;32m[INFO][0m[WiFi] Connected! IP: 192.168.0.27, RSSI: -65 dBm
-[16877][1;32m[INFO][0m[Main] WiFi: CONNECTED to OPTUS_738CC0N
+[16877][1;32m[INFO][0m[Main] WiFi: CONNECTED to REDACTED_PRIVATE_SSID
 [16877][1;32m[INFO][0m[Main] IP: 192.168.0.27
 [16877][1;32m[INFO][0m[Main] Starting Web Server...
 [16877][1;32m[INFO][0m[Main] Plugin Manager: Wired to WebServer
@@ -348,7 +348,7 @@ ot found, using defaults
 [3189][0;37m[DEBUG][0m[Renderer] Speed: 15
 [3190][1;32m[INFO][0m[Main] Using defaults (first boot)
 [3190][1;32m[INFO][0m[Main] Initializing WiFiManager...
-[3190][1;32m[INFO][0m[WiFi] Configured networks: OPTUS_738CC0N (primary), VX220-013F (fallback)
+[3190][1;32m[INFO][0m[WiFi] Configured networks: REDACTED_PRIVATE_SSID (primary), REDACTED_PRIVATE_SSID (fallback)
 [3190][1;32m[INFO][0m[WiFi] Starting non-blocking WiFi management
 [  3205][D][WiFiGeneric.cpp:1040] _eventCallback(): Arduino Event: 0 - WIFI_READY
 [  3249][D][WiFiGeneric.cpp:1040] _eventCallback(): Arduino Event: 2 - STA_START
@@ -368,9 +368,9 @@ ot found, using defaults
 [ 10169][D][WiFiGeneric.cpp:1040] _eventCallback(): Arduino Event: 1 - SCAN_DONE
 [10177][0;37m[DEBUG][0m[WiFi] Event: Scan complete
 [10178][0;37m[DEBUG][0m[WiFi] Found 10 networks
-[10178][1;32m[INFO][0m[WiFi] Best channel for 'OPTUS_738CC0N': 6
+[10178][1;32m[INFO][0m[WiFi] Best channel for 'REDACTED_PRIVATE_SSID': 6
 [10278][0;37m[DEBUG][0m[WiFi] STATE: CONNECTING
-[10278][1;32m[INFO][0m[WiFi] Connecting to 'OPTUS_738CC0N' on channel 6
+[10278][1;32m[INFO][0m[WiFi] Connecting to 'REDACTED_PRIVATE_SSID' on channel 6
 [10287][0;37m[DEBUG][0m[WiFi] WiFi sleep disabled, auto-reconnect enabled
 [ 11076][D][WiFiGeneric.cpp:1040] _eventCallback(): Arduino Event: 4 - STA_CONNECTED
 [11085][1;32m[INFO][0m[WiFi] Event: Connected to AP
@@ -380,7 +380,7 @@ ot found, using defaults
 [11605][1;32m[INFO][0m[WiFi] Event: Got IP - 192.168.0.27
 [11606][0;37m[DEBUG][0m[WiFi] WiFi sleep disabled after GOT_IP (prevents ASSOC_LEAVE)
 [11656][1;32m[INFO][0m[WiFi] Connected! IP: 192.168.0.27, RSSI: -66 dBm
-[11709][1;32m[INFO][0m[Main] WiFi: CONNECTED to OPTUS_738CC0N
+[11709][1;32m[INFO][0m[Main] WiFi: CONNECTED to REDACTED_PRIVATE_SSID
 [11709][1;32m[INFO][0m[Main] IP: 192.168.0.27
 [11710][1;32m[INFO][0m[Main] Starting Web Server...
 [11710][1;32m[INFO][0m[Main] Plugin Manager: Wired to WebServer

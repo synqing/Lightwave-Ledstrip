@@ -235,7 +235,7 @@ Theoretical estimate: 0.1% (actual: 0.168%)
 [328353][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.012 0.010 0.014 0.012 0.014 0.013 0.011 0.006]
 [329313][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.024 0.016 0.013 0.008 0.008 0.011 0.003 0.003]
 [330275][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.008 0.007 0.014 0.013 0.008 0.008 0.006 0.002]
-[330632][1;32m[INFO][0m[WiFi] Connected to 'OPTUS_738CC0N', RSSI: -77 dBm, Channel: 6, Uptime: 318s
+[330632][1;32m[INFO][0m[WiFi] Connected to 'REDACTED_PRIVATE_SSID', RSSI: -77 dBm, Channel: 6, Uptime: 318s
 [331016][1;32m[INFO][0m[AudioCapture] [1;33mDMA:[0m hop=10540 R=[F9D94000..F9EB8000] >>10=[-100784..-99616]
 [331027][1;32m[INFO][0m[Audio] Audio alive: [1;33mmic=-54.2dB[0m cap=10540 pk=147 pkC=1470 rms=0.0189->0.000 pre=0.0019 g=9.63 dc=-0.8 clip=0 flux=0.000 min=-1306 max=1470 mean=-1.4
 [331028][1;32m[INFO][0m[Audio] Spike stats: frames=10540 detected=43055 corrected=31848 avg/frame=0.693 removed=3456.38

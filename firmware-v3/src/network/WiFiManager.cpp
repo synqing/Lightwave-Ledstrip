@@ -906,7 +906,7 @@ void WiFiManager::setState(WiFiState newState) {
             // CRITICAL FIX: Clear stale event bits to avoid false-positive connects.
             // EventGroup bits persist across interrupted connections, which can cause
             // the "Connected! IP: 0.0.0.0" bug when bits from a previous attempt
-            // are still set. This fix is documented in CLAUDE.md as LOAD-BEARING.
+            // are still set. This fix is load-bearing for AP-only operation.
             if (m_wifiEventGroup) {
                 xEventGroupClearBits(m_wifiEventGroup,
                     EVENT_CONNECTED | EVENT_GOT_IP | EVENT_CONNECTION_FAILED);

@@ -15,7 +15,7 @@
 //   - docs/research/synergy-topology/Topology_Reconciliation.md §3 [C-5], §6 item 7
 //   - docs/research/synergy-topology/PASS_4_ADVERSARIAL_STRESS_TEST.md §1 [A-05] + §4.1
 //
-// Hard constraints (CLAUDE.md):
+// Hard constraints:
 //   - Centre-origin invariant: BOTH strips render the same wavelength λ; the
 //     resulting fringe is symmetric about LED 79/80 by construction (each strip
 //     is sampled with the same per-LED index function, so the centre of the

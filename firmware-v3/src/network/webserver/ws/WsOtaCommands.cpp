@@ -1001,7 +1001,7 @@ static void handleOtaVerify(AsyncWebSocketClient* client, JsonDocument& doc, con
             return;
         }
         if (!constTimeHexEquals(computedHex, s_otaExpectedSha256, 64)) {
-            // Log both digests for diagnosis. British English as per CLAUDE.md.
+            // Log both digests for diagnosis.
             char detail[160];
             snprintf(detail, sizeof(detail),
                      "sha256 mismatch: computed=%.16s... expected=%.16s...",

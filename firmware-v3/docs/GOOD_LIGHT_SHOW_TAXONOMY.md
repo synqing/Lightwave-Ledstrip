@@ -7,7 +7,7 @@ abstract: "K1 Good Light Show Taxonomy. Defines how effects are judged as light 
 **Status:** DRAFT - Captain-approved for documentation/tooling package on 2026-05-06. No firmware behaviour changes are made by this document.
 
 **Authority anchors:**
-- `AGENTS.md:31-39` defines centre-origin, no-rainbow, no-heap, timing, latency, and language constraints.
+- Project effect constraints define centre-origin, no-rainbow, no-heap, timing, latency, and language requirements.
 - `firmware-v3/docs/effects-catalog/PATTERN_TAXONOMY.md:9-23` defines the current four-axis effect catalogue and centre-origin baseline.
 - `firmware-v3/docs/EFFECTS_BEHAVIORAL_REFERENCE.md:11-54` documents live behavioural gates: colour correction bypass, tone mapping, silence gate, and palette caveats.
 - `firmware-v3/docs/research/PHASE5_EFFECTS_RESEARCH_SYNTHESIS_2026-04-27.md:172-211` records the de-facto brand filter: visceral curiosity, liquid centre-origin fields, bounded palette arcs, and rejection of graph-like or fragmented visuals.

@@ -684,15 +684,6 @@ static void handleActionButton(uint8_t buttonIndex) {
     // Get current state (use defaults if not valid)
     ColorCorrectionState cc = g_wsClient.getColorCorrectionState();
     
-    // #region agent log (DISABLED)
-    // FILE* logFile = fopen("/Users/spectrasynq/Workspace_Management/Software/PRISM.tab5/.cursor/debug.log", "a");
-    // if (logFile != nullptr) {
-    //     fprintf(logFile, "{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H5\",\"location\":\"main.cpp:215\",\"message\":\"handleActionButton.stateBefore\",\"data\":{\"buttonIndex\":%d,\"gammaEnabled\":%d,\"gammaValue\":%.1f,\"aeEnabled\":%d,\"aeTarget\":%d,\"brownEnabled\":%d,\"mode\":%d,\"valid\":%d},\"timestamp\":%lu}\n",
-    //             buttonIndex, cc.gammaEnabled ? 1 : 0, cc.gammaValue, cc.autoExposureEnabled ? 1 : 0,
-    //             cc.autoExposureTarget, cc.brownGuardrailEnabled ? 1 : 0, cc.mode, cc.valid ? 1 : 0, (unsigned long)millis());
-    //     fclose(logFile);
-    // }
-        // #endregion
     if (!cc.valid) {
         // Initialize with defaults if not synced yet
         cc.valid = true;

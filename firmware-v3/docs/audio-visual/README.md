@@ -131,4 +131,3 @@ When updating these documents:
 ## See Also
 
 - [docs/api/API_V1.md](../api/API_V1.md) - REST/WebSocket API documentation
-- [CLAUDE.md](../../CLAUDE.md) - Development guidelines

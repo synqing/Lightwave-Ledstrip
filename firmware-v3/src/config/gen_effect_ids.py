@@ -287,7 +287,7 @@ inline uint8_t effectSequence(EffectId id) {
 
 if __name__ == "__main__":
     inventory = Path(__file__).resolve().parent.parent.parent.parent.parent / \
-        ".claude/orchestration/effects-docs/output/inventory.json"
+        "firmware-v3/docs/effects-catalog/inventory.json"
     if len(sys.argv) > 1:
         inventory = Path(sys.argv[1])
     generate(inventory)

@@ -13,12 +13,12 @@
  * Usage (curl):
  *   # Firmware update
  *   curl -X POST http://lightwaveos.local/api/v1/firmware/update \
- *        -H "X-OTA-Token: LW-OTA-2024-SecureUpdate" \
+ *        -H "X-OTA-Token: CHANGE_ME_OTA_TOKEN" \
  *        -F "firmware=@firmware.bin"
  *
  *   # Filesystem update (LittleFS image)
  *   curl -X POST http://lightwaveos.local/api/v1/firmware/filesystem \
- *        -H "X-OTA-Token: LW-OTA-2024-SecureUpdate" \
+ *        -H "X-OTA-Token: CHANGE_ME_OTA_TOKEN" \
  *        -F "filesystem=@littlefs.bin"
  */
 

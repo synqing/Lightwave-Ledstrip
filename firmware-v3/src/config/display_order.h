@@ -305,8 +305,8 @@ constexpr EffectId DISPLAY_ORDER[] = {
 
     // SB Waveform Oscilloscope — removed from display order pending algorithmic
     // redesign. Effects remain registered (accessible via API/serial) for dev.
-    // See .claude/handoff.md for context: SB 3.0.0 waveform was dead code,
-    // activity-gated waveform data makes raw time-domain display difficult.
+    // SB 3.0.0 waveform was dead code; activity-gated waveform data makes
+    // raw time-domain display difficult.
     // EID_SB_WAVEFORM_OSCILLOSCOPE,         // 0x130C — dev only
     // EID_SB_WAVEFORM_OSCILLOSCOPE_BRIGHT,  // 0x130D — dev only
 

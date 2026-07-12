@@ -59,7 +59,6 @@ mocks. A standalone env keeps the regression check isolated.
 ## Related work
 
 - Companion ADR: `docs/adr/zone-composer-architecture-decisions.md`
-- Companion plan: `~/.claude/plans/zone-composer-instrument-program.md`
 - Verification pass V4 confirmed only two declarations existed (zones + gradient,
   different domains) — rename, not unify.
 

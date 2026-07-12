@@ -188,8 +188,8 @@ python3 tools/capture_ota_ws_trace_direct.py ota_ws_reconnect_mid_transfer trace
 python3 tools/capture_ota_ws_trace_direct.py ota_ws_abort_and_retry traces/curated/
 
 # Capture REST OTA traces
-python3 tools/capture_ota_rest_trace_direct.py ota_rest_happy_path traces/curated/ lightwaveos.local LW-OTA-2024-SecureUpdate
-python3 tools/capture_ota_rest_trace_direct.py ota_rest_invalid_token traces/curated/ lightwaveos.local LW-OTA-2024-SecureUpdate
+python3 tools/capture_ota_rest_trace_direct.py ota_rest_happy_path traces/curated/ lightwaveos.local CHANGE_ME_OTA_TOKEN
+python3 tools/capture_ota_rest_trace_direct.py ota_rest_invalid_token traces/curated/ lightwaveos.local CHANGE_ME_OTA_TOKEN
 ```
 
 The capture scripts:

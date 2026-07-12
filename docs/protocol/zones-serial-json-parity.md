@@ -172,8 +172,6 @@ After step 6, every effect's already-declared parameters become per-zone-tunable
 ## Cross-references
 
 - Command matrix: [`zones-command-matrix.md`](zones-command-matrix.md)
-- ADR: [`../adr/zone-composer-architecture-decisions.md`](../adr/zone-composer-architecture-decisions.md)
-- Companion plan: `~/.claude/plans/zone-composer-instrument-program.md`
 - F1 commit (BlendMode range check, zone.setBlend at line 680): `9d7bc261`
 - Verification pass V6 source: 5-SSA context report, in conversation history
 

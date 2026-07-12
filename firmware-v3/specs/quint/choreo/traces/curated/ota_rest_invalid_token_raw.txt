@@ -18,7 +18,7 @@ Theoretical estimate: 0.1% (actual: 0.168%)
 [Status] FPS: 137, CPU: 87%, Effect: Fire
 [22016][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.013 0.011 0.014 0.010 0.004 0.007 0.004 0.002]
 [22725][1;32m[INFO][0m[OtaHandlers] OTA: Upload starting: firmware.bin
-[22726][1;35m[WARN][0m[OtaHandlers] OTA: Invalid token (expected: LW-OTA-2024-SecureUpdate)
+[22726][1;35m[WARN][0m[OtaHandlers] OTA: Invalid token (expected: CHANGE_ME_OTA_TOKEN)
 {"event":"ota.rest.failed","ts_mono_ms":22726,"reason":"Unauthorized","bytesWritten":0,"schemaVersion":"1.0.0"}
 [22769][1;32m[INFO][0m[AudioCapture] [1;33mDMA:[0m hop=620 R=[F9CA8000..F9F88000] >>10=[-101728..-98784]
 [22779][1;32m[INFO][0m[Audio] Audio alive: [1;33mmic=-45.4dB[0m cap=620 pk=442 pkC=5169 rms=0.0657->0.001 pre=0.0054 g=12.14 dc=17.9 clip=0 flux=0.000 min=-2842 max=5169 mean=46.2
@@ -34,7 +34,7 @@ Theoretical estimate: 0.1% (actual: 0.168%)
 [27799][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.012 0.006 0.007 0.007 0.003 0.003 0.004 0.001]
 [28757][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.015 0.009 0.007 0.006 0.005 0.006 0.004 0.002]
 [29717][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.010 0.005 0.007 0.008 0.002 0.002 0.003 0.001]
-[30044][1;32m[INFO][0m[WiFi] Connected to 'OPTUS_738CC0N', RSSI: -75 dBm, Channel: 6, Uptime: 18s
+[30044][1;32m[INFO][0m[WiFi] Connected to 'REDACTED_PRIVATE_SSID', RSSI: -75 dBm, Channel: 6, Uptime: 18s
 [30677][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.013 0.005 0.006 0.005 0.003 0.003 0.004 0.001]
 [31635][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.011 0.003 0.004 0.005 0.002 0.003 0.003 0.001]
 [Status] FPS: 137, CPU: 86%, Effect: Fire

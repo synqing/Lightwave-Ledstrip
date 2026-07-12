@@ -152,7 +152,7 @@ pio device monitor -p /dev/cu.usbmodem101 -d tab5-encoder -b 115200
 
        ; Secondary WiFi (v2 device AP - automatic fallback)
        -DWIFI_SSID2=\"LightwaveOS-AP\"
-       -DWIFI_PASSWORD2=\"SpectraSynq\"
+       -DWIFI_PASSWORD2=\"YourDeviceApPassword\"
    ```
 3. The file is gitignored - your credentials stay private
 
@@ -283,7 +283,6 @@ src/ui/
 tab5-encoder/
 ├── platformio.ini                  # Build config with LVGL flags
 ├── README.md                       # This file
-├── CLAUDE.md                       # Agent guidance
 ├── wifi_credentials.ini            # WiFi config (gitignored)
 ├── wifi_credentials.ini.template   # Template
 ├── scripts/
@@ -400,7 +399,7 @@ Use the exact commands from the "CORRECT BUILD COMMANDS" section above. The `PAT
 ### WebSocket Won't Connect
 
 1. Check that v2 device is broadcasting `LightwaveOS-AP` (not `LightwaveOS`)
-2. Verify password is `SpectraSynq` on both devices
+2. Verify the AP password matches on both devices
 3. Ensure v2 is in STA+AP mode (runs AP even when on WiFi)
 4. Monitor serial output for WiFi status messages
 5. Use `find_device_ip.sh` to verify v2 IP address

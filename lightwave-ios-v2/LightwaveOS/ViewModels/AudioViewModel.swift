@@ -428,11 +428,11 @@ class AudioViewModel {
 
         audioTuningDebounceTask?.cancel()
 
-        let payload: [String: Any] = [
+        let payload: [String: any Sendable] = [
             "controlBus": [
                 "alphaFast": alphaFast,
                 "alphaSlow": alphaSlow
-            ],
+            ] as [String: any Sendable],
             "pipeline": [
                 "bandAttack": bandAttack,
                 "bandRelease": bandRelease,
@@ -440,11 +440,11 @@ class AudioViewModel {
                 "heavyBandRelease": heavyRelease,
                 "silenceHysteresisMs": silenceHysteresis,
                 "silenceThreshold": silenceThreshold
-            ],
+            ] as [String: any Sendable],
             "novelty": [
                 "useSpectralFlux": spectralFluxEnabled,
                 "spectralFluxScale": fluxScale
-            ]
+            ] as [String: any Sendable]
         ]
 
         audioTuningDebounceTask = Task { [weak self] in

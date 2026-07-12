@@ -932,8 +932,12 @@ actor RESTClient {
         try await request("GET", path: "audio/parameters")
     }
 
-    func patchAudioTuning(_ payload: [String: Any]) async throws {
-        let _: GenericResponse = try await request("PATCH", path: "audio/parameters", body: payload)
+    func patchAudioTuning(_ payload: [String: any Sendable]) async throws {
+        var body: [String: Any] = [:]
+        for (key, value) in payload {
+            body[key] = value
+        }
+        let _: GenericResponse = try await request("PATCH", path: "audio/parameters", body: body)
     }
 
     func getAudioFFT() async throws -> AudioFFTResponse {
@@ -1171,5 +1175,4 @@ actor RESTClient {
         try await request("GET", path: "shows/current")
     }
 }
-
 

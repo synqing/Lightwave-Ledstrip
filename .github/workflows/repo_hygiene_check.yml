@@ -31,17 +31,9 @@ jobs:
             # Hidden entries (dotfiles / dotdirs)
             ".git"
             ".github"
-            ".claude"
-            ".codex"
             ".gitignore"
-            ".mcp.json"
             ".pre-commit-config.yaml"
-            ".worktreeinclude"
             # Governance / standard root files
-            "AGENTS.md"
-            "BACKLOG.md"
-            "CHANGELOG.md"
-            "CLAUDE.md"
             "CONTRIBUTING.md"
             "LICENSE"
             "NOTICE"
@@ -52,13 +44,14 @@ jobs:
             "docs"
             "firmware-v3"
             "harness"
-            "instructions"
             "k1-composer"
+            "k1-node-composer"
             "lightwave-dashboard"
             "lightwave-ios-v2"
             "scripts"
             "tab5-encoder"
             "tools"
+            "zone-mixer"
           )
 
           echo "Checking root directory entries against allowlist..."
@@ -135,8 +128,7 @@ jobs:
 
           # Governance files exempt from kebab-case
           EXEMPT=(
-            "AGENTS.md" "CLAUDE.md" "README.md"
-            "CONTRIBUTING.md" "CHANGELOG.md"
+            "README.md" "CONTRIBUTING.md" "LICENSE" "NOTICE" "TRADEMARK.md"
           )
 
           echo "Checking root-level filename policy..."
@@ -186,6 +178,11 @@ jobs:
         run: |
           set -euo pipefail
 
+          if [ ! -d instructions/changelog ]; then
+            echo "No tracked changelog fragment directory; skipping legacy fragment gate"
+            exit 0
+          fi
+
           BASE_REF="${BASE_REF:-main}"
           git fetch --no-tags --prune origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}" 2>/dev/null || true
 
@@ -225,6 +222,11 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: |
           set -euo pipefail
+
+          if [ ! -d instructions/changelog ]; then
+            echo "No tracked changelog fragment directory; skipping legacy fragment validation"
+            exit 0
+          fi
 
           BASE_REF="${BASE_REF:-main}"
 

@@ -17,6 +17,11 @@ on:
       - 'firmware-v3/test/test_audio/**'
   workflow_dispatch:  # Allow manual trigger
 
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
 env:
   PLATFORMIO_CORE_DIR: .platformio
 
@@ -73,6 +78,9 @@ jobs:
           pio test -e native_audio_benchmark --verbose > benchmark_output.log 2>&1 || true
           cat benchmark_output.log
 
+      - name: Create results directory
+        run: mkdir -p firmware-v3/test/results
+
       - name: Parse benchmark results
         id: parse
         run: |
@@ -86,9 +94,6 @@ jobs:
             firmware-v3/benchmark_output.log \
             --format summary \
             --platformio
-
-      - name: Create results directory
-        run: mkdir -p firmware-v3/test/results
 
       - name: Detect regressions
         id: regression

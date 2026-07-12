@@ -30,7 +30,7 @@ jobs:
         run: |
           xcodebuild build \
             -scheme LightwaveOS \
-            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -destination 'platform=iOS Simulator,name=iPhone 17' \
             -skipPackagePluginValidation
 
       - name: Run tests
@@ -38,5 +38,5 @@ jobs:
         run: |
           xcodebuild test \
             -scheme LightwaveOS \
-            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -destination 'platform=iOS Simulator,name=iPhone 17' \
             -skipPackagePluginValidation

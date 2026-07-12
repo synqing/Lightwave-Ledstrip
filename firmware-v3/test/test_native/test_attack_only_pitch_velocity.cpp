@@ -25,6 +25,7 @@
 #include <unity.h>
 
 #include <cmath>
+#include <cstdio>
 #include <cstdint>
 #include <cstring>
 #include <set>

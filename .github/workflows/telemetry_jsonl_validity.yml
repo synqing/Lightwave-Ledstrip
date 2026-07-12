@@ -86,26 +86,26 @@ jobs:
             export VALIDATE_FILE="$TMP_JSONL"
             export VALIDATE_RAW_FILE="$raw_file"
             if ! python3 <<'PYEOF'; then
-import json
-import os
-import sys
+          import json
+          import os
+          import sys
 
-validate_file = os.environ['VALIDATE_FILE']
-raw_file = os.environ['VALIDATE_RAW_FILE']
+          validate_file = os.environ['VALIDATE_FILE']
+          raw_file = os.environ['VALIDATE_RAW_FILE']
 
-with open(validate_file, 'r') as f:
-    for line_num, line in enumerate(f, start=1):
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            json.loads(line)
-        except json.JSONDecodeError as e:
-            print(f"ERROR: {raw_file} line {line_num} is not valid JSON: {e}", file=sys.stderr)
-            print(f"  Line: {line[:200]}", file=sys.stderr)  # Truncate for readability
-            sys.exit(1)
-sys.exit(0)
-PYEOF
+          with open(validate_file, 'r') as f:
+              for line_num, line in enumerate(f, start=1):
+                  line = line.strip()
+                  if not line:
+                      continue
+                  try:
+                      json.loads(line)
+                  except json.JSONDecodeError as e:
+                      print(f"ERROR: {raw_file} line {line_num} is not valid JSON: {e}", file=sys.stderr)
+                      print(f"  Line: {line[:200]}", file=sys.stderr)  # Truncate for readability
+                      sys.exit(1)
+          sys.exit(0)
+          PYEOF
               echo "ERROR: $raw_file contains invalid JSON lines"
               rm -f "$TMP_JSONL"
               FAILED=1

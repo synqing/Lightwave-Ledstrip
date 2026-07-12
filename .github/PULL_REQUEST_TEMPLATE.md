@@ -28,7 +28,6 @@
 ## Visual Pipeline and Memory Safety (Mandatory)
 
 Reference context:
-- `AGENTS.md` -> Visual Pipeline Guardrails (Agents)
 - `firmware-v3/docs/INCIDENT_LED_STABILITY_POSTMORTEM_2026-03-04.md`
 - `firmware-v3/docs/STAGE1_CHERRY_PICK_PLAN.md`
 - `firmware-v3/docs/TECHNICAL_DEBT_AUDIT_2026-03-04.md` (H-5 + addendum)

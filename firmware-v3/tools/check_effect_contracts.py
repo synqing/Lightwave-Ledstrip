@@ -325,6 +325,8 @@ CENTRE_ORIGIN_PATTERN = re.compile(
     r"|writeCentrePair"
     r"|79\s*-\s*\w"
     r"|80\s*\+\s*\w"
+    r"|centre\s*-\s*\w"
+    r"|rightCentre\s*\+\s*\w"
     r"|NUM_LEDS\s*/\s*2"
     r"|numLeds\s*/\s*2"
 )

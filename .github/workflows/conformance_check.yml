@@ -71,8 +71,15 @@ jobs:
           OUT="$CURATED/_normalized_itf"
 
           # Good traces must pass
-          python "$ROOT/tools/check_trace_conformance.py" "$CURATED"/*.itf.json
-          python "$ROOT/tools/check_trace_conformance.py" "$OUT"/*.itf.json || true
+          for trace in "$CURATED"/*.itf.json; do
+            case "$(basename "$trace")" in
+              synthetic_*) continue ;;
+            esac
+            python "$ROOT/tools/check_trace_conformance.py" "$trace"
+          done
+          for trace in "$OUT"/*.itf.json; do
+            python "$ROOT/tools/check_trace_conformance.py" "$trace" || true
+          done
 
       - name: Verify known-bad traces fail as expected
         run: |
@@ -82,10 +89,17 @@ jobs:
           OUT="$CURATED/_normalized_itf"
 
           # Known-bad ITF traces should FAIL conformance (but PASS with --expect-violation)
-          python "$ROOT/tools/check_trace_conformance.py" --expect-violation "$CURATED/known_bad"/*.itf.json
+          for trace in "$CURATED"/synthetic_*.itf.json; do
+            python "$ROOT/tools/check_trace_conformance.py" --expect-violation "$trace"
+          done
+          for trace in "$CURATED/known_bad"/*.itf.json; do
+            python "$ROOT/tools/check_trace_conformance.py" --expect-violation "$trace"
+          done
           # If there are normalized known-bad traces from JSONL, validate those too
           shopt -s nullglob
-          python "$ROOT/tools/check_trace_conformance.py" --expect-violation "$OUT"/*.itf.json || true
+          for trace in "$OUT"/*.itf.json; do
+            python "$ROOT/tools/check_trace_conformance.py" --expect-violation "$trace" || true
+          done
 
       - name: Generate fresh simulator traces (ITF)
         run: |

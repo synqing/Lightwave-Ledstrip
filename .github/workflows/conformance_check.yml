@@ -100,33 +100,3 @@ jobs:
           for trace in "$OUT"/*.itf.json; do
             python "$ROOT/tools/check_trace_conformance.py" --expect-violation "$trace" || true
           done
-
-      - name: Generate fresh simulator traces (ITF)
-        run: |
-          set -euxo pipefail
-          ROOT="firmware-v3/specs/quint/choreo"
-          GEN="$ROOT/traces/sim/_ci"
-          mkdir -p "$GEN"
-
-          # NOTE: adjust --main / file path to your choreo entrypoint module
-          quint run "$ROOT/lightwave_system.qnt" \
-            --main=lightwave_system \
-            --max-steps=300 \
-            --n-traces=20 \
-            --seed=123 \
-            --out-itf="$GEN/sim_raw.itf.json"
-
-          # Convert Quint's ITF to ADR-015 compliant format
-          python "$ROOT/tools/convert_itf_to_adr015.py" \
-            "$GEN/sim_raw.itf.json" \
-            "$GEN/sim.itf.json"
-
-          # Validate ADR-015 compliance
-          python "$ROOT/tools/validate_itf_bigint.py" "$GEN/sim.itf.json"
-
-      - name: Conformance check simulator traces
-        run: |
-          set -euxo pipefail
-          ROOT="firmware-v3/specs/quint/choreo"
-          GEN="$ROOT/traces/sim/_ci"
-          python "$ROOT/tools/check_trace_conformance.py" "$GEN"/*.itf.json

@@ -1,0 +1,288 @@
+======================================================================
+DE-SB VERIFIER — root=/private/tmp/k1_edgemixer_on_im73d
+======================================================================
+TOTAL residual (excluding sanctioned magic bytes):
+  sensory_bridge  : 31
+  sb_lower        : 2551
+  SB_upper        : 1488
+  SB_caps         : 730
+  GRAND TOTAL     : 4800
+
+FILES WITH RESIDUAL: 168
+   1048  SPECTRASYNQ_K1_FIRMWARE/audio/sb_tempo.cpp   {'sb_lower': 729, 'SB_upper': 306, 'SB_caps': 13}
+    283  SPECTRASYNQ_K1_FIRMWARE/audio/sb_onset_beat.cpp   {'sb_lower': 160, 'SB_upper': 21, 'SB_caps': 102}
+    256  SPECTRASYNQ_K1_FIRMWARE/director/sb_smart_director.cpp   {'sb_lower': 129, 'SB_upper': 87, 'SB_caps': 40}
+    163  SPECTRASYNQ_K1_FIRMWARE/SPECTRASYNQ_K1_FIRMWARE.ino   {'sensory_bridge': 1, 'sb_lower': 69, 'SB_upper': 80, 'SB_caps': 13}
+    131  scripts/regression-harness/smart_director_replay.py   {'sb_lower': 49, 'SB_upper': 32, 'SB_caps': 50}
+    125  SPECTRASYNQ_K1_FIRMWARE/control/sb_effect_queue.cpp   {'sb_lower': 43, 'SB_upper': 34, 'SB_caps': 48}
+    122  tests/test_rate_consistency.py   {'sb_lower': 19, 'SB_upper': 100, 'SB_caps': 3}
+    121  scripts/regression-harness/test_acf_salience.cpp   {'sb_lower': 62, 'SB_upper': 57, 'SB_caps': 2}
+    119  scripts/regression-harness/golden/oracle_smart_director.py   {'sb_lower': 38, 'SB_upper': 43, 'SB_caps': 38}
+    117  SPECTRASYNQ_K1_FIRMWARE/serial/serial_menu.h   {'sensory_bridge': 5, 'sb_lower': 69, 'SB_upper': 23, 'SB_caps': 20}
+     94  tests/test_smart_visual_engine_static.py   {'sb_lower': 75, 'SB_upper': 9, 'SB_caps': 10}
+     80  SPECTRASYNQ_K1_FIRMWARE/director/sb_mode_selection.cpp   {'sb_lower': 67, 'SB_upper': 8, 'SB_caps': 5}
+     80  scripts/regression-harness/tempo_replay.py   {'sensory_bridge': 1, 'sb_lower': 46, 'SB_upper': 13, 'SB_caps': 20}
+     78  SPECTRASYNQ_K1_FIRMWARE/director/sb_visual_hooks.cpp   {'sb_lower': 65, 'SB_caps': 13}
+     64  scripts/regression-harness/golden/oracle_serial_replay.py   {'sb_lower': 39, 'SB_upper': 18, 'SB_caps': 7}
+     61  SPECTRASYNQ_K1_FIRMWARE/serial/serial_cmd_handlers.cpp   {'sb_lower': 45, 'SB_upper': 10, 'SB_caps': 6}
+     58  SPECTRASYNQ_K1_FIRMWARE/audio/sb_musical_saliency.cpp   {'sb_lower': 25, 'SB_upper': 11, 'SB_caps': 22}
+     58  scripts/regression-harness/onset_beat_replay.py   {'sb_lower': 30, 'SB_upper': 1, 'SB_caps': 27}
+     58  scripts/regression-harness/visual_hooks_replay.py   {'sb_lower': 25, 'SB_caps': 33}
+     53  SPECTRASYNQ_K1_FIRMWARE/control/sb_k1_control_facade.cpp   {'sb_lower': 35, 'SB_upper': 8, 'SB_caps': 10}
+     52  SPECTRASYNQ_K1_FIRMWARE/control/sb_effect_queue.h   {'sb_lower': 31, 'SB_upper': 14, 'SB_caps': 7}
+     51  scripts/regression-harness/semantic_state_replay.py   {'sb_lower': 29, 'SB_upper': 16, 'SB_caps': 6}
+     47  scripts/regression-harness/acf_gap_ablation.py   {'sb_lower': 13, 'SB_upper': 34}
+     45  scripts/regression-harness/golden/oracle_tempo.py   {'sb_lower': 23, 'SB_upper': 14, 'SB_caps': 8}
+     43  SPECTRASYNQ_K1_FIRMWARE/director/k1_edgemixer.cpp   {'sb_lower': 1, 'SB_upper': 42}
+     43  scripts/regression-harness/bt_acf_4way.py   {'sb_lower': 12, 'SB_upper': 31}
+     37  SPECTRASYNQ_K1_FIRMWARE/audio/sb_audio_snapshot.cpp   {'sb_lower': 25, 'SB_upper': 8, 'SB_caps': 4}
+     36  SPECTRASYNQ_K1_FIRMWARE/audio/sb_audio_snapshot.h   {'sb_lower': 6, 'SB_upper': 20, 'SB_caps': 10}
+     36  tests/test_sb_wireless_control_static.py   {'sb_lower': 25, 'SB_upper': 10, 'SB_caps': 1}
+     34  SPECTRASYNQ_K1_FIRMWARE/effects/framework/K1AudioContext.h   {'sb_lower': 4, 'SB_upper': 18, 'SB_caps': 12}
+     33  scripts/regression-harness/export_diagnostic_trajectories.py   {'sb_lower': 20, 'SB_upper': 13}
+     33  tests/test_k1_av_regression_static.py   {'sb_lower': 13, 'SB_upper': 16, 'SB_caps': 4}
+     33  tests/golden/serial_struct.golden.jsonl   {'sb_lower': 25, 'SB_upper': 4, 'SB_caps': 4}
+     30  SPECTRASYNQ_K1_FIRMWARE/director/sb_smart_director.h   {'sb_lower': 12, 'SB_upper': 4, 'SB_caps': 14}
+     30  SPECTRASYNQ_K1_FIRMWARE/audio/i2s_audio.h   {'sensory_bridge': 1, 'sb_lower': 12, 'SB_upper': 12, 'SB_caps': 5}
+     30  scripts/regression-harness/chord_saliency_replay.py   {'sb_lower': 14, 'SB_upper': 11, 'SB_caps': 5}
+     30  tests/test_effect_queue_static.py   {'sb_lower': 19, 'SB_upper': 5, 'SB_caps': 6}
+     28  SPECTRASYNQ_K1_FIRMWARE/audio/sb_semantic_state.cpp   {'sb_lower': 13, 'SB_upper': 12, 'SB_caps': 3}
+     25  SPECTRASYNQ_K1_FIRMWARE/network/sb_k1_wireless.cpp   {'sb_lower': 10, 'SB_upper': 15}
+     24  scripts/regression-harness/golden/oracle_onset_beat.py   {'sb_lower': 8, 'SB_upper': 1, 'SB_caps': 15}
+     24  tests/test_trace_dev_static.py   {'sb_lower': 2, 'SB_upper': 22}
+     23  SPECTRASYNQ_K1_FIRMWARE/director/sb_mode_selection.h   {'sb_lower': 3, 'SB_upper': 11, 'SB_caps': 9}
+     22  scripts/regression-harness/golden/oracle_chord.py   {'sensory_bridge': 1, 'sb_lower': 12, 'SB_upper': 5, 'SB_caps': 4}
+     21  SPECTRASYNQ_K1_FIRMWARE/visual/led_utilities.h   {'sb_lower': 9, 'SB_upper': 11, 'SB_caps': 1}
+     21  tests/test_nyquist_bin_hygiene_static.py   {'sb_lower': 6, 'SB_upper': 6, 'SB_caps': 9}
+     20  SPECTRASYNQ_K1_FIRMWARE/light_mode_waveform_tempo.cpp.wip   {'sensory_bridge': 1, 'sb_lower': 13, 'SB_upper': 3, 'SB_caps': 3}
+     20  SPECTRASYNQ_K1_FIRMWARE/system/constants.h   {'sb_lower': 3, 'SB_upper': 17}
+     20  SPECTRASYNQ_K1_FIRMWARE/effects/light_mode_waveform_tempo.cpp   {'sb_lower': 12, 'SB_upper': 3, 'SB_caps': 5}
+     20  scripts/regression-harness/acf_ceiling_sweep.py   {'sb_lower': 16, 'SB_upper': 4}
+     19  scripts/regression-harness/onset_v2_replay.py   {'sb_lower': 12, 'SB_upper': 3, 'SB_caps': 4}
+     19  scripts/regression-harness/render_replay.py   {'sb_lower': 8, 'SB_upper': 9, 'SB_caps': 2}
+     19  platformio.ini   {'sb_lower': 8, 'SB_upper': 10, 'SB_caps': 1}
+     18  SPECTRASYNQ_K1_FIRMWARE/director/beat_aware_director.cpp   {'sb_lower': 8, 'SB_upper': 7, 'SB_caps': 3}
+     18  SPECTRASYNQ_K1_FIRMWARE/audio/sb_chord_detect.cpp   {'sb_lower': 6, 'SB_upper': 5, 'SB_caps': 7}
+     18  SPECTRASYNQ_K1_FIRMWARE/audio/sb_semantic_state.h   {'sb_lower': 9, 'SB_upper': 8, 'SB_caps': 1}
+     18  scripts/regression-harness/tempo_accuracy.py   {'sb_lower': 16, 'SB_upper': 2}
+     17  scripts/regression-harness/musical_saliency_benchmark.py   {'sb_lower': 13, 'SB_caps': 4}
+     16  SPECTRASYNQ_K1_FIRMWARE/audio/sb_tempo.h   {'sb_lower': 9, 'SB_caps': 7}
+     16  SPECTRASYNQ_K1_FIRMWARE/serial/k1_ap_capture_telemetry.cpp   {'sb_lower': 8, 'SB_upper': 4, 'SB_caps': 4}
+     14  SPECTRASYNQ_K1_FIRMWARE/director/sb_visual_hooks.h   {'sb_lower': 6, 'SB_caps': 8}
+     14  SPECTRASYNQ_K1_FIRMWARE/effects/light_mode_dense_forge_chord.cpp   {'sb_lower': 6, 'SB_upper': 3, 'SB_caps': 5}
+     14  scripts/regression-harness/render_host_globals.cpp   {'sb_lower': 7, 'SB_upper': 4, 'SB_caps': 3}
+     14  scripts/regression-harness/stubs/Arduino.h   {'sb_lower': 7, 'SB_upper': 7}
+     14  scripts/regression-harness/golden/oracle_serial_struct.py   {'sb_lower': 12, 'SB_caps': 2}
+     13  SPECTRASYNQ_K1_FIRMWARE/audio/sb_i2s_capture_types.h   {'sensory_bridge': 1, 'SB_upper': 10, 'SB_caps': 2}
+     13  scripts/regression-harness/beat_semantic_metrics.py   {'sb_lower': 10, 'SB_upper': 3}
+     12  SPECTRASYNQ_K1_FIRMWARE/diag/sb_trace.h   {'sb_lower': 2, 'SB_upper': 10}
+     12  SPECTRASYNQ_K1_FIRMWARE/network/ble_remoted_central.cpp   {'sb_lower': 9, 'SB_upper': 3}
+     12  SPECTRASYNQ_K1_FIRMWARE/audio/sb_musical_saliency.h   {'sb_lower': 5, 'SB_caps': 7}
+     12  scripts/regression-harness/golden/oracle_render.py   {'sb_lower': 5, 'SB_upper': 7}
+     11  SPECTRASYNQ_K1_FIRMWARE/system/system.h   {'SB_upper': 11}
+     11  SPECTRASYNQ_K1_FIRMWARE/persistence/bridge_fs.h   {'sensory_bridge': 1, 'sb_lower': 1, 'SB_upper': 9}
+     11  SPECTRASYNQ_K1_FIRMWARE/effects/light_mode_dense_forge.cpp   {'sb_lower': 6, 'SB_upper': 1, 'SB_caps': 4}
+     10  SPECTRASYNQ_K1_FIRMWARE/effects/light_mode_pulse_prism.cpp   {'sb_lower': 6, 'SB_upper': 1, 'SB_caps': 3}
+     10  SPECTRASYNQ_K1_FIRMWARE/control/sb_noise_cal_arm.cpp   {'sb_lower': 9, 'SB_upper': 1}
+     10  SPECTRASYNQ_K1_FIRMWARE/serial/k1_ap_capture_telemetry.h   {'sb_lower': 4, 'SB_upper': 1, 'SB_caps': 5}
+     10  scripts/regression-harness/novelty_from_wav.py   {'sensory_bridge': 4, 'sb_lower': 6}
+     10  tests/test_token_scrub_static.py   {'sb_lower': 8, 'SB_upper': 2}
+      9  SPECTRASYNQ_K1_FIRMWARE/network/k1_ble_midi_decoder.cpp   {'SB_upper': 8, 'SB_caps': 1}
+      9  SPECTRASYNQ_K1_FIRMWARE/effects/light_mode_chroma_constellation.cpp   {'sb_lower': 5, 'SB_upper': 2, 'SB_caps': 2}
+      9  SPECTRASYNQ_K1_FIRMWARE/effects/light_mode_percussion_burst.cpp   {'sb_lower': 4, 'SB_upper': 1, 'SB_caps': 4}
+      9  SPECTRASYNQ_K1_FIRMWARE/effects/framework/framework_compile_probe.cpp   {'sb_lower': 1, 'SB_upper': 5, 'SB_caps': 3}
+      9  tests/test_chord_hue_consumer_static.py   {'sb_lower': 2, 'SB_upper': 5, 'SB_caps': 2}
+      8  SPECTRASYNQ_K1_FIRMWARE/audio/k1_gdft_core.cpp   {'sb_lower': 1, 'SB_upper': 7}
+      8  SPECTRASYNQ_K1_FIRMWARE/serial/serial_cmd_handlers.h   {'sb_lower': 4, 'SB_upper': 4}
+      8  scripts/regression-harness/device_novelty_replay.py   {'sb_lower': 3, 'SB_upper': 5}
+      8  tests/test_novelty_decimation_smoothing.py   {'sb_lower': 5, 'SB_upper': 3}
+      7  scripts/regression-harness/replay_device_apdbg.py   {'sb_lower': 5, 'SB_upper': 2}
+      7  tests/test_semantic_state_replay.py   {'sb_lower': 4, 'SB_upper': 3}
+      6  SPECTRASYNQ_K1_FIRMWARE/network/sb_k1_wireless.h   {'sb_lower': 4, 'SB_upper': 2}
+      6  SPECTRASYNQ_K1_FIRMWARE/audio/sb_onset_beat.h   {'sb_lower': 4, 'SB_caps': 2}
+      6  SPECTRASYNQ_K1_FIRMWARE/effects/light_mode_snapwave.cpp   {'sb_lower': 4, 'SB_caps': 2}
+      6  SPECTRASYNQ_K1_FIRMWARE/effects/framework/EffectContext.h   {'sb_lower': 1, 'SB_caps': 5}
+      6  SPECTRASYNQ_K1_FIRMWARE/control/sb_noise_cal_arm.h   {'sb_lower': 5, 'SB_upper': 1}
+      6  SPECTRASYNQ_K1_FIRMWARE/control/sb_wireless_control.h   {'SB_upper': 3, 'SB_caps': 3}
+      6  scripts/regression-harness/golden/serial_replay_host_stubs.h   {'sb_lower': 6}
+      6  tests/test_vivid_precomp_static.py   {'SB_upper': 6}
+      5  SPECTRASYNQ_K1_FIRMWARE/network/ble_remoted_central.h   {'sb_lower': 4, 'SB_upper': 1}
+      5  SPECTRASYNQ_K1_FIRMWARE/effects/light_mode_tempo_river_walk.cpp   {'sb_lower': 3, 'SB_upper': 1, 'SB_caps': 1}
+      5  SPECTRASYNQ_K1_FIRMWARE/effects/light_mode_tempo_comet.cpp   {'sb_lower': 4, 'SB_caps': 1}
+      5  SPECTRASYNQ_K1_FIRMWARE/control/sb_k1_control_facade.h   {'sb_lower': 5}
+      5  SPECTRASYNQ_K1_FIRMWARE/control/sb_wireless_control.cpp   {'sb_lower': 5}
+      5  scripts/regression-harness/tempo_confv2_calibrate.py   {'sb_lower': 1, 'SB_upper': 4}
+      5  tests/test_serial_hotkeys_static.py   {'sb_lower': 5}
+      5  tests/test_dev_instrumentation_boundary.py   {'sb_lower': 5}
+      4  SPECTRASYNQ_K1_FIRMWARE/system/globals.h   {'SB_upper': 4}
+      4  SPECTRASYNQ_K1_FIRMWARE/effects/light_mode_tempo_comet_anticipate.cpp   {'sb_lower': 3, 'SB_caps': 1}
+      4  SPECTRASYNQ_K1_FIRMWARE/effects/light_mode_tempo_river.cpp   {'sb_lower': 2, 'SB_upper': 1, 'SB_caps': 1}
+      4  scripts/regression-harness/stubs/freertos/task.h   {'SB_upper': 4}
+      4  scripts/regression-harness/golden/oracle_gdft.py   {'SB_upper': 4}
+      4  tests/test_fw_strings_removed_static.py   {'SB_upper': 4}
+      4  tests/test_vp_motion_lab_static.py   {'sb_lower': 3, 'SB_caps': 1}
+      4  tests/test_ble_midi_firmware_decoder.py   {'SB_upper': 3, 'SB_caps': 1}
+      4  tests/test_chord_saliency_replay.py   {'sb_lower': 2, 'SB_upper': 2}
+      3  SPECTRASYNQ_K1_FIRMWARE/system/user_config.h   {'sensory_bridge': 3}
+      3  SPECTRASYNQ_K1_FIRMWARE/audio/GDFT.h   {'sensory_bridge': 3}
+      3  SPECTRASYNQ_K1_FIRMWARE/effects/light_mode_comet.cpp   {'sb_lower': 2, 'SB_caps': 1}
+      3  SPECTRASYNQ_K1_FIRMWARE/effects/light_mode_ember.cpp   {'sb_lower': 2, 'SB_caps': 1}
+      3  SPECTRASYNQ_K1_FIRMWARE/effects/light_mode_ember_v2.cpp   {'sb_lower': 2, 'SB_caps': 1}
+      3  SPECTRASYNQ_K1_FIRMWARE/effects/light_mode_spectrum_river_v2.cpp   {'sb_lower': 2, 'SB_caps': 1}
+      3  SPECTRASYNQ_K1_FIRMWARE/effects/light_mode_river_surge.cpp   {'sb_lower': 2, 'SB_caps': 1}
+      3  scripts/regression-harness/sample_rate_32k_migration_model.py   {'sb_lower': 2, 'SB_upper': 1}
+      3  scripts/regression-harness/gdft_center_honesty_model.py   {'sb_lower': 3}
+      3  scripts/regression-harness/novelty_decimation_model.py   {'sb_lower': 1, 'SB_upper': 2}
+      3  scripts/ble_midi/guard_k1_radio_isolation.py   {'SB_upper': 3}
+      3  tests/test_agc_perband_independence.py   {'SB_upper': 3}
+      3  tests/test_percussion_event_status_static.py   {'sb_lower': 3}
+      3  tests/test_sb_trace_l1_gate.py   {'sb_lower': 2, 'SB_caps': 1}
+      3  tests/test_calibration_profile_static.py   {'SB_upper': 3}
+      2  SPECTRASYNQ_K1_FIRMWARE/diag/k1_pin_evidence.cpp   {'SB_upper': 2}
+      2  SPECTRASYNQ_K1_FIRMWARE/system/globals.cpp   {'SB_upper': 2}
+      2  SPECTRASYNQ_K1_FIRMWARE/system/config_types.h   {'SB_upper': 2}
+      2  SPECTRASYNQ_K1_FIRMWARE/audio/k1_spectral_honesty.h   {'sensory_bridge': 1, 'sb_lower': 1}
+      2  SPECTRASYNQ_K1_FIRMWARE/effects/framework/TransitionOverlay.h   {'sb_lower': 2}
+      2  SPECTRASYNQ_K1_FIRMWARE/effects/framework/effect_lgp_transient_lattice.h   {'SB_upper': 2}
+      2  SPECTRASYNQ_K1_FIRMWARE/effects/framework/effect_lgp_transient_lattice.cpp   {'SB_upper': 2}
+      2  SPECTRASYNQ_K1_FIRMWARE/effects/framework/effect_lgp_beat_prism.cpp   {'SB_upper': 1, 'SB_caps': 1}
+      2  SPECTRASYNQ_K1_FIRMWARE/effects/framework/EffectMetadata.h   {'sb_lower': 1, 'SB_upper': 1}
+      2  SPECTRASYNQ_K1_FIRMWARE/serial/serial_tx.h   {'SB_upper': 2}
+      2  scripts/regression-harness/ap_capture_leg.py   {'sensory_bridge': 2}
+      2  scripts/regression-harness/row1_dispatch_table_test.cpp   {'SB_upper': 2}
+      2  scripts/regression-harness/high_bin_alias_audit.py   {'sb_lower': 1, 'SB_caps': 1}
+      2  scripts/regression-harness/golden/oracle_ble_midi_map.py   {'sb_lower': 2}
+      2  tests/test_k1_pin_evidence_static.py   {'SB_upper': 2}
+      2  tests/test_impact_lane_static.py   {'SB_upper': 2}
+      1  SPECTRASYNQ_K1_FIRMWARE/director/beat_aware_director.h   {'SB_caps': 1}
+      1  SPECTRASYNQ_K1_FIRMWARE/network/k1_ble_midi_decoder.h   {'sb_lower': 1}
+      1  SPECTRASYNQ_K1_FIRMWARE/visual/channel_effect_state.h   {'SB_upper': 1}
+      1  SPECTRASYNQ_K1_FIRMWARE/visual/lightshow_modes.h   {'SB_upper': 1}
+      1  SPECTRASYNQ_K1_FIRMWARE/persistence/buttons.h   {'sensory_bridge': 1}
+      1  SPECTRASYNQ_K1_FIRMWARE/persistence/knobs.h   {'sensory_bridge': 1}
+      1  SPECTRASYNQ_K1_FIRMWARE/effects/framework/EffectRegistry.cpp   {'sb_lower': 1}
+      1  SPECTRASYNQ_K1_FIRMWARE/effects/framework/effect_lgp_flux_rift.h   {'SB_caps': 1}
+      1  SPECTRASYNQ_K1_FIRMWARE/serial/serial_tx.cpp   {'SB_caps': 1}
+      1  scripts/regression-harness/derive_bands.py   {'sensory_bridge': 1}
+      1  scripts/regression-harness/sb_trace_capture.py   {'sensory_bridge': 1}
+      1  scripts/regression-harness/golden/harness_selftest.py   {'sb_lower': 1}
+      1  scripts/regression-harness/golden/oracle_ble_midi_diff.py   {'sb_lower': 1}
+      1  scripts/regression-harness/golden/oracle_agc_perband.py   {'SB_upper': 1}
+      1  scripts/platformio/k1_effect_framework_includes.py   {'sensory_bridge': 1}
+      1  scripts/platformio/k1_src_includes.py   {'sensory_bridge': 1}
+      1  tests/test_loop.py   {'SB_upper': 1}
+      1  tests/test_onset_beat_replay.py   {'SB_upper': 1}
+      1  tests/test_k1_ws_registry_codegen.py   {'sb_lower': 1}
+      1  tests/test_k1_upload_guard.py   {'SB_upper': 1}
+      1  tests/test_k1_loud_guard_static.py   {'SB_upper': 1}
+      1  tests/test_im73d_audio_purity_static.py   {'sb_lower': 1}
+      1  tests/test_snapwave_pulse_static.py   {'sb_lower': 1}
+
+SANCTIONED MAGIC residual lines (3 — MUST remain):
+  SPECTRASYNQ_K1_FIRMWARE/control/sb_effect_queue.h: #define SB_PRESET_SLOTS_MAGIC 0x53504253UL  // 'SBPS' little-endian
+  SPECTRASYNQ_K1_FIRMWARE/control/sb_effect_queue.h: #define SB_PRESET_SLOTS_MAGIC 0x53504253UL  // 'SBPS' little-endian
+  tests/test_effect_queue_static.py: self.assertIn("#define SB_PRESET_SLOTS_MAGIC 0x53504253UL", self.header)
+
+-DSB_ FLAGS in platformio.ini (26):
+  SB_ACQUISITION_ONLY_PROBE
+  SB_AGC_PERBAND_V1
+  SB_ALLOW_AP_VP_SAME_CORE_FOR_PROBE
+  SB_AP_STAGE_PROBE_STOP_STAGE
+  SB_CHORD_HUE_V1
+  SB_CHORD_V2
+  SB_DROP_CUT_V1
+  SB_I2S_DMA_DESC_NUM_VALUE
+  SB_K1_BENCH_REFERENCE_PINMAP
+  SB_K1_BLE_REMOTED
+  SB_K1_HARDWARE
+  SB_K1_WIRELESS_ENABLED
+  SB_LED_TASK_CORE
+  SB_ONSET_V2
+  SB_PEAK_ASYM_ENV
+  SB_SEMANTIC_STATE
+  SB_TEMPO_ACF_REFRESH_DECIMATION
+  SB_TEMPO_ACF_SKIP_UPDATE_ON_PUBLISH
+  SB_TEMPO_ACF_SPREAD_LAGS_PER_EMIT
+  SB_TEMPO_ACF_SPREAD_PROBE
+  SB_TEMPO_ACF_SPREAD_V1
+  SB_TEMPO_AP_FRAME_HZ
+  SB_TEMPO_CONF_V2
+  SB_TEMPO_FLYWHEEL_V2
+  SB_TEMPO_NOVELTY_DECIMATION
+  SB_VIVID_PRECOMP_V1
+
+SB_ symbols in #ifdef/#if/defined() across source (67):
+  SB_ACQUISITION_ONLY_PROBE
+  SB_AGC_PERBAND_V1
+  SB_ALLOW_AP_VP_SAME_CORE_FOR_PROBE
+  SB_AP_STAGE_PROBE_STOP_STAGE
+  SB_CHORD_HUE_V1
+  SB_CHORD_V2
+  SB_COMB_TEETH   <-- no matching -D flag (may be nested/derived)
+  SB_COMB_W2   <-- no matching -D flag (may be nested/derived)
+  SB_COMB_W3   <-- no matching -D flag (may be nested/derived)
+  SB_COMB_W4   <-- no matching -D flag (may be nested/derived)
+  SB_CONF_BPM   <-- no matching -D flag (may be nested/derived)
+  SB_CONF_SIGMA   <-- no matching -D flag (may be nested/derived)
+  SB_CONF_V2_FLOOR   <-- no matching -D flag (may be nested/derived)
+  SB_CONF_V2_HI   <-- no matching -D flag (may be nested/derived)
+  SB_CONF_V2_LO   <-- no matching -D flag (may be nested/derived)
+  SB_CONF_V2_REL   <-- no matching -D flag (may be nested/derived)
+  SB_CONF_V2_TAU_S   <-- no matching -D flag (may be nested/derived)
+  SB_CONF_V2_W1   <-- no matching -D flag (may be nested/derived)
+  SB_CONF_V2_W2   <-- no matching -D flag (may be nested/derived)
+  SB_CONF_V2_W3   <-- no matching -D flag (may be nested/derived)
+  SB_CONF_V2_WARMUP_UPDATES   <-- no matching -D flag (may be nested/derived)
+  SB_CONF_V2_WATCHDOG_N   <-- no matching -D flag (may be nested/derived)
+  SB_DROP_CUT_V1
+  SB_ENABLE_USB_MSC_UPDATE   <-- no matching -D flag (may be nested/derived)
+  SB_FS_MIN_INTERNAL_BLOCK   <-- no matching -D flag (may be nested/derived)
+  SB_FW_COAST_BEATS   <-- no matching -D flag (may be nested/derived)
+  SB_FW_FREQ_PULL   <-- no matching -D flag (may be nested/derived)
+  SB_FW_KI   <-- no matching -D flag (may be nested/derived)
+  SB_FW_KP   <-- no matching -D flag (may be nested/derived)
+  SB_FW_MAX_CORR   <-- no matching -D flag (may be nested/derived)
+  SB_FW_ONSET_FLOOR_TAU_S   <-- no matching -D flag (may be nested/derived)
+  SB_FW_ONSET_K   <-- no matching -D flag (may be nested/derived)
+  SB_FW_REFRACTORY   <-- no matching -D flag (may be nested/derived)
+  SB_GDFT_STATIC_NOISE_SUBTRACTION_ENABLED   <-- no matching -D flag (may be nested/derived)
+  SB_HAS_ROTATE8   <-- no matching -D flag (may be nested/derived)
+  SB_HAS_SWEET_SPOT_LEDS   <-- no matching -D flag (may be nested/derived)
+  SB_HOST_PORTMUX_DEFINED   <-- no matching -D flag (may be nested/derived)
+  SB_I2S_CAPTURE_TYPES_H   <-- no matching -D flag (may be nested/derived)
+  SB_I2S_DMA_DESC_NUM_VALUE
+  SB_K1_BENCH_REFERENCE_PINMAP
+  SB_K1_BLE_REMOTED
+  SB_K1_HARDWARE
+  SB_K1_WIRELESS_ENABLED
+  SB_K1_WIRELESS_TASK_CORE   <-- no matching -D flag (may be nested/derived)
+  SB_K1_WS_TASK_CORE   <-- no matching -D flag (may be nested/derived)
+  SB_LED_TASK_CORE
+  SB_ONSET_V2
+  SB_PALETTE_ENERGY_EXCURSION_V1   <-- no matching -D flag (may be nested/derived)
+  SB_PEAK_ASYM_ENV
+  SB_SEMANTIC_HOST_TEST   <-- no matching -D flag (may be nested/derived)
+  SB_SEMANTIC_STATE
+  SB_SERIAL_REPLAY_HOST   <-- no matching -D flag (may be nested/derived)
+  SB_TACTUS_BPM   <-- no matching -D flag (may be nested/derived)
+  SB_TACTUS_SIGMA   <-- no matching -D flag (may be nested/derived)
+  SB_TEMPO_ACF_REFRESH_DECIMATION
+  SB_TEMPO_ACF_SKIP_UPDATE_ON_PUBLISH
+  SB_TEMPO_ACF_SPREAD_LAGS_PER_EMIT
+  SB_TEMPO_ACF_SPREAD_PROBE
+  SB_TEMPO_ACF_SPREAD_V1
+  SB_TEMPO_AP_FRAME_HZ
+  SB_TEMPO_CONF_DUMP   <-- no matching -D flag (may be nested/derived)
+  SB_TEMPO_CONF_V2
+  SB_TEMPO_FLYWHEEL_V2
+  SB_TEMPO_HOST_TEST   <-- no matching -D flag (may be nested/derived)
+  SB_TEMPO_NOVELTY_DECIMATION
+  SB_USB_CUSTOM_DESCRIPTORS   <-- no matching -D flag (may be nested/derived)
+  SB_VIVID_PRECOMP_V1
+
+ATOMICITY NOTE: after rename, every -DSB_X becomes -DK1_X AND every
+#ifdef SB_X becomes #ifdef K1_X in the SAME uncommitted pass, so the
+pairing is preserved by construction. The 0-residual test confirms it.
+
+ACCEPTANCE: FAIL (4800 residual)
+JSON:{"grand": 4800, "by_cat": {"sensory_bridge": 31, "sb_lower": 2551, "SB_upper": 1488, "SB_caps": 730}, "files": 168}

@@ -190,6 +190,9 @@ context_engineering_runs/
 .contextpack_ledger.json
 .contextpack_cache/z_temp/
 
+# MarkItDown disposable conversion cache
+.markitdown/cache/
+
 # Temporary working directory
 z_temp/
 

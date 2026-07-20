@@ -783,11 +783,24 @@ endpoints:
 
   /api/v1/transitions/config:
     method: GET
-    description: "Get transition config"
+    description: "Get transition config (Phase 2.1: `_scope` field documents kill-switch narrowing to manual paths)"
 
   /api/v1/transitions/config:
     method: POST
     description: "Set transition config"
+
+  /api/v1/transitions/leadtime:
+    method: POST
+    description: "Compute leadTime for a transition type + optional duration (Phase 2.4)"
+    body:
+      type: { type: uint8, required: true, range: [0, 11] }
+      duration: { type: uint16, optional: true, range: [0, 10000] }
+    response:
+      leadTime: { type: uint16, description: "Effective duration + safety margin (ms)" }
+      duration: { type: uint16, description: "Effective duration after default resolution (ms)" }
+      safetyMargin: { type: uint16, description: "Constant 50ms — covers message queue + frame quantisation + init time" }
+      tier: { type: string, enum: [Quick, Medium, Cinematic] }
+    consumers: [ios]
 
   # ── Zones ──────────────────────────────────────────────────────────────
   # Wire-format note (2026-05-02 migration): zoneId is 1-indexed across REST,

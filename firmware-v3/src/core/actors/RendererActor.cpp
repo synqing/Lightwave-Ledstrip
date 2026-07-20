@@ -68,26 +68,6 @@ namespace {
 // while preserving immediate slider responsiveness.
 constexpr uint32_t kHueAutoRotatePauseMs = 30000;
 
-#if FEATURE_AUDIO_SYNC && FEATURE_TRANSITIONS
-TransitionType synqMatrixTransitionForReason(const char* reason) {
-    if (reason == nullptr) {
-        return TransitionType::FADE;
-    }
-    if (strcmp(reason, "drop_impact") == 0) {
-        return TransitionType::PULSEWAVE;
-    }
-    if (strcmp(reason, "build_pressure") == 0 ||
-        strcmp(reason, "transition_bridge") == 0) {
-        return TransitionType::WIPE_OUT;
-    }
-    if (strcmp(reason, "breakdown_release") == 0 ||
-        strcmp(reason, "ambient_posture") == 0) {
-        return TransitionType::FADE;
-    }
-    return TransitionType::FADE;
-}
-#endif
-
 /// Reinhard tone-map scale LUT (knee = 1.0).
 /// lut[avg] = round(255 * 255 / (avg + 255))
 /// Used with CRGB::nscale8() to replace per-pixel float maths.
@@ -232,6 +212,7 @@ RendererActor::RendererActor()
     memset(m_leds, 0, sizeof(m_leds));
 #if FEATURE_TRANSITIONS
     memset(m_transitionSourceBuffer, 0, sizeof(m_transitionSourceBuffer));
+    memset(m_transitionUpdateWindow, 0, sizeof(m_transitionUpdateWindow));
     m_transitionEngine = new TransitionEngine();
 #endif
 
@@ -788,8 +769,12 @@ void RendererActor::onMessage(const Message& msg)
             break;
 
         case MessageType::START_TRANSITION:
-            // ActorSystem packs EffectId as 2 bytes: param1=low, param2=high, param3=transitionType
-            handleStartTransition(static_cast<EffectId>(msg.param1) | (static_cast<EffectId>(msg.param2) << 8), msg.param3);
+            // ActorSystem packs EffectId as param1/2, type in param3,
+            // explicit duration in param4 and easing in _reserved.
+            handleStartTransition(static_cast<EffectId>(msg.param1) | (static_cast<EffectId>(msg.param2) << 8),
+                                  msg.param3,
+                                  static_cast<uint16_t>(msg.param4),
+                                  (msg._reserved == 0xFFFFFFFFUL) ? 0xFF : static_cast<uint8_t>(msg._reserved));
             break;
 
         case MessageType::HEALTH_CHECK:
@@ -992,6 +977,7 @@ void RendererActor::onTick()
 {
     uint32_t frameStartUs = micros();
     static uint16_t s_wdtResetFrames = 0;
+    m_transitionWorkThisFrame = false;
 
     // Capture auto-stop watchdog. If capture is enabled but no consumer has drained
     // a tap for CAPTURE_DRAIN_TIMEOUT_MS, assume the consumer session is gone
@@ -1125,6 +1111,10 @@ void RendererActor::onTick()
     // 2.0 ms render contract ceiling (CLAUDE.md hard constraints).
     if (rawFrameTimeUs > 2000U) {
         TRACE_INSTANT("render_frame_deadline_miss");
+        if (m_transitionWorkThisFrame) {
+            m_stats.transitionDeadlineMiss++;
+            TRACE_INSTANT("transition_deadline_miss");
+        }
     }
     updateStats(frameTimeUs, rawFrameTimeUs);
 
@@ -1642,6 +1632,56 @@ bool RendererActor::processSynqMatrixTransition(uint32_t nowMs)
     m_synqMatrixDirectorTransitionQueued = false;
 
     auto& director = synqmatrix::SynqMatrix::instance();
+    const auto applyDirectorTargetTrim = [&]() {
+        // PaletteShift: bundled with EffectSwitch on the same state-change
+        // trigger. Skip if sentinel (0xFF) or already on target palette.
+        if (targetPalette != 0xFF && targetPalette != m_paletteIndex) {
+            const uint8_t prevPalette = m_paletteIndex;
+            handleSetPalette(targetPalette);
+            LW_LOGI("Director palette: %u (%s) -> %u (%s)",
+                    prevPalette, getPaletteName(prevPalette),
+                    m_paletteIndex, getPaletteName(m_paletteIndex));
+        }
+
+        // ColourModifierShift: bundled with EffectSwitch on the same state-change
+        // trigger. handleSetHue re-arms the auto-rotate pause window so the
+        // Director's chosen hue sticks for the documented window before
+        // auto-rotation resumes from the Director's hue value.
+        if (applyColourModifier && targetColourModifier != m_hue) {
+            const uint8_t prevHue = m_hue;
+            handleSetHue(targetColourModifier);
+            LW_LOGI("Director hue: %u -> %u", prevHue, m_hue);
+        }
+
+        // Director Effect Registry speed cap: clamp m_speed DOWN to the registry-
+        // specified cap if the user's current speed exceeds it. Never raises
+        // m_speed. Two effects carry caps: 0x0D02 caps at 14, 0x0B01 caps at 1.
+        if (speedCap != 0xFF && m_speed > speedCap) {
+            const uint8_t prevSpeed = m_speed;
+            handleSetSpeed(speedCap);
+            LW_LOGI("Director speed cap: %u -> %u (effect 0x%04X cap=%u)",
+                    prevSpeed, m_speed, targetEffect, speedCap);
+        }
+
+        // EdgeMixerAdjust: bundled with EffectSwitch on the same state-change
+        // trigger. Per-state mode differentiates strip 2 colour treatment for
+        // richer K1 LGP depth perception. RendererActor runs on Core 1 alongside
+        // EdgeMixer::process() (called from showLeds() each frame), so direct
+        // setMode() is thread-safe here.
+        if (edgeMixerMode != 0xFF) {
+            auto& mixer = enhancement::EdgeMixer::getInstance();
+            const uint8_t currentMode = static_cast<uint8_t>(mixer.getMode());
+            if (edgeMixerMode != currentMode) {
+                const auto newMode = static_cast<enhancement::EdgeMixerMode>(edgeMixerMode);
+                mixer.setMode(newMode);
+                LW_LOGI("Director edgemixer: %u (%s) -> %u (%s)",
+                        currentMode,
+                        enhancement::EdgeMixer::modeName(static_cast<enhancement::EdgeMixerMode>(currentMode)),
+                        edgeMixerMode,
+                        enhancement::EdgeMixer::modeName(newMode));
+            }
+        }
+    };
 
     // Authority structure: user (Manual) > preset (Show) > director.
     // If the user has manually asserted Zone Composer state mid-flight,
@@ -1668,93 +1708,26 @@ bool RendererActor::processSynqMatrixTransition(uint32_t nowMs)
         return false;
     }
 
-#if FEATURE_TRANSITIONS
-    if (!m_transitionEngine) {
-        director.notifySwitchRejected(targetEffect, nowMs, synqmatrix::SynqMatrixSuppressedReason::SwitchingDisabled);
-        return false;
-    }
-
-    memcpy(m_transitionSourceBuffer, m_leds, sizeof(m_transitionSourceBuffer));
-
+    // Director path is hard cut only (Phase 2.1). The lead time between a
+    // Director trigger and its hitFrame stutters against continuous music,
+    // so the engine is no longer driven autonomously. Manual / show /
+    // recording paths retain transitions via handleStartTransition.
     m_synqMatrixDirectorTransitionPreparing = true;
     handleSetEffect(targetEffect);
     m_synqMatrixDirectorTransitionPreparing = false;
+    applyDirectorTargetTrim();
 
-    const EffectId currentAfterTransitionStart =
+    const EffectId currentAfterHardSwitch =
         m_currentEffectValid ? m_validatedEffectId : validateEffectId(m_currentEffect);
-    if (currentAfterTransitionStart != targetEffect) {
+    if (currentAfterHardSwitch != targetEffect) {
         director.notifySwitchRejected(targetEffect, millis(), synqmatrix::SynqMatrixSuppressedReason::TargetUnavailable);
         return false;
     }
 
-    m_synqMatrixDirectorTransitionPreparing = true;
-    renderFrame();
-    m_synqMatrixDirectorTransitionPreparing = false;
-
-    const TransitionType transitionType = synqMatrixTransitionForReason(reason);
-    m_transitionEngine->startTransition(m_transitionSourceBuffer,
-                                        m_leds,
-                                        m_leds,
-                                        transitionType);
-    LW_LOGI("Director transition engine: type=%d active=%d remaining=%ums",
-            static_cast<int>(transitionType),
-            m_transitionEngine->isActive() ? 1 : 0,
-            (unsigned)m_transitionEngine->getRemainingMs());
-
-    // PaletteShift: bundled with EffectSwitch on the same state-change
-    // trigger. Skip if sentinel (0xFF) or already on target palette.
-    if (targetPalette != 0xFF && targetPalette != m_paletteIndex) {
-        const uint8_t prevPalette = m_paletteIndex;
-        handleSetPalette(targetPalette);
-        LW_LOGI("Director palette: %u (%s) -> %u (%s)",
-                prevPalette, getPaletteName(prevPalette),
-                m_paletteIndex, getPaletteName(m_paletteIndex));
-    }
-
-    // ColourModifierShift: bundled with EffectSwitch on the same state-change
-    // trigger. handleSetHue re-arms the auto-rotate pause window so the
-    // Director's chosen hue sticks for the documented window before
-    // auto-rotation resumes from the Director's hue value.
-    if (applyColourModifier && targetColourModifier != m_hue) {
-        const uint8_t prevHue = m_hue;
-        handleSetHue(targetColourModifier);
-        LW_LOGI("Director hue: %u -> %u", prevHue, m_hue);
-    }
-
-    // Director Effect Registry speed cap: clamp m_speed DOWN to the registry-
-    // specified cap if the user's current speed exceeds it. Never raises
-    // m_speed. Two effects carry caps: 0x0D02 caps at 14, 0x0B01 caps at 1.
-    if (speedCap != 0xFF && m_speed > speedCap) {
-        const uint8_t prevSpeed = m_speed;
-        handleSetSpeed(speedCap);
-        LW_LOGI("Director speed cap: %u -> %u (effect 0x%04X cap=%u)",
-                prevSpeed, m_speed, targetEffect, speedCap);
-    }
-
-    // EdgeMixerAdjust: bundled with EffectSwitch on the same state-change
-    // trigger. Per-state mode differentiates strip 2 colour treatment for
-    // richer K1 LGP depth perception. RendererActor runs on Core 1 alongside
-    // EdgeMixer::process() (called from showLeds() each frame), so direct
-    // setMode() is thread-safe here.
-    if (edgeMixerMode != 0xFF) {
-        auto& mixer = enhancement::EdgeMixer::getInstance();
-        const uint8_t currentMode = static_cast<uint8_t>(mixer.getMode());
-        if (edgeMixerMode != currentMode) {
-            const auto newMode = static_cast<enhancement::EdgeMixerMode>(edgeMixerMode);
-            mixer.setMode(newMode);
-            LW_LOGI("Director edgemixer: %u (%s) -> %u (%s)",
-                    currentMode,
-                    enhancement::EdgeMixer::modeName(static_cast<enhancement::EdgeMixerMode>(currentMode)),
-                    edgeMixerMode,
-                    enhancement::EdgeMixer::modeName(newMode));
-        }
-    }
-
-    // ZoneComposer is a capture/control surface, not Director-owned state.
-    // Historical Director policies still carry zoneEnabled=0 for unified
-    // rendering, but applying that here disables the exact ZoneComposer +
-    // Director path needed for recording. Treat the policy as a release-time
-    // cleanup only: active Director ownership leaves ZoneComposer unchanged.
+    // ZoneComposer release-time cleanup: ownership-gated, not Director-owned.
+    // Applies the policy's zoneEnabled hint only when SynqMatrix has no
+    // active owner. Manual ownership leaves ZoneComposer untouched (the
+    // capture/control surface remains under user authority).
     if (zoneEnabled != 0xFF && m_zoneComposer != nullptr) {
         const synqmatrix::SynqMatrixOwner activeOwner = director.getOwner();
         if (activeOwner == synqmatrix::SynqMatrixOwner::None) {
@@ -1773,18 +1746,12 @@ bool RendererActor::processSynqMatrixTransition(uint32_t nowMs)
     director.notifySwitchApplied(previousEffect,
                                  targetEffect,
                                  appliedAtMs,
-                                 getEffectName(currentAfterTransitionStart));
-
-    if (m_transitionEngine->isActive()) {
-        const uint32_t elapsedMs = m_transitionEngine->getElapsedMs();
-        const uint32_t durationMs = elapsedMs + m_transitionEngine->getRemainingMs();
-        const uint32_t startedAtMs = (appliedAtMs >= elapsedMs) ? (appliedAtMs - elapsedMs) : appliedAtMs;
-        director.notifyTransitionStarted(previousEffect, targetEffect, startedAtMs, durationMs);
-        m_synqMatrixDirectorTransitionActiveNotified = true;
-    } else {
-        director.notifyTransitionCompleted(appliedAtMs);
-        m_synqMatrixDirectorTransitionActiveNotified = false;
-    }
+                                 getEffectName(currentAfterHardSwitch));
+    // No transition runs from the Director path, so external observers
+    // see Completed immediately after Applied. Started is never emitted
+    // from Director — that pairing remains exclusive to manual transitions.
+    director.notifyTransitionCompleted(appliedAtMs);
+    m_synqMatrixDirectorTransitionActiveNotified = false;
 
     {
         const synqmatrix::DirectorMarker marker =
@@ -1792,7 +1759,7 @@ bool RendererActor::processSynqMatrixTransition(uint32_t nowMs)
         const char* source = (marker == synqmatrix::DirectorMarker::None)
                                  ? "fallback"
                                  : "registry";
-        LW_LOGI("SynqMatrix Director transition state=%s confidence=%.3f prev=0x%04X target=0x%04X marker=%s source=%s family=%s language=%s reason=%s",
+        LW_LOGI("Director hard cut: state=%s confidence=%.3f prev=0x%04X target=0x%04X marker=%s source=%s family=%s language=%s reason=%s",
                 synqmatrix::synqMatrixStateName(director.getStatus().currentState),
                 director.getStatus().confidence,
                 previousEffect,
@@ -1804,10 +1771,6 @@ bool RendererActor::processSynqMatrixTransition(uint32_t nowMs)
                 reason);
     }
     return true;
-#else
-    director.notifySwitchRejected(targetEffect, nowMs, synqmatrix::SynqMatrixSuppressedReason::SwitchingDisabled);
-    return false;
-#endif
 }
 
 void RendererActor::syncSynqMatrixTransitionTelemetry(uint32_t nowMs)
@@ -1898,7 +1861,7 @@ void RendererActor::renderFrame()
     if (processSynqMatrixTransition(synqMatrixNowMs)) {
 #if FEATURE_TRANSITIONS
         if (m_transitionEngine && m_transitionEngine->isActive()) {
-            m_transitionEngine->update();
+            updateTransitionFrame();
         }
 #endif
         syncSynqMatrixTransitionTelemetry(millis());
@@ -1910,7 +1873,7 @@ void RendererActor::renderFrame()
     // EXCLUSIVE MODE: If transition active, ONLY update transition
     // v1 pattern: effect OR transition, never both
     if (m_transitionEngine && m_transitionEngine->isActive()) {
-        const bool transitionStillActive = m_transitionEngine->update();
+        const bool transitionStillActive = updateTransitionFrame();
 #if FEATURE_AUDIO_SYNC
         if (!transitionStillActive) {
             syncSynqMatrixTransitionTelemetry(millis());
@@ -3014,7 +2977,160 @@ void RendererActor::handleSetFadeAmount(uint8_t fadeAmount)
 // Transition Methods
 // ============================================================================
 
-void RendererActor::handleStartTransition(EffectId newEffectId, uint8_t transitionType)
+void RendererActor::recordTransitionUpdate(uint32_t updateUs)
+{
+    m_transitionWorkThisFrame = true;
+    m_stats.transitionUpdateUs = updateUs;
+
+    m_transitionUpdateWindow[m_transitionUpdateWriteIndex] = updateUs;
+    m_transitionUpdateWriteIndex =
+        static_cast<uint8_t>((m_transitionUpdateWriteIndex + 1U) % TRANSITION_UPDATE_WINDOW);
+    if (m_transitionUpdateCount < TRANSITION_UPDATE_WINDOW) {
+        m_transitionUpdateCount++;
+    }
+
+    uint32_t samples[TRANSITION_UPDATE_WINDOW];
+    for (uint8_t i = 0; i < m_transitionUpdateCount; ++i) {
+        samples[i] = m_transitionUpdateWindow[i];
+    }
+    for (uint8_t i = 1; i < m_transitionUpdateCount; ++i) {
+        const uint32_t value = samples[i];
+        int8_t j = static_cast<int8_t>(i) - 1;
+        while (j >= 0 && samples[j] > value) {
+            samples[j + 1] = samples[j];
+            --j;
+        }
+        samples[j + 1] = value;
+    }
+
+    if (m_transitionUpdateCount > 0) {
+        const uint8_t last = static_cast<uint8_t>(m_transitionUpdateCount - 1U);
+        m_stats.transitionUpdateP50Us = samples[(last * 50U) / 100U];
+        m_stats.transitionUpdateP95Us = samples[(last * 95U) / 100U];
+        m_stats.transitionUpdateP99Us = samples[(last * 99U) / 100U];
+    }
+
+    TRACE_COUNTER("transition_update_us", static_cast<int>(updateUs));
+    TRACE_COUNTER("transition_update_p50_us", static_cast<int>(m_stats.transitionUpdateP50Us));
+    TRACE_COUNTER("transition_update_p95_us", static_cast<int>(m_stats.transitionUpdateP95Us));
+    TRACE_COUNTER("transition_update_p99_us", static_cast<int>(m_stats.transitionUpdateP99Us));
+}
+
+bool RendererActor::updateTransitionFrame()
+{
+#if FEATURE_TRANSITIONS
+    if (!m_transitionEngine || !m_transitionEngine->isActive()) {
+        m_stats.transitionUpdateUs = 0;
+        m_stats.transitionTypeActive = 0xFF;
+        TRACE_COUNTER("transition_type_active", 0xFF);
+        return false;
+    }
+
+    const uint8_t typeBefore =
+        static_cast<uint8_t>(m_transitionEngine->getType());
+    m_stats.transitionTypeActive = typeBefore;
+    TRACE_COUNTER("transition_type_active", typeBefore);
+
+    const uint32_t startUs = micros();
+    const bool stillActive = m_transitionEngine->update();
+    const uint32_t endUs = micros();
+    const uint32_t updateUs = (endUs >= startUs)
+        ? (endUs - startUs)
+        : ((UINT32_MAX - startUs) + endUs);
+    recordTransitionUpdate(updateUs);
+
+    if (!stillActive) {
+        m_stats.transitionTypeActive = 0xFF;
+        TRACE_COUNTER("transition_type_active", 0xFF);
+    }
+    return stillActive;
+#else
+    return false;
+#endif
+}
+
+bool RendererActor::prepareEffectSwitchForTransition(EffectId target, EffectId& outOldEffectId)
+{
+    const EffectRegistration* incomingReg = findById(target);
+    if (!incomingReg) {
+        return false;
+    }
+
+    static constexpr size_t TRANSITION_INIT_MIN_HEAP = 12288;  // 12 KB
+    const size_t freeInternal = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (freeInternal < TRANSITION_INIT_MIN_HEAP) {
+        LW_LOGW("Transition to 0x%04X REJECTED: internal heap %u < %u floor",
+                 target, (unsigned)freeInternal, (unsigned)TRANSITION_INIT_MIN_HEAP);
+        return false;
+    }
+
+    outOldEffectId = m_currentEffect;
+
+    const EffectRegistration* oldReg = findById(outOldEffectId);
+    if (oldReg && oldReg->effect != nullptr) {
+        LW_LOGD("IEffect cleanup (transition): %s (ID 0x%04X)",
+                 oldReg->name, outOldEffectId);
+        oldReg->effect->cleanup();
+    }
+
+    if (incomingReg->effect != nullptr) {
+        LW_LOGD("IEffect init (transition): %s (ID 0x%04X)",
+                 incomingReg->name, target);
+        plugins::EffectContext initCtx;
+        initCtx.leds = m_leds;
+        initCtx.ledCount = LedConfig::TOTAL_LEDS;
+        initCtx.centerPoint = LedConfig::CENTER_LED_INDEX;
+        initCtx.palette = plugins::PaletteRef(&m_currentPalette);
+        initCtx.brightness = m_brightness;
+        initCtx.speed = m_speed;
+        initCtx.gHue = m_hue;
+        initCtx.intensity = m_intensity;
+        initCtx.saturation = m_saturation;
+        initCtx.complexity = m_complexity;
+        initCtx.variation = m_variation;
+        initCtx.mood = m_mood;
+        initCtx.fadeAmount = m_fadeAmount;
+        initCtx.frameNumber = m_frameCount;
+        initCtx.totalTimeMs = m_frameCount * 8;
+        initCtx.deltaTimeMs = 8;
+        initCtx.deltaTimeSeconds = 0.008f;
+        initCtx.rawTotalTimeMs = initCtx.totalTimeMs;
+        initCtx.rawDeltaTimeMs = initCtx.deltaTimeMs;
+        initCtx.rawDeltaTimeSeconds = 0.008f;
+        initCtx.zoneId = 0xFF;
+        initCtx.zoneStart = 0;
+        initCtx.zoneLength = 0;
+
+#ifndef NATIVE_BUILD
+        vTaskDelay(1);
+#endif
+        const bool initOk = incomingReg->effect->init(initCtx);
+#ifndef NATIVE_BUILD
+        vTaskDelay(1);
+#endif
+        if (!initOk) {
+            incomingReg->effect->cleanup();
+            LW_LOGW("IEffect 0x%04X init failed during transition, staying on 0x%04X",
+                     target, outOldEffectId);
+            return false;
+        }
+    }
+
+    m_currentEffect = target;
+    m_validatedEffectId = target;
+    m_currentEffectValid = true;
+
+#if FEATURE_AUDIO_SYNC
+    m_effectHasAudioMappings = audio::AudioMappingRegistry::instance().hasActiveMappings(target);
+#endif
+
+    return true;
+}
+
+void RendererActor::handleStartTransition(EffectId newEffectId,
+                                          uint8_t transitionType,
+                                          uint16_t durationMs,
+                                          uint8_t easing)
 {
     // Validate new effect exists in registry
     EffectId safeEffectId = validateEffectId(newEffectId);
@@ -3027,126 +3143,57 @@ void RendererActor::handleStartTransition(EffectId newEffectId, uint8_t transiti
         transitionType = 0;  // Default to FADE
     }
 
-    // ---------------------------------------------------------------------
-    // P1-08: Concurrent START_TRANSITION guard.
-    //
-    // If a second transition request arrives while the engine is still
-    // blending (A -> B in progress, now C arrives), the naive path would:
-    //   1. memcpy the partially-blended m_leds as the new source (stale mush)
-    //   2. Skip cleanup() on the mid-flight effect B (state carries over)
-    //   3. Skip init() on the incoming effect C (uninitialised state)
-    //   4. Bypass the internal-heap floor check applied by handleSetEffect
-    //
-    // Correct behaviour: complete the previous transition cleanly (so the
-    // new source buffer reflects effect B fully rendered, not a mid-blend),
-    // then bracket the B -> C switch with cleanup(B) + init(C), honouring
-    // the same heap floor used for direct effect switches.
-    // ---------------------------------------------------------------------
+    TransitionType type = static_cast<TransitionType>(transitionType);
+    uint16_t resolvedDurationMs = (durationMs == 0)
+        ? getDefaultDuration(type)
+        : durationMs;
+    EasingCurve resolvedEasing = (easing == 0xFF ||
+                                  easing >= static_cast<uint8_t>(EasingCurve::CURVE_COUNT))
+        ? static_cast<EasingCurve>(getDefaultEasing(type))
+        : static_cast<EasingCurve>(easing);
+
     if (m_transitionEngine->isActive()) {
-        // Heap floor check — mirror handleSetEffect. An in-flight transition
-        // plus a fresh init() can drive internal SRAM below safe thresholds
-        // for WiFi/AsyncTCP; refuse the new transition if we are already
-        // running on fumes rather than risk a partial init.
-        static constexpr size_t TRANSITION_INIT_MIN_HEAP = 12288;  // 12 KB
-        const size_t freeInternal = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-        if (freeInternal < TRANSITION_INIT_MIN_HEAP) {
-            LW_LOGW("Transition to 0x%04X REJECTED: internal heap %u < %u floor (in-flight transition preserved)",
-                     safeEffectId, (unsigned)freeInternal, (unsigned)TRANSITION_INIT_MIN_HEAP);
-            return;
-        }
-
-        // Step 1: Abort the previous transition cleanly. cancel() memcpys
-        // the engine's internal target buffer into the output buffer
-        // (m_leds), so m_leds now reflects the fully-rendered end of the
-        // prior transition rather than a partially blended frame.
+        const EffectId previousTargetEffectId =
+            m_currentEffectValid ? m_validatedEffectId : validateEffectId(m_currentEffect);
+        const uint32_t preemptElapsedMs = m_transitionEngine->getElapsedMs();
+        const TransitionType preemptedType = m_transitionEngine->getType();
+        TRACE_INSTANT("transition_preempted");
+        LW_LOGI("TRANSITION_PREEMPTED prev_target=0x%04X new_target=0x%04X elapsed_ms=%lu type=%u",
+                previousTargetEffectId,
+                safeEffectId,
+                static_cast<unsigned long>(preemptElapsedMs),
+                static_cast<unsigned>(preemptedType));
         m_transitionEngine->cancel();
-
-        // Step 2: Cleanup the mid-flight effect (which was the prior
-        // transition's target, i.e. m_currentEffect) and init the new
-        // effect, keeping bracketing symmetry with handleSetEffect.
-        const EffectRegistration* inFlightReg = findById(m_currentEffect);
-        if (inFlightReg && inFlightReg->effect != nullptr) {
-            LW_LOGD("IEffect cleanup (concurrent-transition): %s (ID 0x%04X)",
-                     inFlightReg->name, m_currentEffect);
-            inFlightReg->effect->cleanup();
-        }
-
-        const EffectRegistration* incomingReg = findById(safeEffectId);
-        if (incomingReg && incomingReg->effect != nullptr) {
-            LW_LOGD("IEffect init (concurrent-transition): %s (ID 0x%04X)",
-                     incomingReg->name, safeEffectId);
-            plugins::EffectContext initCtx;
-            initCtx.leds = m_leds;
-            initCtx.ledCount = LedConfig::TOTAL_LEDS;
-            initCtx.centerPoint = LedConfig::CENTER_LED_INDEX;
-            initCtx.palette = plugins::PaletteRef(&m_currentPalette);
-            initCtx.brightness = m_brightness;
-            initCtx.speed = m_speed;
-            initCtx.gHue = m_hue;
-            initCtx.intensity = m_intensity;
-            initCtx.saturation = m_saturation;
-            initCtx.complexity = m_complexity;
-            initCtx.variation = m_variation;
-            initCtx.frameNumber = m_frameCount;
-            initCtx.totalTimeMs = m_frameCount * 8;  // Approximate
-            initCtx.deltaTimeMs = 8;  // Default
-            initCtx.rawTotalTimeMs = initCtx.totalTimeMs;
-            initCtx.rawDeltaTimeMs = initCtx.deltaTimeMs;
-            initCtx.rawDeltaTimeSeconds = initCtx.deltaTimeMs * 0.001f;
-            initCtx.zoneId = 0xFF;
-            initCtx.zoneStart = 0;
-            initCtx.zoneLength = 0;
-
-            // Pre-init yield (see handleSetEffect for rationale) — release
-            // CPU 1 so loopTask can feed its task-WDT before we potentially
-            // spend hundreds of ms inside the incoming effect's init().
-#ifndef NATIVE_BUILD
-            vTaskDelay(1);
-#endif
-            const bool concurrentInitOk = incomingReg->effect->init(initCtx);
-#ifndef NATIVE_BUILD
-            vTaskDelay(1);
-#endif
-            if (!concurrentInitOk) {
-                // init() failed: release any partial allocations and bail.
-                // m_currentEffect has NOT yet been rewritten to safeEffectId,
-                // so we simply abort the new transition. m_leds already
-                // contains the prior transition's final frame (from cancel()),
-                // so visual output stays on the prior target effect.
-                incomingReg->effect->cleanup();
-                LW_LOGW("IEffect 0x%04X init failed during concurrent transition, staying on 0x%04X",
-                         safeEffectId, m_currentEffect);
-                return;
-            }
-        }
     }
 
-    EffectId oldEffectId = m_currentEffect;
-
-    // Copy current LED state as source
+    // Capture source before init(); init() is allowed to mutate m_leds.
     memcpy(m_transitionSourceBuffer, m_leds, sizeof(m_transitionSourceBuffer));
 
-    // Switch to new effect
-    m_currentEffect = safeEffectId;
-    m_validatedEffectId = safeEffectId;
-    m_currentEffectValid = true;
+    EffectId oldEffectId = m_currentEffect;
+    if (!prepareEffectSwitchForTransition(safeEffectId, oldEffectId)) {
+        return;
+    }
 
     // Render one frame of new effect to get target
     renderFrame();
 
-    // Start transition
-    TransitionType type = static_cast<TransitionType>(transitionType);
     m_transitionEngine->startTransition(
         m_transitionSourceBuffer,
         m_leds,
         m_leds,
-        type
+        type,
+        resolvedDurationMs,
+        resolvedEasing
     );
 
-    LW_LOGI("Transition started: %s -> %s (%s)",
+    // Phase 2.4 — surface the engine-view hitFrame (no safety margin; the
+    // ActorSystem::getRealLeadTime caller-facing leadTime adds the margin).
+    LW_LOGI("Transition started: %s -> %s (%s), duration=%ums, hitFrame in %ums",
              getEffectName(oldEffectId),
              getEffectName(safeEffectId),
-             getTransitionName(type));
+             getTransitionName(type),
+             static_cast<unsigned>(resolvedDurationMs),
+             static_cast<unsigned>(resolvedDurationMs));
 #else
     // Instant switch (no transition engine on FH4)
     m_currentEffect = safeEffectId;

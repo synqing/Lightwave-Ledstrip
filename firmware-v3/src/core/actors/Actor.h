@@ -84,7 +84,7 @@ enum class MessageType : uint8_t {
     SET_TRANSITION_TYPE = 0x41,
     SET_TRANSITION_TIME = 0x42,
     CANCEL_TRANSITION   = 0x43,
-    START_TRANSITION    = 0x44,  // param1=effectId, param2=transitionType, param4=durationMs
+    START_TRANSITION    = 0x44,  // param1/2=effectId lo/hi, param3=type, param4=durationMs, _reserved=easing
 
     // System commands (0x60-0x7F)
     SHUTDOWN            = 0x60,
@@ -173,7 +173,7 @@ enum class MessageType : uint8_t {
  * - SET_BRIGHTNESS: param1=brightness (0-255)
  * - ZONE_SET_EFFECT: param1=zoneId, param2=effectId
  * - TRIGGER_TRANSITION: param1=transitionType, param4=durationMs
- * - START_TRANSITION: param1=effectId, param2=transitionType, param4=durationMs
+ * - START_TRANSITION: param1/2=effectId lo/hi, param3=type, param4=durationMs, _reserved=easing
  */
 struct Message {
     MessageType type;       // 1 byte - Message type

@@ -480,6 +480,13 @@ void printVpStackSnapshot(const RendererActor::VpStackSnapshot& snap) {
                   static_cast<unsigned long>(snap.lastOutputPrepUs),
                   static_cast<unsigned long>(snap.avgOutputPrepUs),
                   static_cast<unsigned long>(snap.ledStats.avgShowUs));
+    Serial.printf("  transition: type=%u update_us=%lu p50_us=%lu p95_us=%lu p99_us=%lu deadline_miss=%lu\n",
+                  snap.renderStats.transitionTypeActive,
+                  static_cast<unsigned long>(snap.renderStats.transitionUpdateUs),
+                  static_cast<unsigned long>(snap.renderStats.transitionUpdateP50Us),
+                  static_cast<unsigned long>(snap.renderStats.transitionUpdateP95Us),
+                  static_cast<unsigned long>(snap.renderStats.transitionUpdateP99Us),
+                  static_cast<unsigned long>(snap.renderStats.transitionDeadlineMiss));
     Serial.printf("  led_show: frames=%lu last_us=%lu avg_us=%lu max_us=%lu brightness=%u\n",
                   static_cast<unsigned long>(snap.ledStats.frameCount),
                   static_cast<unsigned long>(snap.ledStats.lastShowUs),
@@ -617,19 +624,37 @@ bool SerialCLI::isImmediateHotkeyChar(char c) {
         case '}':            // EdgeMixer save to NVS
         case 'a':            // Audio debug toggle
         case 'p': case 'P':  // Bloom prism opacity
-        case 'o': case 'O':  // Bloom bulb opacity
         case 'i': case 'I':  // Mood
-        case 'f': case 'F':  // Bloom alpha (persistence)
-        case 'h': case 'H':  // Bloom square iter (contrast)
-        case 'j': case 'J':  // Bloom prism iterations
-        case 'k': case 'K':  // Bloom gHue speed (palette sweep)
-        case 'u': case 'U':  // Bloom spatial spread
-        case 'v': case 'V':  // Bloom intensity coupling
-        case 'b': case 'B':  // RD Triangle K +/-
-        case 't': case 'T':  // RD Triangle F +/-
         case 'x': case 'X':  // Bands observability (one-shot dump)
-        case 'q':            // Cinema post-processing toggle
         case '`':            // Status strip idle mode cycle
+        // 2026-05-19 restore pass + Captain disassociation pass — the
+        // 38ff128c (2026-05-17) extraction left several hotkeys stranded;
+        // the 2026-05-19 disassociation removed Captain's deprecated
+        // keystroke→function bindings (auto-play A, Bloom Parity M, Rose
+        // Bloom R, RD Triangle K b/B + F t/T, Bloom alpha f/F, square
+        // iter h/H, prism iter j/J, gHue k/K, spatial u/U, intensity
+        // v/V, bulb o/O, cinema q, jump-to-last L, ambient register m,
+        // and the bloom-debug 'd' single key). Helpers preserved — only
+        // the keystroke associations were removed.
+        case 'n': case 'N':  // Next / previous effect
+        case 't': case 'T':  // Queue next/previous transition type
+        case 'c': case 'C':  // Colour correction cycle / status
+        case 'E':            // Auto-exposure toggle
+        case 'g':            // Gamma toggle / cycle
+        case 'l':            // List all effects
+        case 'r':            // Switch to Reactive register
+        case 's': case 'S':  // Print actor status / save to NVS
+        case 'z': case 'Z':  // Toggle zone mode / print zone status
+        case '?':            // Phase 2.3 — emit arm/staging status
+        case 'M':            // Phase 2.3 — cycle renderer mode (rebound from `?`)
+        case 'f': case 'F':  // Phase 2.3 — stage next/previous effect (no fire)
+        case '\r': case '\n':  // Phase 2.3 — Enter fires the armed pair
+        case '\x1B':         // Phase 2.3 — Esc disarms both staging slots
+        case '|':            // Toggle active strip
+        case '!':            // List transition types
+        case '@':            // Print narrative status
+        case '#':            // Print EdgeMixer status
+        case '*':            // Switch to All register
             return true;
         default:
             return false;
@@ -679,7 +704,10 @@ void SerialCLI::processCommand(const String& rawInput, char firstChar) {
     if (input.length() == 0 && firstChar != ' ' && firstChar != '+' && firstChar != '-' &&
         firstChar != '=' && firstChar != '[' && firstChar != ']' &&
         firstChar != ',' && firstChar != '.' && firstChar != '<' && firstChar != '>' &&
-        firstChar != '}' && firstChar != 'x' && firstChar != 'X') {
+        firstChar != '}' && firstChar != 'x' && firstChar != 'X' &&
+        // Phase 2.3 — Enter / Esc are whitespace-stripped by trim() but
+        // remain valid single-char hotkeys for arm/fire.
+        firstChar != '\r' && firstChar != '\n' && firstChar != '\x1B') {
         // Empty after trim and not an immediate command — ignore
         return;
     }
@@ -758,6 +786,91 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
                       static_cast<unsigned>(effectId),
                       renderer ? renderer->getEffectName(static_cast<EffectId>(effectId)) : "?");
         actors.startTransition(static_cast<EffectId>(effectId), static_cast<uint8_t>(ttype));
+        handledMulti = true;
+        return;
+    }
+
+    // Queue a one-shot transition for the next manual effect change:
+    //   tq <type> [durationMs] [easing]
+    // The queued transition is consumed by dispatchEffect(), so effect-cycle
+    // keys such as space, n, and N keep their normal target selection and only
+    // change the switch transport from hard cut to transition.
+    if (inputLower == "tq" || inputLower == "tq status") {
+        handledMulti = true;
+        if (m_deps.actors) {
+            const auto& staging = m_deps.actors->getStaging();
+            if (staging.hasQueuedTransition()) {
+                const TransitionType tt = static_cast<TransitionType>(staging.queuedTransitionType);
+                Serial.printf("tq: queued %s (%s duration, %s easing) for next effect change\n",
+                              getTransitionName(tt),
+                              (staging.queuedDurationMs == 0) ? "default" : "explicit",
+                              (staging.queuedEasing == 0xFF) ? "default" : "explicit");
+            } else {
+                Serial.println("tq: no queued transition");
+            }
+        }
+        return;
+    }
+    if (inputLower == "tq clear") {
+        if (m_deps.actors) m_deps.actors->clearQueuedTransition();
+        Serial.println("tq: cleared queued transition");
+        handledMulti = true;
+        return;
+    }
+    if (inputLower.startsWith("tq ")) {
+        const char* args = input.c_str() + 3;
+        char* end = nullptr;
+        const long ttype = strtol(args, &end, 10);
+        if (end == args || ttype < 0 || ttype >= static_cast<long>(TransitionType::TYPE_COUNT)) {
+            Serial.printf("tq: bad type (0..%d). Type '!' to list.\n",
+                          static_cast<int>(TransitionType::TYPE_COUNT) - 1);
+            handledMulti = true;
+            return;
+        }
+
+        uint16_t durationMs = 0;
+        uint8_t easing = 0xFF;
+
+        while (*end == ' ') ++end;
+        if (*end != '\0') {
+            char* durationEnd = nullptr;
+            const long parsedDuration = strtol(end, &durationEnd, 10);
+            if (durationEnd == end || parsedDuration < 0 || parsedDuration > 10000 ||
+                (parsedDuration != 0 && parsedDuration < 100)) {
+                Serial.println("tq: bad duration (0 for default, or 100..10000 ms).");
+                handledMulti = true;
+                return;
+            }
+            durationMs = static_cast<uint16_t>(parsedDuration);
+            end = durationEnd;
+
+            while (*end == ' ') ++end;
+            if (*end != '\0') {
+                char* easingEnd = nullptr;
+                const long parsedEasing = strtol(end, &easingEnd, 10);
+                if (easingEnd == end || parsedEasing < 0 ||
+                    parsedEasing >= static_cast<long>(lightwaveos::transitions::EasingCurve::CURVE_COUNT)) {
+                    Serial.printf("tq: bad easing (0..%d).\n",
+                                  static_cast<int>(lightwaveos::transitions::EasingCurve::CURVE_COUNT) - 1);
+                    handledMulti = true;
+                    return;
+                }
+                easing = static_cast<uint8_t>(parsedEasing);
+            }
+        }
+
+        if (m_deps.actors) {
+            m_deps.actors->queueTransition(static_cast<uint8_t>(ttype), durationMs, easing);
+        }
+        const TransitionType tt = static_cast<TransitionType>(ttype);
+        Serial.printf("tq: queued %s for next effect change", getTransitionName(tt));
+        if (durationMs != 0) {
+            Serial.printf(" duration=%ums", durationMs);
+        }
+        if (easing != 0xFF) {
+            Serial.printf(" easing=%u", easing);
+        }
+        Serial.println();
         handledMulti = true;
         return;
     }
@@ -2457,8 +2570,90 @@ void SerialCLI::dispatchEffect(EffectId eid) {
         renderer->getRendererMode() == lightwaveos::actors::RendererMode::Independent) {
         renderer->setStripEffectId(m_activeStripEditing, eid);
     } else if (m_deps.actors != nullptr) {
+#if FEATURE_TRANSITIONS
+        // Phase 2.3 — staging now lives on ActorSystem. Consume any queued
+        // transition through the same path; the t/T → Space/n/N legacy
+        // auto-fire workflow is preserved verbatim.
+        const auto& staging = m_deps.actors->getStaging();
+        if (staging.hasQueuedTransition()) {
+            const uint8_t type = staging.queuedTransitionType;
+            const uint16_t durationMs = staging.queuedDurationMs;
+            const uint8_t easing = staging.queuedEasing;
+            const bool dispatched = m_deps.actors->startTransition(eid, type, durationMs, easing);
+            if (dispatched) {
+                m_deps.actors->clearQueuedTransition();
+                return;
+            }
+
+            if (m_deps.actors->getLastTransitionDispatchResult() ==
+                lightwaveos::actors::TransitionDispatchResult::TransitionsDisabled) {
+                m_deps.actors->clearQueuedTransition();
+                m_deps.actors->setEffect(eid);
+                Serial.println("tq: transitions disabled, hard-switched instead");
+                return;
+            }
+
+            Serial.println("tq: queued transition dispatch failed; effect change not sent");
+            return;
+        }
+#endif
         m_deps.actors->setEffect(eid);
     }
+}
+
+void SerialCLI::emitArmLine() {
+#if FEATURE_TRANSITIONS
+    if (!m_deps.actors) return;
+    const auto& s = m_deps.actors->getStaging();
+    if (!s.isAnyArmed()) {
+        Serial.println("ARM | idle");
+        return;
+    }
+    // Em-dash literal (UTF-8 0xE2 0x80 0x94). pio device monitor supports
+    // UTF-8; legacy non-UTF8 clients see three replacement bytes — still
+    // legible, just not pretty.
+    constexpr const char kEmDash[] = "\xE2\x80\x94";
+
+    char transBuf[32];
+    if (s.hasQueuedTransition()) {
+        const auto tt = static_cast<TransitionType>(s.queuedTransitionType);
+        snprintf(transBuf, sizeof(transBuf), "%s(%u)",
+                 getTransitionName(tt), s.queuedTransitionType);
+    } else {
+        snprintf(transBuf, sizeof(transBuf), "%s", kEmDash);
+    }
+
+    char effectBuf[48];
+    if (s.hasStagedEffect()) {
+        const auto* name = m_deps.renderer
+                             ? m_deps.renderer->getEffectName(s.stagedEffect)
+                             : "?";
+        snprintf(effectBuf, sizeof(effectBuf), "%s(0x%04X)",
+                 name ? name : "?", s.stagedEffect);
+    } else {
+        snprintf(effectBuf, sizeof(effectBuf), "%s", kEmDash);
+    }
+
+    const uint16_t leadMs = computeArmLeadMs();
+    const bool isHardCut = s.hasStagedEffect() && !s.hasQueuedTransition();
+    Serial.printf("ARM | trans=%s | effect=%s | lead=%ums%s\n",
+                  transBuf, effectBuf, leadMs,
+                  isHardCut ? " (hard cut)" : "");
+#endif
+}
+
+uint16_t SerialCLI::computeArmLeadMs() const {
+#if FEATURE_TRANSITIONS
+    if (!m_deps.actors) return 0;
+    const auto& s = m_deps.actors->getStaging();
+    if (!s.hasQueuedTransition()) {
+        return 0;  // hard cut — no lead
+    }
+    return m_deps.actors->getRealLeadTime(s.queuedTransitionType,
+                                          s.queuedDurationMs);
+#else
+    return 0;
+#endif
 }
 
 // ============================================================================
@@ -2595,6 +2790,38 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
             }
             break;
 
+        case 'T':
+#if FEATURE_TRANSITIONS
+            if (m_deps.actors) {
+                const auto& staging = m_deps.actors->getStaging();
+                const uint8_t count = static_cast<uint8_t>(TransitionType::TYPE_COUNT);
+                const uint8_t nextType = staging.hasQueuedTransition()
+                    ? static_cast<uint8_t>((staging.queuedTransitionType + 1U) % count)
+                    : 0U;
+                m_deps.actors->queueTransition(nextType, 0, 0xFF);
+                emitArmLine();
+            }
+#else
+            Serial.println("Transitions disabled (FH4 build)");
+#endif
+            break;
+
+        case 't':
+#if FEATURE_TRANSITIONS
+            if (m_deps.actors) {
+                const auto& staging = m_deps.actors->getStaging();
+                const uint8_t count = static_cast<uint8_t>(TransitionType::TYPE_COUNT);
+                const uint8_t prevType = staging.hasQueuedTransition()
+                    ? static_cast<uint8_t>((staging.queuedTransitionType + count - 1U) % count)
+                    : static_cast<uint8_t>(count - 1U);
+                m_deps.actors->queueTransition(prevType, 0, 0xFF);
+                emitArmLine();
+            }
+#else
+            Serial.println("Transitions disabled (FH4 build)");
+#endif
+            break;
+
         case 'Z':
             // Print zone status
             zoneComposer.printStatus();
@@ -2633,6 +2860,15 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
 
         case ' ':  // Spacebar — quick next effect (no Enter needed)
         case 'n':
+#if FEATURE_TRANSITIONS
+            // Phase 2.3 collision rule — when a staged effect is present,
+            // Space/n/N are suppressed. Enter is the only commit path so
+            // the deliberate-fire workflow is unambiguous.
+            if (m_deps.actors != nullptr && m_deps.actors->getStaging().hasStagedEffect()) {
+                Serial.println("USE ENTER -- armed pair staged");
+                break;
+            }
+#endif
             if (!inZoneMode) {
                 EffectId newEffectId = m_currentEffect;
 
@@ -2672,6 +2908,12 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
             break;
 
         case 'N':
+#if FEATURE_TRANSITIONS
+            if (m_deps.actors != nullptr && m_deps.actors->getStaging().hasStagedEffect()) {
+                Serial.println("USE ENTER -- armed pair staged");
+                break;
+            }
+#endif
             if (!inZoneMode) {
                 EffectId newEffectId = m_currentEffect;
 
@@ -2729,22 +2971,6 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
             }
             break;
 
-        case 'm':  // Switch to aMbient register (time-based effects)
-            m_currentRegister = EffectRegister::AMBIENT;
-            Serial.println("Switched to " LW_CLR_MAGENTA "Ambient" LW_ANSI_RESET " register");
-            Serial.printf("  %d ambient effects available\n", m_ambientEffectCount);
-            // Switch to current ambient effect
-            if (m_ambientEffectCount > 0 && m_ambientRegisterIndex < m_ambientEffectCount) {
-                EffectId ambientId = m_ambientEffectIds[m_ambientRegisterIndex];
-                if (ambientId != lightwaveos::INVALID_EFFECT_ID) {
-                    m_currentEffect = ambientId;
-                    actors.setEffect(ambientId);
-                    Serial.printf("  Current: %s (ID 0x%04X)\n",
-                                  renderer->getEffectName(ambientId), ambientId);
-                }
-            }
-            break;
-
         case '*':  // Switch back to All effects register (default)
             m_currentRegister = EffectRegister::ALL;
             Serial.println("Switched to " LW_CLR_GREEN "All Effects" LW_ANSI_RESET " register");
@@ -2753,52 +2979,16 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
                           renderer->getEffectName(m_currentEffect), m_currentEffect);
             break;
 
-        case 'L': {  // Jump to last effect in current register
-            EffectId newEffectId = lightwaveos::INVALID_EFFECT_ID;
-
-            switch (m_currentRegister) {
-                case EffectRegister::ALL: {
-                    // Last effect in display order
-                    uint16_t dc = lightwaveos::DISPLAY_COUNT;
-                    if (dc > 0) {
-                        newEffectId = lightwaveos::DISPLAY_ORDER[dc - 1];
-                    }
-                    break;
-                }
-
-                case EffectRegister::REACTIVE: {
-                    uint8_t count = PatternRegistry::getReactiveEffectCount();
-                    if (count > 0) {
-                        m_reactiveRegisterIndex = count - 1;
-                        newEffectId = PatternRegistry::getReactiveEffectId(m_reactiveRegisterIndex);
-                    }
-                    break;
-                }
-
-                case EffectRegister::AMBIENT:
-                    if (m_ambientEffectCount > 0) {
-                        m_ambientRegisterIndex = m_ambientEffectCount - 1;
-                        newEffectId = m_ambientEffectIds[m_ambientRegisterIndex];
-                    }
-                    break;
-            }
-
-            if (newEffectId != lightwaveos::INVALID_EFFECT_ID) {
-                m_currentEffect = newEffectId;
-                dispatchEffect(m_currentEffect);
-                const char* suffix = (m_currentRegister == EffectRegister::REACTIVE) ? "[R]" :
-                                     (m_currentRegister == EffectRegister::AMBIENT) ? "[M]" : "";
-                bool isIndep = (renderer != nullptr) &&
-                               (renderer->getRendererMode() == lightwaveos::actors::RendererMode::Independent);
-                Serial.printf("Last effect 0x%04X%s: " LW_CLR_GREEN "%s" LW_ANSI_RESET "%s\n",
-                              m_currentEffect, suffix, renderer->getEffectName(m_currentEffect),
-                              isIndep ? (m_activeStripEditing == 0 ? " -> s0" : " -> s1") : "");
-            }
+        case '?':
+            // Phase 2.3 — emit current arm/staging status. One-shot query,
+            // no mutation. Echoes "ARM | idle" when both slots empty, or
+            // a compact "ARM | trans=... | effect=... | lead=Xms" line.
+            emitArmLine();
             break;
-        }
 
-        case '?': {
-            // Phase 1C — cycle renderer mode (Unified <-> Independent).
+        case 'M': {
+            // Phase 2.3 — rebound from `?` so the arm-status key (`?`) is
+            // free. Cycles renderer mode (Unified <-> Independent).
             // On entry to Independent, seed any unset strip with m_currentEffect
             // so both strips show something rather than a black 0xFFFF fall-through.
             if (renderer == nullptr) break;
@@ -2824,6 +3014,95 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
             }
             break;
         }
+
+        case 'f':
+#if FEATURE_TRANSITIONS
+            // Phase 2.3 — stage NEXT effect (no fire). When Enter is the only
+            // way to commit, Space/n/N collide with the staged pair and emit
+            // a guard message. Esc clears the staging.
+            if (m_deps.actors != nullptr) {
+                const auto& staging = m_deps.actors->getStaging();
+                const EffectId base = staging.hasStagedEffect()
+                                          ? staging.stagedEffect
+                                          : m_currentEffect;
+                const EffectId next = lightwaveos::getNextDisplay(base);
+                if (next != lightwaveos::INVALID_EFFECT_ID) {
+                    m_deps.actors->stageEffect(next);
+                    emitArmLine();
+                }
+            }
+#endif
+            break;
+
+        case 'F':
+#if FEATURE_TRANSITIONS
+            // Phase 2.3 — stage PREVIOUS effect.
+            if (m_deps.actors != nullptr) {
+                const auto& staging = m_deps.actors->getStaging();
+                const EffectId base = staging.hasStagedEffect()
+                                          ? staging.stagedEffect
+                                          : m_currentEffect;
+                const EffectId prev = lightwaveos::getPrevDisplay(base);
+                if (prev != lightwaveos::INVALID_EFFECT_ID) {
+                    m_deps.actors->stageEffect(prev);
+                    emitArmLine();
+                }
+            }
+#endif
+            break;
+
+        case '\r':
+        case '\n': {
+            // Phase 2.3 — Enter fires the armed staging. Debounce CRLF
+            // (some terminals send both bytes) within 50ms. Silent on
+            // NotArmed per Captain spec.
+#if FEATURE_TRANSITIONS
+            const uint32_t now = millis();
+            if (now - m_lastEnterFireMs < 50) {
+                break;  // duplicate from CRLF arrival; eat silently
+            }
+            m_lastEnterFireMs = now;
+            if (m_deps.actors == nullptr) break;
+            using lightwaveos::actors::FireResult;
+            const FireResult result = m_deps.actors->fireArmedPair();
+            switch (result) {
+                case FireResult::Fired: {
+                    const uint16_t leadMs = computeArmLeadMs();
+                    Serial.printf("FIRE: hitFrame in %ums\n", leadMs);
+                    break;
+                }
+                case FireResult::HardCut:
+                    Serial.println("FIRE: hitFrame in 0ms (hard cut)");
+                    break;
+                case FireResult::Busy: {
+                    uint32_t remainingMs = 0;
+                    if (m_deps.renderer) {
+                        auto* engine = m_deps.renderer->getTransitionEngine();
+                        if (engine) remainingMs = engine->getRemainingMs();
+                    }
+                    Serial.printf("BUSY: %ums remaining\n", static_cast<unsigned>(remainingMs));
+                    break;
+                }
+                case FireResult::TransitionsDisabled:
+                    Serial.println("FIRE (transitions disabled, hard cut)");
+                    break;
+                case FireResult::NotArmed:
+                    // Captain spec: silent. No echo.
+                    break;
+            }
+#endif
+            break;
+        }
+
+        case '\x1B':
+            // Phase 2.3 — Esc disarms both staging slots. Echoes "ARM | idle".
+#if FEATURE_TRANSITIONS
+            if (m_deps.actors != nullptr) {
+                m_deps.actors->disarmAll();
+                emitArmLine();
+            }
+#endif
+            break;
 
         case '|': {
             // Phase 1C — toggle active strip for effect-cycle keys.
@@ -2942,46 +3221,6 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
             }
             break;
 
-        case 'o':
-            // Bloom bulb opacity +
-            {
-                using BP = lightwaveos::effects::ieffect::BloomParityEffect;
-                BP::setBulbOpacity(BP::getBulbOpacity() + 0.05f);
-                Serial.printf("Bloom Bulb: %.2f\n", BP::getBulbOpacity());
-            }
-            break;
-
-        case 'O':
-            // Bloom bulb opacity -
-            {
-                using BP = lightwaveos::effects::ieffect::BloomParityEffect;
-                BP::setBulbOpacity(BP::getBulbOpacity() - 0.05f);
-                Serial.printf("Bloom Bulb: %.2f\n", BP::getBulbOpacity());
-            }
-            break;
-
-        case 'M':
-            // Bloom Parity — cycle runtime test mode (Baseline + 9 hypotheses for second-motion-layer artefact)
-            {
-                using BP = lightwaveos::effects::ieffect::BloomParityEffect;
-                const uint8_t next = (static_cast<uint8_t>(BP::getPrismMode()) + 1) % BP::kPrismModeCount;
-                const auto mode = static_cast<BP::PrismMode>(next);
-                BP::setPrismMode(mode);
-                Serial.printf("Bloom Parity Mode: %u — %s\n", next, BP::getPrismModeName(mode));
-            }
-            break;
-
-        case 'R':
-            // Rose Bloom — cycle runtime test mode (Baseline + 9 hypotheses for carry-through)
-            {
-                using RB = lightwaveos::effects::ieffect::LGPRoseBloomAREffect;
-                const uint8_t next = (static_cast<uint8_t>(RB::getRoseBloomMode()) + 1) % RB::kRoseBloomModeCount;
-                const auto mode = static_cast<RB::RoseBloomMode>(next);
-                RB::setRoseBloomMode(mode);
-                Serial.printf("Rose Bloom Mode: %u — %s\n", next, RB::getRoseBloomModeName(mode));
-            }
-            break;
-
         case 'a':
             // Toggle audio debug logging
             {
@@ -3023,52 +3262,6 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
             }
             break;
 
-        case 'd':
-            // Toggle Bloom effect debug output
-            lightwaveos::effects::ieffect::g_bloomDebugEnabled =
-                !lightwaveos::effects::ieffect::g_bloomDebugEnabled;
-            Serial.printf("[BLOOM DEBUG] %s\n",
-                lightwaveos::effects::ieffect::g_bloomDebugEnabled ? "ENABLED (select effect 120)" : "DISABLED");
-            break;
-
-        case 't':
-        case 'T':
-            // RD Triangle: F - / +
-            {
-                EffectId rdTriangleId = lightwaveos::INVALID_EFFECT_ID;
-                uint16_t effectCount = renderer->getEffectCount();
-                for (uint16_t i = 0; i < effectCount; i++) {
-                    EffectId eid = renderer->getEffectIdAt(i);
-                    const char* name = renderer->getEffectName(eid);
-                    if (name && strcmp(name, "LGP RD Triangle") == 0) {
-                        rdTriangleId = eid;
-                        break;
-                    }
-                }
-                if (rdTriangleId == lightwaveos::INVALID_EFFECT_ID) {
-                    Serial.println("RD Triangle not found");
-                    break;
-                }
-                if (renderer->getCurrentEffect() != rdTriangleId) {
-                    m_currentEffect = rdTriangleId;
-                    actors.setEffect(rdTriangleId);
-                }
-                IEffect* effect = renderer->getEffectInstance(rdTriangleId);
-                if (!effect) {
-                    Serial.println("RD Triangle not available");
-                    break;
-                }
-                float f = effect->getParameter("F");
-                if (f <= 0.0f) f = 0.0380f;
-                if (cmd == 't') f -= 0.0010f;
-                else f += 0.0010f;
-                if (f < 0.0300f) f = 0.0300f;
-                if (f > 0.0500f) f = 0.0500f;
-                effect->setParameter("F", f);
-                Serial.printf("RD Triangle F: %.4f\n", f);
-            }
-            break;
-
         case '!':
 #if FEATURE_TRANSITIONS
             // List transition types
@@ -3082,17 +3275,6 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
 #else
             Serial.println("Transitions disabled (FH4 build)");
 #endif
-            break;
-
-        case 'A':
-            // Toggle auto-play (narrative) mode
-            if (NARRATIVE.isEnabled()) {
-                NARRATIVE.disable();
-                Serial.println("Auto-play: DISABLED");
-            } else {
-                NARRATIVE.enable();
-                Serial.println("Auto-play: ENABLED (4s cycle)");
-            }
             break;
 
         case '@':
@@ -3299,53 +3481,6 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
             }
             break;
 
-        case 'q':
-            // Toggle cinema post-processing (A/B visual comparison)
-            {
-                namespace cine = lightwaveos::effects::cinema;
-                cine::setEnabled(!cine::isEnabled());
-                Serial.printf("Cinema post: %s\n", cine::isEnabled() ? "ON" : "OFF");
-            }
-            break;
-
-        case 'b':
-        case 'B':
-            // RD Triangle: K - / +
-            {
-                EffectId rdTriangleId = lightwaveos::INVALID_EFFECT_ID;
-                uint16_t effectCount = renderer->getEffectCount();
-                for (uint16_t i = 0; i < effectCount; i++) {
-                    EffectId eid = renderer->getEffectIdAt(i);
-                    const char* name = renderer->getEffectName(eid);
-                    if (name && strcmp(name, "LGP RD Triangle") == 0) {
-                        rdTriangleId = eid;
-                        break;
-                    }
-                }
-                if (rdTriangleId == lightwaveos::INVALID_EFFECT_ID) {
-                    Serial.println("RD Triangle not found");
-                    break;
-                }
-                if (renderer->getCurrentEffect() != rdTriangleId) {
-                    m_currentEffect = rdTriangleId;
-                    actors.setEffect(rdTriangleId);
-                }
-                IEffect* effect = renderer->getEffectInstance(rdTriangleId);
-                if (!effect) {
-                    Serial.println("RD Triangle not available");
-                    break;
-                }
-                float k = effect->getParameter("K");
-                if (k <= 0.0f) k = 0.0630f;
-                if (cmd == 'b') k -= 0.0010f;
-                else k += 0.0010f;
-                if (k < 0.0550f) k = 0.0550f;
-                if (k > 0.0750f) k = 0.0750f;
-                effect->setParameter("K", k);
-                Serial.printf("RD Triangle K: %.4f\n", k);
-            }
-            break;
-
         case 'I':
             // Mood -
             {
@@ -3356,117 +3491,6 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
             }
             break;
 
-        case 'f':
-            // Alpha (persistence) +
-            {
-                using BP = lightwaveos::effects::ieffect::BloomParityEffect;
-                BP::setAlpha(BP::getAlpha() + 0.01f);
-                Serial.printf("Bloom Alpha: %.3f\n", BP::getAlpha());
-            }
-            break;
-
-        case 'F':
-            // Alpha (persistence) -
-            {
-                using BP = lightwaveos::effects::ieffect::BloomParityEffect;
-                BP::setAlpha(BP::getAlpha() - 0.01f);
-                Serial.printf("Bloom Alpha: %.3f\n", BP::getAlpha());
-            }
-            break;
-
-        case 'h':
-            // Square iterations (contrast) +
-            {
-                using BP = lightwaveos::effects::ieffect::BloomParityEffect;
-                BP::setSquareIter(BP::getSquareIter() + 1);
-                Serial.printf("Bloom Square Iter: %d\n", BP::getSquareIter());
-            }
-            break;
-
-        case 'H':
-            // Square iterations (contrast) -
-            {
-                using BP = lightwaveos::effects::ieffect::BloomParityEffect;
-                uint8_t si = BP::getSquareIter();
-                BP::setSquareIter(si > 0 ? si - 1 : 0);
-                Serial.printf("Bloom Square Iter: %d\n", BP::getSquareIter());
-            }
-            break;
-
-        case 'j':
-            // Prism iterations +
-            {
-                using BP = lightwaveos::effects::ieffect::BloomParityEffect;
-                BP::setPrismIterations(BP::getPrismIterations() + 1);
-                Serial.printf("Bloom Prism Iter: %d\n", BP::getPrismIterations());
-            }
-            break;
-
-        case 'J':
-            // Prism iterations -
-            {
-                using BP = lightwaveos::effects::ieffect::BloomParityEffect;
-                uint8_t pi = BP::getPrismIterations();
-                BP::setPrismIterations(pi > 0 ? pi - 1 : 0);
-                Serial.printf("Bloom Prism Iter: %d\n", BP::getPrismIterations());
-            }
-            break;
-
-        case 'k':
-            // gHue speed +
-            {
-                using BP = lightwaveos::effects::ieffect::BloomParityEffect;
-                BP::setGHueSpeed(BP::getGHueSpeed() + 0.25f);
-                Serial.printf("Bloom gHue Speed: %.2f\n", BP::getGHueSpeed());
-            }
-            break;
-
-        case 'K':
-            // gHue speed -
-            {
-                using BP = lightwaveos::effects::ieffect::BloomParityEffect;
-                BP::setGHueSpeed(BP::getGHueSpeed() - 0.25f);
-                Serial.printf("Bloom gHue Speed: %.2f\n", BP::getGHueSpeed());
-            }
-            break;
-
-        case 'u':
-            // Spatial spread +
-            {
-                using BP = lightwaveos::effects::ieffect::BloomParityEffect;
-                BP::setSpatialSpread(BP::getSpatialSpread() + 16.0f);
-                Serial.printf("Bloom Spatial Spread: %.0f\n", BP::getSpatialSpread());
-            }
-            break;
-
-        case 'U':
-            // Spatial spread -
-            {
-                using BP = lightwaveos::effects::ieffect::BloomParityEffect;
-                float ss = BP::getSpatialSpread();
-                BP::setSpatialSpread(ss > 16.0f ? ss - 16.0f : 0.0f);
-                Serial.printf("Bloom Spatial Spread: %.0f\n", BP::getSpatialSpread());
-            }
-            break;
-
-        case 'v':
-            // Intensity coupling +
-            {
-                using BP = lightwaveos::effects::ieffect::BloomParityEffect;
-                BP::setIntensityCoupling(BP::getIntensityCoupling() + 0.1f);
-                Serial.printf("Bloom Intensity Coupling: %.1f\n", BP::getIntensityCoupling());
-            }
-            break;
-
-        case 'V':
-            // Intensity coupling -
-            {
-                using BP = lightwaveos::effects::ieffect::BloomParityEffect;
-                float ic = BP::getIntensityCoupling();
-                BP::setIntensityCoupling(ic > 0.1f ? ic - 0.1f : 0.0f);
-                Serial.printf("Bloom Intensity Coupling: %.1f\n", BP::getIntensityCoupling());
-            }
-            break;
         }
     }
 }

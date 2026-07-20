@@ -455,7 +455,8 @@ void printHelpBanner() {
     Serial.println("  1-5     - Load zone preset (in zone mode)");
     Serial.println("  S       - Save all settings to NVS");
     Serial.println("\nTransition Commands:");
-    Serial.println("  t/T     - RD Triangle F +/- (auto-selects RD Triangle)");
+    Serial.println("  T       - Queue next transition type for next effect change");
+    Serial.println("  t       - Queue previous transition type for next effect change");
     Serial.println("  !       - List transition types");
     Serial.println("\nAuto-Play (Narrative) Commands:");
     Serial.println("  A       - Toggle auto-play mode");

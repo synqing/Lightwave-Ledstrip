@@ -2,8 +2,17 @@
  * @file HeapForensics.cpp
  * @brief Diagnostic heap dump emitter (SSA-W4 — non-production).
  *
- * Implementation notes
- * --------------------
+ * Master gate
+ * -----------
+ * `dump()` and `dumpScalar()` are no-ops unless `LW_HEAP_FORENSICS_ENABLE=1`
+ * is set on the build env. Production envs leave it undefined so all 11 call
+ * sites (WebServer boot / first-client / 60 s periodic / scalar 1 Hz / shed
+ * transitions, UdpStreamer ENOMEM, SerialCLI `dbg memory verbose`) compile
+ * but return immediately — no serial output, no `heap_caps_*` mutex traffic.
+ * Diagnostic / soak envs opt in with `-D LW_HEAP_FORENSICS_ENABLE=1`.
+ *
+ * Implementation notes (when enabled)
+ * -----------------------------------
  * Output goes straight to `Serial.printf` and `heap_caps_print_heap_info`
  * (which writes to ESP-IDF's `stdout`, normally the same UART as Arduino's
  * `Serial`). Both paths bypass the LW_LOG_* macros so the dumps remain
@@ -22,6 +31,12 @@
  * (feedback_no_heap_scans_in_high_freq_paths.md) does not apply at this
  * cadence.
  */
+
+// Default master gate to OFF if the build env hasn't set it. Diagnostic /
+// soak builds re-enable with `-D LW_HEAP_FORENSICS_ENABLE=1`.
+#ifndef LW_HEAP_FORENSICS_ENABLE
+#define LW_HEAP_FORENSICS_ENABLE 0
+#endif
 
 #include "HeapForensics.h"
 
@@ -59,6 +74,7 @@ const char* reasonTag(HeapDumpReason reason) {
     return "unknown";
 }
 
+#if LW_HEAP_FORENSICS_ENABLE
 namespace {
 
 // Emits Blocks 1-3 (wall-clock anchor + internal SRAM scalars + PSRAM
@@ -163,17 +179,29 @@ void emitScalarBlocks(const char* tag, bool shedActive, uint32_t shedLatchedMs) 
 }
 
 } // namespace
+#endif  // LW_HEAP_FORENSICS_ENABLE
 
 void dumpScalar(HeapDumpReason reason, bool shedActive, uint32_t shedLatchedMs) {
+#if !LW_HEAP_FORENSICS_ENABLE
+    // Master-gate OFF: skip every heap_caps_* call and serial emit. Set
+    // `-D LW_HEAP_FORENSICS_ENABLE=1` on the build env to re-enable.
+    (void)reason; (void)shedActive; (void)shedLatchedMs;
+    return;
+#else
     // Scalar-only emission for the 1 Hz periodic tick (Phase 0.5).
     // Skips the verbose IDF histogram payload — at 1 Hz that would flood
     // serial bandwidth and itself add heap pressure via UART tx buffering.
     // Edges (boot, shed transitions, UDP ENOMEM, on-demand) still get the
     // full dump() with histograms.
     emitScalarBlocks(reasonTag(reason), shedActive, shedLatchedMs);
+#endif
 }
 
 void dump(HeapDumpReason reason, bool shedActive, uint32_t shedLatchedMs) {
+#if !LW_HEAP_FORENSICS_ENABLE
+    (void)reason; (void)shedActive; (void)shedLatchedMs;
+    return;
+#else
     const char* tag = reasonTag(reason);
 
     emitScalarBlocks(tag, shedActive, shedLatchedMs);
@@ -201,6 +229,7 @@ void dump(HeapDumpReason reason, bool shedActive, uint32_t shedLatchedMs) {
     Serial.printf("[HEAP-FORENSICS] %s heap_caps_print MALLOC_CAP_RTCRAM BEGIN\n", tag);
     heap_caps_print_heap_info(MALLOC_CAP_RTCRAM);
     Serial.printf("[HEAP-FORENSICS] %s heap_caps_print MALLOC_CAP_RTCRAM END\n", tag);
+#endif  // LW_HEAP_FORENSICS_ENABLE
 }
 
 } // namespace diagnostics

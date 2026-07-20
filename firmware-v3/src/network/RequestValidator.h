@@ -674,7 +674,7 @@ namespace RequestSchemas {
     /**
      * @brief POST /api/v1/effects/set
      * Required: effectId (0-255, typically 0-45)
-     * Optional: transition (bool), transitionType (0-15)
+     * Optional: transition (bool), transitionType (0-11)
      */
     constexpr FieldSchema SetEffect[] = {
         {"effectId", FieldType::UINT16, true, 0, 65535}
@@ -714,21 +714,34 @@ namespace RequestSchemas {
      */
     constexpr FieldSchema TriggerTransition[] = {
         {"toEffect", FieldType::UINT16, true, 0, 65535},
-        {"type",     FieldType::UINT8,  false, 0, 15},
+        {"type",     FieldType::UINT8,  false, 0, 11},
         {"duration", FieldType::UINT16, false, 100, 10000},
-        {"easing",   FieldType::UINT8,  false, 0, 15}
+        {"easing",   FieldType::UINT8,  false, 0, 14}
     };
     constexpr size_t TriggerTransitionSize = sizeof(TriggerTransition) / sizeof(FieldSchema);
 
     /**
      * @brief POST /api/v1/transitions/config
-     * Optional: defaultDuration, defaultType
+     * Optional: defaultDuration, defaultType, enabled
      */
     constexpr FieldSchema TransitionConfig[] = {
         {"defaultDuration", FieldType::UINT16, false, 100, 10000},
-        {"defaultType",     FieldType::UINT8,  false, 0, 15}
+        {"defaultType",     FieldType::UINT8,  false, 0, 11},
+        {"enabled",         FieldType::BOOL,   false, 0, 1}
     };
     constexpr size_t TransitionConfigSize = sizeof(TransitionConfig) / sizeof(FieldSchema);
+
+    /**
+     * @brief POST /api/v1/transitions/leadtime (Phase 2.4)
+     * Required: type (0..11)
+     * Optional: duration (0 = tier default; otherwise 100..10000ms)
+     * Returns: leadTime, duration, safetyMargin, tier
+     */
+    constexpr FieldSchema TransitionLeadtime[] = {
+        {"type",     FieldType::UINT8,  true,  0, 11},
+        {"duration", FieldType::UINT16, false, 0, 10000}
+    };
+    constexpr size_t TransitionLeadtimeSize = sizeof(TransitionLeadtime) / sizeof(FieldSchema);
 
     // ========================================================================
     // Zone Schemas

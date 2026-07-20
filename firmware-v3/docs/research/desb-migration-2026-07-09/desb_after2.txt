@@ -1,0 +1,35 @@
+======================================================================
+DE-SB VERIFIER — root=/private/tmp/k1_edgemixer_on_im73d
+======================================================================
+TOTAL residual (excluding sanctioned magic bytes):
+  sensory_bridge  : 0
+  sb_lower        : 0
+  SB_upper        : 0
+  SB_caps         : 0
+  flag_DSB        : 0
+  GRAND TOTAL     : 0
+
+FILES WITH RESIDUAL: 0
+
+SANCTIONED MAGIC residual lines (10 — MUST remain):
+  SPECTRASYNQ_K1_FIRMWARE/control/k1_effect_queue.h: #define K1_PRESET_SLOTS_MAGIC 0x53504253UL  // 'SBPS' little-endian
+  scripts/regression-harness/ap_capture_leg.py: DIR = "/Users/spectrasynq/SensoryBridge-main 9/docs/refactor/harness-baselines/freeze-88428a2"
+  scripts/regression-harness/ap_capture_leg.py: ["git", "-C", "/Users/spectrasynq/SensoryBridge-main 9", "rev-parse", "--short", "HEAD"],
+  scripts/regression-harness/derive_bands.py: DIR = "/Users/spectrasynq/SensoryBridge-main 9/docs/refactor/harness-baselines/freeze-88428a2"
+  scripts/regression-harness/golden/oracle_chord.py: ROOT = Path(__file__).resolve().parents[3]          # SensoryBridge-main 9/
+  scripts/platformio/k1_effect_framework_includes.py: survives the space in the repo path ("SensoryBridge-main 9"). This script is
+  scripts/platformio/k1_src_includes.py: so they survive the space in the repo path ("SensoryBridge-main 9"). All envs
+  tests/test_k1_pin_evidence_static.py: self.assertNotIn("SB_PIN", text)
+  tests/test_k1_pin_evidence_static.py: self.assertNotIn("SB_LOUD", text)
+  tests/test_k1_loud_guard_static.py: self.assertNotIn("SB_LOUD", PLATFORMIO + GLOBALS + CONSTANTS + I2S + SERIAL)
+
+-DSB_ FLAGS in platformio.ini (0):
+
+SB_ symbols in #ifdef/#if/defined() across source (0):
+
+ATOMICITY NOTE: after rename, every -DSB_X becomes -DK1_X AND every
+#ifdef SB_X becomes #ifdef K1_X in the SAME uncommitted pass, so the
+pairing is preserved by construction. The 0-residual test confirms it.
+
+ACCEPTANCE: PASS (0 residual)
+JSON:{"grand": 0, "by_cat": {"sensory_bridge": 0, "sb_lower": 0, "SB_upper": 0, "SB_caps": 0, "flag_DSB": 0}, "files": 0}

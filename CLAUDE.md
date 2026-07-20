@@ -1,3 +1,7 @@
+> ⛔ **DEPRECATED FIRMWARE LINEAGE.** `firmware-v3/` in this repo is DEAD and ships to nobody.
+> The canonical product firmware is **`/Users/spectrasynq/SpectraSynq_K1_Firmware`**.
+> Do not read, index, or edit `firmware-v3/`. See `DEPRECATED-firmware-v3.md`.
+
 # LightwaveOS
 
 ## RBDO Gate — Mandatory Before Tactical Output

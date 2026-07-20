@@ -8,6 +8,8 @@
 
 #include "ActorSystem.h"
 #include "../../config/effect_ids.h"
+#include "../../effects/transitions/TransitionRuntimeConfig.h"
+#include "../../effects/transitions/TransitionTypes.h"
 #include <math.h>
 
 #ifndef NATIVE_BUILD
@@ -44,6 +46,7 @@ ActorSystem& ActorSystem::instance()
 ActorSystem::ActorSystem()
     : m_state(SystemState::UNINITIALIZED)
     , m_startTime(0)
+    , m_lastTransitionDispatchResult(TransitionDispatchResult::None)
 {
 #if FEATURE_AUDIO_SYNC
     m_stimulusMutex = xSemaphoreCreateMutex();
@@ -749,15 +752,29 @@ const lightwaveos::audio::SnapshotBuffer<lightwaveos::audio::ControlBusFrame>& A
 }
 #endif
 
-bool ActorSystem::startTransition(EffectId effectId, uint8_t transitionType)
+bool ActorSystem::startTransition(EffectId effectId,
+                                  uint8_t transitionType,
+                                  uint16_t durationMs,
+                                  uint8_t easing)
 {
     if (!m_renderer || !m_renderer->isRunning()) {
+        m_lastTransitionDispatchResult = TransitionDispatchResult::RendererUnavailable;
+        return false;
+    }
+
+    if (!transitions::transitionsEnabled()) {
+        m_lastTransitionDispatchResult = TransitionDispatchResult::TransitionsDisabled;
+#ifndef NATIVE_BUILD
+        ESP_LOGW(TAG, "startTransition(0x%04X, %d) rejected - transitions disabled",
+                 effectId, transitionType);
+#endif
         return false;
     }
 
     // Queue backpressure: reject if queue > 90% full
     uint8_t utilization = m_renderer->getQueueUtilization();
     if (utilization >= 90) {
+        m_lastTransitionDispatchResult = TransitionDispatchResult::QueueSaturated;
 #ifndef NATIVE_BUILD
         ESP_LOGW(TAG, "startTransition(0x%04X, %d) rejected - queue saturated (utilization: %d%%)",
                  effectId, transitionType, utilization);
@@ -765,20 +782,143 @@ bool ActorSystem::startTransition(EffectId effectId, uint8_t transitionType)
         return false;
     }
 
-    // Pack EffectId as 2 bytes: low byte in param1, high byte in param2
-    // transitionType moves to param3
+    // START_TRANSITION packing:
+    // param1/2 = EffectId low/high, param3 = transition type,
+    // param4 = durationMs (0 means renderer default), _reserved = easing
+    // (0xFFFFFFFF means renderer default).
     Message msg(MessageType::START_TRANSITION);
     msg.param1 = static_cast<uint8_t>(effectId & 0xFF);
     msg.param2 = static_cast<uint8_t>((effectId >> 8) & 0xFF);
     msg.param3 = transitionType;
+    msg.param4 = durationMs;
+    msg._reserved = (easing == 0xFF) ? 0xFFFFFFFFUL : static_cast<uint32_t>(easing);
     bool success = m_renderer->send(msg, pdMS_TO_TICKS(10));
     if (!success) {
+        m_lastTransitionDispatchResult = TransitionDispatchResult::SendFailed;
 #ifndef NATIVE_BUILD
         ESP_LOGW(TAG, "startTransition(0x%04X, %d) failed - queue may be full (utilization: %d%%)",
                  effectId, transitionType, m_renderer->getQueueUtilization());
 #endif
     }
+    if (success) {
+        m_lastTransitionDispatchResult = TransitionDispatchResult::Sent;
+    }
     return success;
+}
+
+// ============================================================================
+// Phase 2.3 — Manual Arm/Fire Staging
+// ============================================================================
+// All methods below are Core-0 only. The renderer (Core 1) never reads
+// m_staging directly — fire packs the staged values into a START_TRANSITION
+// or SET_EFFECT message and the renderer sees only the message. Future
+// REST/WS arm/fire surfaces will need a mutex around m_staging.
+
+void ActorSystem::queueTransition(uint8_t transitionType,
+                                  uint16_t durationMs,
+                                  uint8_t easing)
+{
+    if (transitionType >= static_cast<uint8_t>(transitions::TransitionType::TYPE_COUNT)) {
+        return;  // Silently reject out-of-range types; the validator gate
+                 // is the canonical contract — CLI cycle code keeps types
+                 // in range by construction.
+    }
+    m_staging.queuedTransitionType = transitionType;
+    m_staging.queuedDurationMs     = durationMs;
+    m_staging.queuedEasing         = easing;
+}
+
+void ActorSystem::clearQueuedTransition()
+{
+    m_staging.queuedTransitionType = ManualStaging::kNoTransition;
+    m_staging.queuedDurationMs     = 0;
+    m_staging.queuedEasing         = 0xFF;
+}
+
+void ActorSystem::stageEffect(EffectId eid)
+{
+    // Effect existence is not validated here — the renderer-side
+    // handleSetEffect / handleStartTransition validates against the
+    // registry. Staging an unknown id will surface as a reject at fire
+    // time. CLI cycles via DISPLAY_ORDER so this is a no-op in practice.
+    m_staging.stagedEffect = eid;
+}
+
+void ActorSystem::clearStagedEffect()
+{
+    m_staging.stagedEffect = INVALID_EFFECT_ID;
+}
+
+void ActorSystem::disarmAll()
+{
+    clearQueuedTransition();
+    clearStagedEffect();
+}
+
+FireResult ActorSystem::fireArmedPair()
+{
+    if (!m_staging.isAnyArmed()) {
+        return FireResult::NotArmed;
+    }
+
+    // UX-layer busy guard: the engine has its own preemption guard, so a
+    // stale read is acceptable — if the transition just ended we'll re-
+    // dispatch on the next Enter; if one just started, the engine refuses.
+    if (m_renderer && m_renderer->isTransitionActive()) {
+        return FireResult::Busy;
+    }
+
+    const ManualStaging staged = m_staging;  // snapshot before clearing
+
+    // Hard cut path: staged effect with no queued transition.
+    if (staged.hasStagedEffect() && !staged.hasQueuedTransition()) {
+        const bool ok = setEffect(staged.stagedEffect);
+        disarmAll();
+        return ok ? FireResult::HardCut : FireResult::HardCut;
+    }
+
+    // Paired fire — transition queued, effect optional.
+    // If only a transition is queued (no staged effect), Enter falls
+    // through to NotArmed handling above? No — isAnyArmed() returns true
+    // here. Define semantics: with no staged effect, paired-fire has no
+    // target. Treat as NotArmed (silent per Captain spec) so users do not
+    // get a confused echo.
+    if (!staged.hasStagedEffect()) {
+        return FireResult::NotArmed;
+    }
+
+    const bool dispatched = startTransition(staged.stagedEffect,
+                                            staged.queuedTransitionType,
+                                            staged.queuedDurationMs,
+                                            staged.queuedEasing);
+    if (dispatched) {
+        disarmAll();
+        return FireResult::Fired;
+    }
+
+    // Dispatch failed — distinguish kill-switch from generic failure.
+    if (m_lastTransitionDispatchResult == TransitionDispatchResult::TransitionsDisabled) {
+        const bool hardOk = setEffect(staged.stagedEffect);
+        (void)hardOk;
+        disarmAll();
+        return FireResult::TransitionsDisabled;
+    }
+
+    // Queue saturated or send failed — treat as Busy for the UX layer.
+    return FireResult::Busy;
+}
+
+uint16_t ActorSystem::getRealLeadTime(uint8_t transitionType,
+                                       uint16_t requestedDurationMs) const
+{
+    if (transitionType >= static_cast<uint8_t>(transitions::TransitionType::TYPE_COUNT)) {
+        return 0;
+    }
+    const auto tt = static_cast<transitions::TransitionType>(transitionType);
+    const uint16_t eff = (requestedDurationMs != 0)
+                            ? requestedDurationMs
+                            : transitions::getDefaultDuration(tt);
+    return eff + kTransitionSafetyMarginMs;
 }
 
 // ============================================================================

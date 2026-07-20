@@ -85,6 +85,9 @@ private:
     EffectId       m_ambientEffectIds[170] = {};     // 340 bytes, static storage duration
     uint16_t       m_ambientEffectCount    = 0;
     bool           m_registersInitialised  = false;
+    // Phase 2.3: transition queue + staged effect migrated to ActorSystem
+    // (ManualStaging). SerialCLI is now a transport layer over the actor
+    // staging surface; the legacy m_queued* fields are gone.
 
     // ── Phase 1C dual-strip Independent mode — keystroke editing target ──
     // Which strip (0 or 1) is targeted when effect-cycle keys (space/n/N/L)
@@ -92,6 +95,13 @@ private:
     // Ephemeral: resets to 0 each boot. Serial-only — iOS/Tab5/web do not
     // share this field; future cross-stack independence uses separate state.
     uint8_t        m_activeStripEditing    = 0;
+
+    // Phase 2.3 — Enter debounce. CRLF-sending terminals (PIO monitor on
+    // Windows, some Mac configurations) deliver \r and \n in quick
+    // succession. A simple ms-window guard prevents double-fire from a
+    // single keypress. 50ms is well above CRLF arrival delta (~µs) and
+    // well below user typing cadence (~100ms minimum).
+    uint32_t       m_lastEnterFireMs       = 0;
 
     // ── Internal dispatch ──
     void initRegisters();
@@ -108,6 +118,13 @@ private:
     // routes to actors.setEffect (legacy); in Independent mode routes to
     // renderer->setStripEffectId(m_activeStripEditing, ...).
     void dispatchEffect(EffectId eid);
+
+    // Phase 2.3 — arm/fire status echo helpers. Emit one ARM line per
+    // staging-mutating keystroke (a/A/t/T/f/F/Esc) and per ? query.
+    // computeArmLeadMs returns 0 when no transition is queued (hard cut
+    // semantics), otherwise delegates to ActorSystem::getRealLeadTime.
+    void emitArmLine();
+    uint16_t computeArmLeadMs() const;
 };
 
 } // namespace serial

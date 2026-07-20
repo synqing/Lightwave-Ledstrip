@@ -963,6 +963,19 @@ void V1ApiRoutes::registerRoutes(
         }
     );
 
+    // Phase 2.4 — leadTime query endpoint. POST-with-JSON-body matches
+    // the rest of the transitions surface (no GET-with-query-params
+    // precedent exists in this webserver).
+    registry.onPost("/api/v1/transitions/leadtime",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::TransitionHandlers::handleLeadtime(request, data, len, ctx.orchestrator);
+        }
+    );
+
     // Batch operations
     registry.onPost("/api/v1/batch",
         [](AsyncWebServerRequest* request) {},

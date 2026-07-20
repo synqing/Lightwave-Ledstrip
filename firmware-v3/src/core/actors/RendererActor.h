@@ -134,11 +134,19 @@ struct RenderStats {
     uint32_t minFrameTimeUs;      // Minimum frame time seen
     uint16_t currentFPS;          // Measured FPS
     uint8_t cpuPercent;           // Legacy wire field: renderer frame-budget occupancy
+    uint32_t transitionUpdateUs;   // Last transition engine update cost
+    uint32_t transitionUpdateP50Us; // Running p50 over the transition timing window
+    uint32_t transitionUpdateP95Us; // Running p95 over the transition timing window
+    uint32_t transitionUpdateP99Us; // Running p99 over the transition timing window
+    uint32_t transitionDeadlineMiss; // Frames with transition work over the render deadline
+    uint8_t transitionTypeActive;  // Current TransitionType, 0xFF when idle
 
     RenderStats()
         : framesRendered(0), frameDrops(0)
         , avgFrameTimeUs(0), maxFrameTimeUs(0), minFrameTimeUs(UINT32_MAX)
-        , currentFPS(0), cpuPercent(0) {}
+        , currentFPS(0), cpuPercent(0)
+        , transitionUpdateUs(0), transitionUpdateP50Us(0), transitionUpdateP95Us(0), transitionUpdateP99Us(0)
+        , transitionDeadlineMiss(0), transitionTypeActive(0xFF) {}
 
     void reset() {
         framesRendered = 0;
@@ -148,6 +156,12 @@ struct RenderStats {
         minFrameTimeUs = UINT32_MAX;
         currentFPS = 0;
         cpuPercent = 0;
+        transitionUpdateUs = 0;
+        transitionUpdateP50Us = 0;
+        transitionUpdateP95Us = 0;
+        transitionUpdateP99Us = 0;
+        transitionDeadlineMiss = 0;
+        transitionTypeActive = 0xFF;
     }
 };
 
@@ -799,7 +813,13 @@ private:
     /**
      * @brief Handle START_TRANSITION message (thread-safe)
      */
-    void handleStartTransition(EffectId effectId, uint8_t transitionType);
+    void handleStartTransition(EffectId effectId,
+                               uint8_t transitionType,
+                               uint16_t durationMs = 0,
+                               uint8_t easing = 0xFF);
+    bool prepareEffectSwitchForTransition(EffectId target, EffectId& outOldEffectId);
+    bool updateTransitionFrame();
+    void recordTransitionUpdate(uint32_t updateUs);
 
     /**
      * @brief Handle SET_BRIGHTNESS message
@@ -924,6 +944,11 @@ private:
     uint32_t m_avgOutputPrepUs = 0;
     uint32_t m_lastPrePacingWorkUs = 0;
     uint32_t m_avgPrePacingWorkUs = 0;
+    static constexpr uint8_t TRANSITION_UPDATE_WINDOW = 64;
+    uint32_t m_transitionUpdateWindow[TRANSITION_UPDATE_WINDOW] = {};
+    uint8_t m_transitionUpdateWriteIndex = 0;
+    uint8_t m_transitionUpdateCount = 0;
+    bool m_transitionWorkThisFrame = false;
 
     hal::LedDriver m_ledDriver;
 

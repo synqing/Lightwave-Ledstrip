@@ -1,0 +1,86 @@
+project: lightwave-ledstrip
+profile_version: 1
+tool:
+  cli: /Users/spectrasynq/.local/bin/markitdown
+  mcp: markitdown
+output:
+  generated_root: docs/markitdown/generated
+  cache_root: .markitdown/cache
+  naming: "{source_basename}.markitdown.md"
+sources:
+  - id: firmware-docs
+    root: firmware-v3/docs
+    include:
+      - "*.md"
+      - "*.json"
+      - "*.yaml"
+      - "*.yml"
+    output_subdir: firmware-v3-docs
+    reason: "Core firmware architecture, audio-visual, testing, performance, and research documentation."
+  - id: notebooklm-bundles
+    root: docs/tooling/notebooklm-bundles
+    include:
+      - "*.md"
+      - "*.json"
+      - "*.yaml"
+      - "*.yml"
+    output_subdir: notebooklm-bundles
+    reason: "Existing curated bundle surface should stay aligned with MarkItDown outputs."
+  - id: architecture-docx
+    root: _archive
+    include:
+      - K1_Technical_Architecture_V1.2.docx
+    output_subdir: archive-office
+    reason: "Architecture DOCX converts cleanly enough for source-truth handoff review."
+  - id: master-tracker
+    root: _archive
+    include:
+      - K1-Master-Tracker.xlsx
+    output_subdir: archive-office
+    reason: "Tracker spreadsheet converts to useful blocker and dependency tables."
+  - id: tab5-docs
+    root: tab5-encoder/docs
+    include:
+      - "*.md"
+      - "*.json"
+      - "*.yaml"
+      - "*.yml"
+    output_subdir: tab5-encoder-docs
+    reason: "Control-surface and LVGL context for Tab5 work."
+  - id: zone-mixer-docs
+    root: zone-mixer/docs
+    include:
+      - "*.md"
+      - "*.pdf"
+      - "*.json"
+      - "*.yaml"
+      - "*.yml"
+    output_subdir: zone-mixer-docs
+    reason: "I2C, control, and mock-up documentation adjacent to K1 operator surfaces."
+exclude:
+  - .git
+  - .claude/worktrees
+  - .embedder
+  - .pio
+  - .venv*
+  - node_modules
+  - build
+  - dist
+  - .cache
+  - .contextpack_cache
+  - z_temp
+  - firmware-v3/docs/research/k1_songaware_lane_d_evidence/**/*.mov
+quality_gates:
+  - inspect_first_120_lines
+  - reject_empty_output
+  - flag_low_spacing_pdf_text
+  - verify_against_current_source_before_tactical_claim
+  - do_not_overwrite_sources
+security:
+  plugins_default: false
+  cloud_ocr_allowed: false
+  notes: "Converted content is context, not firmware authority."
+commands:
+  smoke_docx: "markitdown _archive/K1_Technical_Architecture_V1.2.docx -o .markitdown/cache/K1_Technical_Architecture_V1.2.markitdown.md"
+  smoke_xlsx: "markitdown _archive/K1-Master-Tracker.xlsx -o .markitdown/cache/K1-Master-Tracker.markitdown.md"
+  inspect: "sed -n '1,120p' .markitdown/cache/K1_Technical_Architecture_V1.2.markitdown.md"

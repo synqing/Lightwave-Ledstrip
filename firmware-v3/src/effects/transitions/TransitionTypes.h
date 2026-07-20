@@ -59,27 +59,106 @@ inline const char* getTransitionName(TransitionType type) {
     }
 }
 
+// ==================== Tier System ====================
+
+/**
+ * @brief Three duration tiers for predictable leadTime semantics.
+ *
+ * Phase 2.2: replaces per-transition magic-number durations with a
+ * canonical tier classification. The user can predict how early to arm
+ * and how late to fire because every transition in a tier finishes in
+ * the same time. Tier durations are calibrated for K1 LGP physics.
+ */
+enum class TransitionTier : uint8_t {
+    QUICK = 0,      // Snappy cuts and dissolves
+    MEDIUM = 1,     // Energy shifts
+    CINEMATIC = 2,  // Set-piece moments
+};
+
+inline constexpr uint16_t kQuickDurationMs     = 500;
+inline constexpr uint16_t kMediumDurationMs    = 1500;
+inline constexpr uint16_t kCinematicDurationMs = 2500;
+
+inline TransitionTier getTransitionTier(TransitionType type) {
+    switch (type) {
+        case TransitionType::FADE:
+        case TransitionType::WIPE_OUT:
+        case TransitionType::WIPE_IN:
+        case TransitionType::DISSOLVE:
+            return TransitionTier::QUICK;
+        case TransitionType::PHASE_SHIFT:
+        case TransitionType::PULSEWAVE:
+        case TransitionType::IMPLOSION:
+        case TransitionType::IRIS:
+            return TransitionTier::MEDIUM;
+        case TransitionType::NUCLEAR:
+        case TransitionType::STARGATE:
+        case TransitionType::KALEIDOSCOPE:
+        case TransitionType::MANDALA:
+            return TransitionTier::CINEMATIC;
+        default:
+            return TransitionTier::MEDIUM;
+    }
+}
+
+inline uint16_t getTierDuration(TransitionTier tier) {
+    switch (tier) {
+        case TransitionTier::QUICK:     return kQuickDurationMs;
+        case TransitionTier::MEDIUM:    return kMediumDurationMs;
+        case TransitionTier::CINEMATIC: return kCinematicDurationMs;
+    }
+    return kMediumDurationMs;
+}
+
+inline const char* getTierName(TransitionTier tier) {
+    switch (tier) {
+        case TransitionTier::QUICK:     return "Quick";
+        case TransitionTier::MEDIUM:    return "Medium";
+        case TransitionTier::CINEMATIC: return "Cinematic";
+    }
+    return "Unknown";
+}
+
+/**
+ * @brief Fill outTypes (sized 4) with the transitions belonging to a tier.
+ *
+ * Caller owns the storage; pass a `TransitionType[4]` buffer. The order
+ * matches the enum declaration so CLI cycling remains stable across
+ * tier boundaries.
+ */
+inline void getTransitionsInTier(TransitionTier tier, TransitionType outTypes[4]) {
+    switch (tier) {
+        case TransitionTier::QUICK:
+            outTypes[0] = TransitionType::FADE;
+            outTypes[1] = TransitionType::WIPE_OUT;
+            outTypes[2] = TransitionType::WIPE_IN;
+            outTypes[3] = TransitionType::DISSOLVE;
+            return;
+        case TransitionTier::MEDIUM:
+            outTypes[0] = TransitionType::PHASE_SHIFT;
+            outTypes[1] = TransitionType::PULSEWAVE;
+            outTypes[2] = TransitionType::IMPLOSION;
+            outTypes[3] = TransitionType::IRIS;
+            return;
+        case TransitionTier::CINEMATIC:
+            outTypes[0] = TransitionType::NUCLEAR;
+            outTypes[1] = TransitionType::STARGATE;
+            outTypes[2] = TransitionType::KALEIDOSCOPE;
+            outTypes[3] = TransitionType::MANDALA;
+            return;
+    }
+}
+
 // ==================== Default Durations ====================
 
 /**
- * @brief Get recommended duration for transition type (ms)
+ * @brief Recommended duration for a transition type, derived from its tier.
+ *
+ * Phase 2.2: delegates to the tier system so every transition in a tier
+ * shares a canonical duration. Was per-type magic numbers (800/1200/...).
  */
 inline uint16_t getDefaultDuration(TransitionType type) {
-    switch (type) {
-        case TransitionType::FADE:        return 800;
-        case TransitionType::WIPE_OUT:    return 1200;
-        case TransitionType::WIPE_IN:     return 1200;
-        case TransitionType::DISSOLVE:    return 1500;
-        case TransitionType::PHASE_SHIFT: return 1400;
-        case TransitionType::PULSEWAVE:   return 2000;
-        case TransitionType::IMPLOSION:   return 1500;
-        case TransitionType::IRIS:        return 1200;
-        case TransitionType::NUCLEAR:     return 2500;
-        case TransitionType::STARGATE:    return 3000;
-        case TransitionType::KALEIDOSCOPE: return 1800;
-        case TransitionType::MANDALA:     return 2200;
-        default: return 1000;
-    }
+    return getTierDuration(getTransitionTier(type));
 }
 
 // ==================== Default Easing Curves ====================

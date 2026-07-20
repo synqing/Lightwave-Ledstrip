@@ -1,3 +1,9 @@
+> ⚠️ **DEPRECATED / NOT CANONICAL.** The single source of truth for K1 firmware is
+> **[SpectraSynq_K1_Firmware](https://github.com/synqing/SpectraSynq_K1_Firmware)**.
+> This repository is retained as **reference-of-record** — frozen at tag `reference-of-record/v3-final`; its effect/DSP breadth is being migrated into canon. No new features. See the canon repo's `docs/consolidation/`.
+
+---
+
 # LightwaveOS
 
 **Audio-reactive LED controller for Light Guide Plates**
